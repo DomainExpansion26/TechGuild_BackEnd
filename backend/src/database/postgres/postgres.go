@@ -32,7 +32,7 @@ func Connect(cfg *config.Config) error {
 
 	DB = db
 
-	log.Println("✅ PostgreSQL Connected Successfully")
+	log.Println("PostgreSQL Connected Successfully")
 
 	return nil
 }

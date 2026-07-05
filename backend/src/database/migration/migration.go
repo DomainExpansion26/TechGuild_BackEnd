@@ -17,7 +17,7 @@ func Migrate() error {
 		return err
 	}
 
-	log.Println("✅ Database Migration Completed")
+	log.Println(" Database Migration Completed")
 
 	return nil
 }

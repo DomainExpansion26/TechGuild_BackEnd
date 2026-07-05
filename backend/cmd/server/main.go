@@ -7,6 +7,7 @@ import (
 	"techguild-backend/src/config"
 	"techguild-backend/src/database/migration"
 	"techguild-backend/src/database/postgres"
+	"techguild-backend/src/routes"
 )
 
 func main() {
@@ -27,12 +28,7 @@ func main() {
 	}
 
 	router := gin.Default()
-
-	router.GET("/", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "TechGuild Backend Running",
-		})
-	})
+routes.AuthRoutes(router)
 
 	log.Printf("🚀 Server started on port %s", cfg.Port)
 
