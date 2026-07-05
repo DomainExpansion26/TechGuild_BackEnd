@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"techguild-backend/src/config"
+
 	"techguild-backend/src/database/migration"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/routes"
@@ -12,25 +12,21 @@ import (
 
 func main() {
 
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Connect Database & Redis
+	postgres.ConnectDatabase()
 
-	err = postgres.Connect(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Run Migrations
+	migration.Migrate()
 
-	err = migration.Migrate()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	// Create Gin Router
 	router := gin.Default()
-routes.AuthRoutes(router)
 
-	log.Printf("🚀 Server started on port %s", cfg.Port)
+	// Register Routes
+	routes.AuthRoutes(router)
 
-	router.Run(":" + cfg.Port)
+	// Start Server
+	log.Println("Server running on :8080")
+	if err := router.Run(":8080"); err != nil {
+		log.Fatal(err)
+	}
 }

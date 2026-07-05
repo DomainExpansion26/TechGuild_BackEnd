@@ -7,17 +7,26 @@ import (
 	"techguild-backend/src/models"
 )
 
-func Migrate() error {
+func Migrate() {
 
 	err := postgres.DB.AutoMigrate(
+
 		&models.User{},
+		&models.UserProfile{},
+		&models.UserSession{},
+		&models.VerificationRecord{},
+
+		&models.GovernmentID{},
+
+		&models.RuleDocument{},
+		&models.PolicyChangeNotification{},
+
+		&models.AuditLog{},
 	)
 
 	if err != nil {
-		return err
+		log.Fatal("Migration Failed:", err)
 	}
 
-	log.Println(" Database Migration Completed")
-
-	return nil
+	log.Println("Database Migrated Successfully")
 }

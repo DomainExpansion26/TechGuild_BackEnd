@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
 )
@@ -12,6 +14,8 @@ type UserRepository interface {
 
 	GetUserByEmail(email string) (*models.User, error)
 	GetUserByPhone(phone string) (*models.User, error)
+
+	UpdateUserStatus(userID string, status string) error
 }
 
 type userRepository struct{}
@@ -33,23 +37,32 @@ func (r *userRepository) CreateVerification(record *models.VerificationRecord) e
 }
 
 func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
+
 	var user models.User
 
 	err := postgres.DB.Where("email = ?", email).First(&user).Error
 	if err != nil {
-		return nil, err
+		return nil, errors.New("user not found")
 	}
 
 	return &user, nil
 }
 
 func (r *userRepository) GetUserByPhone(phone string) (*models.User, error) {
+
 	var user models.User
 
 	err := postgres.DB.Where("phone = ?", phone).First(&user).Error
 	if err != nil {
-		return nil, err
+		return nil, errors.New("user not found")
 	}
 
 	return &user, nil
+}
+
+func (r *userRepository) UpdateUserStatus(userID string, status string) error {
+
+	return postgres.DB.Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("status", status).Error
 }
