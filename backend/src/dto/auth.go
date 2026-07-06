@@ -54,3 +54,28 @@ type RefreshTokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type VerifyResetOTPRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	OTP   string `json:"otp" binding:"required,len=6"`
+}
+
+type ResetPasswordRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+type ForgotPasswordResponse struct {
+	Message string `json:"message"`
+}
+
+type VerifyResetOTPResponse struct {
+	Message string `json:"message"`
+}
+
+type ResetPasswordResponse struct {
+	Message string `json:"message"`
+}

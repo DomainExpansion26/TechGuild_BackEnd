@@ -21,6 +21,8 @@ type UserRepository interface {
 	GetSession(refreshToken string) (*models.UserSession, error)
 	RevokeSession(refreshToken string) error
 	UpdateRefreshToken(oldToken, newToken string) error
+	UpdatePassword(userID string, passwordHash string) error
+	RevokeAllSessions(userID string) error
 }
 
 type userRepository struct{}
@@ -103,4 +105,18 @@ func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
 		Model(&models.UserSession{}).
 		Where("refresh_token = ? AND is_revoked = false", oldToken).
 		Update("refresh_token", newToken).Error
+}
+func (r *userRepository) UpdatePassword(userID string, passwordHash string) error {
+
+	return postgres.DB.
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("password_hash", passwordHash).Error
+}
+func (r *userRepository) RevokeAllSessions(userID string) error {
+
+	return postgres.DB.
+		Model(&models.UserSession{}).
+		Where("user_id = ?", userID).
+		Update("is_revoked", true).Error
 }

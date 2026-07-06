@@ -235,3 +235,82 @@ func (s *AuthService) RefreshToken(req dto.RefreshTokenRequest) (*dto.RefreshTok
 		RefreshToken: newRefreshToken,
 	}, nil
 }
+func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
+
+	user, err := s.userRepo.GetUserByEmail(req.Email)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	if user.Status != "active" {
+		return errors.New("account is not active")
+	}
+
+	otp, err := utils.GenerateOTP()
+	if err != nil {
+		return err
+	}
+
+	err = s.verificationRepo.SaveOTP("reset:"+req.Email, otp)
+	if err != nil {
+		return err
+	}
+
+	err = utils.SendOTPEmail(req.Email, otp)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func (s *AuthService) VerifyResetOTP(req dto.VerifyResetOTPRequest) error {
+
+	otp, err := s.verificationRepo.GetOTP("reset:" + req.Email)
+	if err != nil {
+		return errors.New("otp expired or invalid")
+	}
+
+	if otp != req.OTP {
+		return errors.New("invalid otp")
+	}
+
+	err = s.verificationRepo.SaveOTP("verified:"+req.Email, "true")
+	if err != nil {
+		return err
+	}
+
+	_ = s.verificationRepo.DeleteOTP("reset:" + req.Email)
+
+	return nil
+}
+func (s *AuthService) ResetPassword(req dto.ResetPasswordRequest) error {
+
+	verified, err := s.verificationRepo.GetOTP("verified:" + req.Email)
+	if err != nil || verified != "true" {
+		return errors.New("otp verification required")
+	}
+
+	user, err := s.userRepo.GetUserByEmail(req.Email)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+
+	err = s.userRepo.UpdatePassword(user.ID.String(), hashedPassword)
+	if err != nil {
+		return err
+	}
+
+	err = s.userRepo.RevokeAllSessions(user.ID.String())
+	if err != nil {
+		return err
+	}
+
+	_ = s.verificationRepo.DeleteOTP("verified:" + req.Email)
+
+	return nil
+}

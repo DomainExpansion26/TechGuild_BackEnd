@@ -155,3 +155,53 @@ func RefreshToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
+func VerifyResetOTP(c *gin.Context) {
+
+	var req dto.VerifyResetOTPRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.VerifyResetOTP(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.VerifyResetOTPResponse{
+		Message: "OTP verified successfully",
+	})
+}
+func ResetPassword(c *gin.Context) {
+
+	var req dto.ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.ResetPassword(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.ResetPasswordResponse{
+		Message: "Password reset successfully",
+	})
+}
