@@ -2,11 +2,12 @@ package services
 
 import (
 	"errors"
-	"techguild-backend/src/models"
+	"time"
+	"github.com/redis/go-redis/v9"
 	"techguild-backend/src/dto"
+	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
 	"techguild-backend/src/utils"
-	"github.com/redis/go-redis/v9"
 )
 
 type AuthService struct {
@@ -113,6 +114,18 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 		return nil, err
 	}
 
+	session := &models.UserSession{
+		UserID:       user.ID,
+		RefreshToken: refreshToken,
+		IsRevoked:    false,
+		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
+	}
+
+	err = s.userRepo.CreateSession(session)
+	if err != nil {
+		return nil, err
+	}
+
 	return &dto.LoginResponse{
 		Message:      "Login successful",
 		AccessToken:  accessToken,
@@ -167,4 +180,58 @@ func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) error {
 
 func (s *AuthService) ResendOTP(req dto.ResendOTPRequest) error {
 	return s.SendVerificationOTP(req.Email)
+}
+func (s *AuthService) Logout(req dto.LogoutRequest) error {
+
+	session, err := s.userRepo.GetSession(req.RefreshToken)
+	if err != nil {
+		return errors.New("invalid session")
+	}
+
+	if session.IsRevoked {
+		return errors.New("already logged out")
+	}
+
+	err = s.userRepo.RevokeSession(req.RefreshToken)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func (s *AuthService) RefreshToken(req dto.RefreshTokenRequest) (*dto.RefreshTokenResponse, error) {
+	session, err := s.userRepo.GetSession(req.RefreshToken)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	if session.IsRevoked {
+		return nil, errors.New("refresh token revoked")
+	}
+	if session.ExpiresAt.Before(time.Now()) {
+		return nil, errors.New("refresh token expired")
+	}
+	claims, err := utils.ValidateRefreshToken(req.RefreshToken)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	userID, ok := claims["user_id"].(string)
+	if !ok {
+		return nil, errors.New("invalid token")
+	}
+	newAccessToken, err := utils.GenerateAccessToken(userID)
+	if err != nil {
+		return nil, err
+	}
+	newRefreshToken, err := utils.GenerateRefreshToken(userID)
+	if err != nil {
+		return nil, err
+	}
+	err = s.userRepo.UpdateRefreshToken(req.RefreshToken, newRefreshToken)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.RefreshTokenResponse{
+		AccessToken:  newAccessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
 }

@@ -6,7 +6,6 @@ import (
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
-	"techguild-backend/src/utils"
 )
 
 func Register(c *gin.Context) {
@@ -108,29 +107,51 @@ func ResendOTP(c *gin.Context) {
 		"message": "OTP sent successfully",
 	})
 }
-func RefreshToken(c *gin.Context) {
-	var req dto.RefreshRequest
+func Logout(c *gin.Context) {
+
+	var req dto.LogoutRequest
+
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{
-			"error": "invalid request",
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
 		})
 		return
 	}
-	claims, err := utils.ValidateRefreshToken(req.RefreshToken)
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.Logout(req)
 	if err != nil {
-		c.JSON(401, gin.H{
-			"error": "invalid or expired refresh token",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
 		})
 		return
 	}
-	newAccessToken, err := utils.GenerateAccessToken(claims["user_id"].(string))
-	if err != nil {
-		c.JSON(500, gin.H{
-			"error": "failed to generate token",
-		})
-		return
-	}
-	c.JSON(200, dto.RefreshResponse{
-		AccessToken: newAccessToken,
+
+	c.JSON(http.StatusOK, dto.LogoutResponse{
+		Message: "Logout successful",
 	})
+}
+func RefreshToken(c *gin.Context) {
+
+	var req dto.RefreshTokenRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	res, err := authService.RefreshToken(req)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
 }

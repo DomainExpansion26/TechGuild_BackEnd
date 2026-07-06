@@ -15,6 +15,7 @@ func AuthRoutes(router *gin.Engine) {
 
 		auth.POST("/verify-email", controllers.VerifyEmail)
 		auth.POST("/resend-otp", controllers.ResendOTP)
-		auth.POST("/refresh", controllers.RefreshToken)
+		auth.POST("/logout", controllers.Logout)
+		auth.POST("/refresh-token", controllers.RefreshToken)
 	}
 }

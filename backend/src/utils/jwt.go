@@ -31,15 +31,29 @@ func GenerateAccessToken(userID string) (string, error) {
 	return token.SignedString([]byte(accessSecret))
 }
 func ValidateRefreshToken(tokenStr string) (jwt.MapClaims, error) {
+
 	token, err := jwt.ParseWithClaims(tokenStr, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(refreshSecret), nil
 	})
+
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
-	claims := token.Claims.(jwt.MapClaims)
-	if claims["type"] != "refresh" {
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+
+	tokenType, ok := claims["type"].(string)
+	if !ok || tokenType != "refresh" {
 		return nil, errors.New("not a refresh token")
 	}
+
+	userID, ok := claims["user_id"].(string)
+	if !ok || userID == "" {
+		return nil, errors.New("user id missing in token")
+	}
+
 	return claims, nil
 }

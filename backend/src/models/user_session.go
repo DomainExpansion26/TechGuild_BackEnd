@@ -1,18 +1,21 @@
 package models
+
 import (
 	"time"
+
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type UserSession struct {
-	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
-	UserID uuid.UUID `gorm:"type:uuid;index;not null"`
-	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	RefreshToken string `gorm:"type:text;not null"`
-	IPAddress string
-	UserAgent string
-	Device    string
-	ExpiresAt time.Time
-	LastUsedAt time.Time
-	CreatedAt time.Time
+	ID           uuid.UUID      `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	UserID       uuid.UUID      `gorm:"type:uuid;not null"`
+	RefreshToken string         `gorm:"type:text;not null"`
+	Device       string         `gorm:"size:255"`
+	IPAddress    string         `gorm:"size:100"`
+	IsRevoked    bool           `gorm:"default:false"`
+	ExpiresAt    time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	DeletedAt    gorm.DeletedAt `gorm:"index"`
 }
