@@ -49,7 +49,7 @@ func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
 
 	err := postgres.DB.Where("email = ?", email).First(&user).Error
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, err
 	}
 
 	return &user, nil
@@ -61,7 +61,7 @@ func (r *userRepository) GetUserByPhone(phone string) (*models.User, error) {
 
 	err := postgres.DB.Where("phone = ?", phone).First(&user).Error
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, err
 	}
 
 	return &user, nil
