@@ -15,6 +15,7 @@ type UserProfile struct {
 	UserID uuid.UUID `gorm:"type:uuid;uniqueIndex;not null"`
 	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	FirstName string `gorm:"size:100;not null"`
+	Phone string `gorm:"type:varchar(20);uniqueIndex"`
 	LastName  string `gorm:"size:100"`
 	DateOfBirth *time.Time
 	Gender Gender `gorm:"size:20"`

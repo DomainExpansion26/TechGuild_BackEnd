@@ -11,8 +11,8 @@ type AccountType string
 
 const (
 	AccountTypeIndividual  AccountType = "individual"
-	AccountTypeAgencyAdmin AccountType = "agency_admin"
-	AccountTypeClientAdmin AccountType = "client_admin"
+	AccountTypeAgencyAdmin AccountType = "agency"
+	AccountTypeClientAdmin AccountType = "client"
 )
 
 type UserStatus string
@@ -31,7 +31,6 @@ type User struct {
 
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
 
-	Phone string `gorm:"type:varchar(20);uniqueIndex"`
 
 	PasswordHash string `gorm:"type:text"`
 

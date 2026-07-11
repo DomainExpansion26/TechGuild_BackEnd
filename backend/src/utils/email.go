@@ -16,8 +16,11 @@ func SendVerificationEmail(toEmail string, token string) error {
 
 	auth := smtp.PlainAuth("", from, password, host)
 
+	backendURL := os.Getenv("BACKEND_URL")
+
 	verificationURL := fmt.Sprintf(
-		"http://localhost:8080/auth/verify-email?token=%s",
+		"%s/auth/verify-email?token=%s",
+		backendURL,
 		token,
 	)
 
