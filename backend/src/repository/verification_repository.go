@@ -17,17 +17,34 @@ func NewVerificationRepository(redisClient *redis.Client) *VerificationRepositor
 	}
 }
 
-func (r *VerificationRepository) SaveOTP(email string, otp string) error {
+func (r *VerificationRepository) SaveVerificationToken(userID string, token string) error {
+
 	ctx := context.Background()
-	return r.Redis.Set(ctx, "verify:"+email, otp, 10*time.Minute).Err()
+
+	return r.Redis.Set(
+		ctx,
+		"verify:"+token,
+		userID,
+		24*time.Hour,
+	).Err()
 }
 
-func (r *VerificationRepository) GetOTP(email string) (string, error) {
+func (r *VerificationRepository) GetVerificationToken(token string) (string, error) {
+
 	ctx := context.Background()
-	return r.Redis.Get(ctx, "verify:"+email).Result()
+
+	return r.Redis.Get(
+		ctx,
+		"verify:"+token,
+	).Result()
 }
 
-func (r *VerificationRepository) DeleteOTP(email string) error {
+func (r *VerificationRepository) DeleteVerificationToken(token string) error {
+
 	ctx := context.Background()
-	return r.Redis.Del(ctx, "verify:"+email).Err()
+
+	return r.Redis.Del(
+		ctx,
+		"verify:"+token,
+	).Err()
 }

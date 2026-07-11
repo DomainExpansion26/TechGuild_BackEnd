@@ -27,21 +27,28 @@ const (
 type User struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	Email        string `gorm:"type:varchar(255);uniqueIndex;not null"`
-	Phone        string `gorm:"type:varchar(20);uniqueIndex"`
-	PasswordHash string `gorm:"type:text"`
-	TwoFASecret  string `gorm:"type:text"`
-
 	FullName string `gorm:"type:varchar(255);not null"`
 
-	AccountType AccountType `gorm:"type:varchar(30);not null"`
-	Status      UserStatus  `gorm:"type:varchar(30);default:'pending_verification'"`
+	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
 
-	EmailVerified bool   `gorm:"default:false"`
+	Phone string `gorm:"type:varchar(20);uniqueIndex"`
+
+	PasswordHash string `gorm:"type:text"`
+
+	TwoFASecret string `gorm:"type:text"`
+
+	AccountType *AccountType `gorm:"type:varchar(30)"`
+
+	Status UserStatus `gorm:"type:varchar(30);default:'pending_verification'"`
+
+	EmailVerified bool `gorm:"default:false"`
+
 	OAuthProvider string `gorm:"type:varchar(20)"`
-	OAuthID       string `gorm:"type:varchar(255);uniqueIndex"`
+
+	OAuthID string `gorm:"type:varchar(255);uniqueIndex"`
 
 	CreatedAt time.Time
+
 	UpdatedAt time.Time
 }
 

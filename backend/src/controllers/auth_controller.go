@@ -30,7 +30,7 @@ func Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Registration successful. OTP sent to your email.",
+		"message": "Registration successful. Please check your email to verify your account.",
 	})
 }
 func Login(c *gin.Context) {
@@ -58,18 +58,20 @@ func Login(c *gin.Context) {
 }
 func VerifyEmail(c *gin.Context) {
 
-	var req dto.VerifyEmailRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
+	token := c.Query("token")
+	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+			"error": "verification token is required",
 		})
 		return
 	}
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	err := authService.VerifyEmail(req)
+	err := authService.VerifyEmail(dto.VerifyEmailRequest{
+		Token: token,
+	})
+
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -81,10 +83,9 @@ func VerifyEmail(c *gin.Context) {
 		"message": "Email verified successfully",
 	})
 }
+func ResendVerificationEmail(c *gin.Context) {
 
-func ResendOTP(c *gin.Context) {
-
-	var req dto.ResendOTPRequest
+	var req dto.ResendVerificationRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -95,7 +96,7 @@ func ResendOTP(c *gin.Context) {
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	err := authService.ResendOTP(req)
+	err := authService.ResendVerificationEmail(req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -103,8 +104,8 @@ func ResendOTP(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "OTP sent successfully",
+	c.JSON(http.StatusOK, dto.ResendVerificationResponse{
+		Message: "Verification email sent successfully",
 	})
 }
 func Logout(c *gin.Context) {
@@ -155,32 +156,15 @@ func RefreshToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
-func VerifyResetOTP(c *gin.Context) {
-
-	var req dto.VerifyResetOTPRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	authService := services.NewAuthService(postgres.RedisDB)
-
-	err := authService.VerifyResetOTP(req)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.VerifyResetOTPResponse{
-		Message: "OTP verified successfully",
-	})
-}
 func ResetPassword(c *gin.Context) {
+
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "reset token is required",
+		})
+		return
+	}
 
 	var req dto.ResetPasswordRequest
 
@@ -190,6 +174,8 @@ func ResetPassword(c *gin.Context) {
 		})
 		return
 	}
+
+	req.Token = token
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
@@ -203,5 +189,57 @@ func ResetPassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, dto.ResetPasswordResponse{
 		Message: "Password reset successfully",
+	})
+}
+func ForgotPassword(c *gin.Context) {
+
+	var req dto.ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.ForgotPassword(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.ForgotPasswordResponse{
+		Message: "Password reset link sent successfully",
+	})
+}
+func ChangePassword(c *gin.Context) {
+
+	userID := c.GetString("userID")
+
+	var req dto.ChangePasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.ChangePassword(userID, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.ChangePasswordResponse{
+		Message: "Password changed successfully",
 	})
 }

@@ -11,11 +11,12 @@ type UserRepository interface {
 	CreateUser(user *models.User) error
 	CreateProfile(profile *models.UserProfile) error
 	CreateVerification(record *models.VerificationRecord) error
-
+	GetUserByID(userID string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
-	GetUserByPhone(phone string) (*models.User, error)
 
 	UpdateUserStatus(userID string, status string) error
+	UpdateEmailVerified(userID string, verified bool) error
+	UpdateAccountType(userID string, accountType models.AccountType) error
 
 	CreateSession(session *models.UserSession) error
 	GetSession(refreshToken string) (*models.UserSession, error)
@@ -43,6 +44,17 @@ func (r *userRepository) CreateVerification(record *models.VerificationRecord) e
 	return postgres.DB.Create(record).Error
 }
 
+func (r *userRepository) GetUserByID(userID string) (*models.User, error) {
+
+	var user models.User
+
+	err := postgres.DB.Where("id = ?", userID).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
 func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
 
 	var user models.User
@@ -55,24 +67,30 @@ func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
 	return &user, nil
 }
 
-func (r *userRepository) GetUserByPhone(phone string) (*models.User, error) {
-
-	var user models.User
-
-	err := postgres.DB.Where("phone = ?", phone).First(&user).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
-}
-
 func (r *userRepository) UpdateUserStatus(userID string, status string) error {
 
-	return postgres.DB.Model(&models.User{}).
+	return postgres.DB.
+		Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("status", status).Error
 }
+
+func (r *userRepository) UpdateEmailVerified(userID string, verified bool) error {
+
+	return postgres.DB.
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("email_verified", verified).Error
+}
+
+func (r *userRepository) UpdateAccountType(userID string, accountType models.AccountType) error {
+
+	return postgres.DB.
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("account_type", accountType).Error
+}
+
 func (r *userRepository) CreateSession(session *models.UserSession) error {
 	return postgres.DB.Create(session).Error
 }
@@ -99,6 +117,7 @@ func (r *userRepository) RevokeSession(refreshToken string) error {
 		Where("refresh_token = ?", refreshToken).
 		Update("is_revoked", true).Error
 }
+
 func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
 
 	return postgres.DB.
@@ -106,6 +125,7 @@ func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
 		Where("refresh_token = ? AND is_revoked = false", oldToken).
 		Update("refresh_token", newToken).Error
 }
+
 func (r *userRepository) UpdatePassword(userID string, passwordHash string) error {
 
 	return postgres.DB.
@@ -113,6 +133,7 @@ func (r *userRepository) UpdatePassword(userID string, passwordHash string) erro
 		Where("id = ?", userID).
 		Update("password_hash", passwordHash).Error
 }
+
 func (r *userRepository) RevokeAllSessions(userID string) error {
 
 	return postgres.DB.

@@ -29,13 +29,13 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 	if err != nil {
 
 		user = &models.User{
-			Email:        req.Email,
-			FullName:     req.FullName,
-			AccountType:  models.AccountTypeIndividual,
-			Status:       models.StatusActive,
-			EmailVerified: true,
-			OAuthProvider: "google",
-			OAuthID:       req.GoogleID,
+			Email:          req.Email,
+			FullName:       req.FullName,
+			PasswordHash:   "",
+			Status:         models.StatusActive,
+			EmailVerified:  true,
+			OAuthProvider:  "google",
+			OAuthID:        req.GoogleID,
 		}
 
 		err = s.userRepo.CreateUser(user)
@@ -90,7 +90,7 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 		user = &models.User{
 			Email:           req.Email,
 			FullName:        req.FullName,
-			AccountType:     models.AccountTypeIndividual,
+			PasswordHash:   "",
 			Status:          models.StatusActive,
 			EmailVerified:   true,
 			OAuthProvider:   "github",
