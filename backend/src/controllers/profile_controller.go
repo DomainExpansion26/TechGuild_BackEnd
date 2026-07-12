@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
@@ -46,7 +47,13 @@ func CreateProfile(c *gin.Context) {
 
 	slug, err := profileService.CreateOrUpdateProfile(userID, req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		if errors.Is(err, services.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
 		return

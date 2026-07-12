@@ -6,11 +6,13 @@ import (
 	"strings"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
+	"techguild-backend/src/repository"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
-
-	"techguild-backend/src/repository"
+	"gorm.io/gorm"
 )
+
+var ErrUserNotFound = errors.New("User is not found")
 
 type ProfileService struct {
 	userRepo repository.UserRepository
@@ -26,21 +28,35 @@ func (s *ProfileService) CreateOrUpdateProfile(userID string, req dto.CreateProf
 	// get the user record to retrieve their full name
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
-		return "", errors.New("User is not found")
-	}
-
-	// generate a unique public url slug from their fullname
-	slug, err := s.generateUniqueSlug(user.FullName)
-	if err != nil {
-		return "", err
+		return "", ErrUserNotFound
 	}
 
 	// if profile is not existed, so need to make it
 	profile, err := s.userRepo.GetProfileByUserID(userID)
+	var isNew bool
 	if err != nil {
-		profile = &models.UserProfile{
-			UserID: user.ID,
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			firstName := user.FullName
+			if parts := strings.Split(user.FullName, " "); len(parts) > 0 {
+				firstName = parts[0]
+			}
+			profile = &models.UserProfile{
+				UserID:    user.ID,
+				FirstName: firstName,
+			}
+			isNew = true
+		} else {
+			return "", err
 		}
+	}
+
+	// generate a unique public url slug from their fullname only if creating a new profile or if empty
+	if isNew || profile.PublicUrlSlug == "" {
+		slug, err := s.generateUniqueSlug(user.FullName)
+		if err != nil {
+			return "", err
+		}
+		profile.PublicUrlSlug = slug
 	}
 
 	// populate the profile data
@@ -49,25 +65,28 @@ func (s *ProfileService) CreateOrUpdateProfile(userID string, req dto.CreateProf
 	profile.PreferredLanguage = req.PreferredLanguage
 	profile.TimeZone = req.TimeZone
 	profile.CountryCode = req.CountryCode
-	profile.PublicUrlSlug = slug
 
 	// save the update profile in db
 	err = s.userRepo.UpdateProfile(profile)
 	if err != nil {
 		return "", err
 	}
-	// Check if verification is already , so we have to make it active
+
+	// Check if verification is already, so we have to make it active
 	verification, err := s.userRepo.GetVerificationRecordByUserID(userID)
 	if err == nil && verification != nil && verification.Status == models.VerificationApproved {
 		// If verification is approved, update user status to active
-		_ = s.userRepo.UpdateUserStatus(userID, string(models.StatusActive))
+		err = s.userRepo.UpdateUserStatus(userID, string(models.StatusActive))
+		if err != nil {
+			return "", err
+		}
 	}
-	return slug, nil
+	return profile.PublicUrlSlug, nil
 }
+
 func (s *ProfileService) generateUniqueSlug(fullName string) (string, error) {
 	// slugify the name (lowercase, replace non-alphanumeric with hyphens)
 	baseSlug := strings.ToLower(fullName)
-	// detects that the emoji is NOT a lowercase letter or number.
 	reg := regexp.MustCompile("[^a-z0-9]+")
 	baseSlug = reg.ReplaceAllString(baseSlug, "-")
 	baseSlug = strings.Trim(baseSlug, "-")
@@ -76,6 +95,10 @@ func (s *ProfileService) generateUniqueSlug(fullName string) (string, error) {
 	id, err := gonanoid.New(8)
 	if err != nil {
 		return "", err
+	}
+
+	if baseSlug == "" {
+		return id, nil
 	}
 
 	// combine them: "rahul-gupta-x9z2p8q1"

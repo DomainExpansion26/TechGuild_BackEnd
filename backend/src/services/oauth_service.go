@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"techguild-backend/src/dto"
@@ -43,8 +44,13 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 			return nil, err
 		}
 
+		firstName := user.FullName
+		if parts := strings.Split(user.FullName, " "); len(parts) > 0 {
+			firstName = parts[0]
+		}
 		profile := &models.UserProfile{
-			UserID: user.ID,
+			UserID:    user.ID,
+			FirstName: firstName,
 		}
 
 		err = s.userRepo.CreateProfile(profile)
@@ -102,8 +108,13 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 			return nil, err
 		}
 
+		firstName := user.FullName
+		if parts := strings.Split(user.FullName, " "); len(parts) > 0 {
+			firstName = parts[0]
+		}
 		profile := &models.UserProfile{
-			UserID: user.ID,
+			UserID:    user.ID,
+			FirstName: firstName,
 		}
 
 		err = s.userRepo.CreateProfile(profile)
