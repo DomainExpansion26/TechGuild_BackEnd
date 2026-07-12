@@ -7,6 +7,7 @@ import (
 	"techguild-backend/src/models"
 )
 
+// defining the lists of methods signatures so that it will talk to db
 type UserRepository interface {
 	CreateUser(user *models.User) error
 	CreateProfile(profile *models.UserProfile) error
@@ -24,6 +25,11 @@ type UserRepository interface {
 	UpdateRefreshToken(oldToken, newToken string) error
 	UpdatePassword(userID string, passwordHash string) error
 	RevokeAllSessions(userID string) error
+	GetProfileByUserID(userID string) (*models.UserProfile, error)
+	UpdateProfile(profile *models.UserProfile) error
+
+	GetProfileBySlug(slug string) (*models.UserProfile, error)
+	GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error)
 }
 
 type userRepository struct{}
@@ -140,4 +146,38 @@ func (r *userRepository) RevokeAllSessions(userID string) error {
 		Model(&models.UserSession{}).
 		Where("user_id = ?", userID).
 		Update("is_revoked", true).Error
+}
+
+// attach this function with userRepo struct
+func (r *userRepository) GetProfileBySlug(slug string) (*models.UserProfile, error) {
+	var profile models.UserProfile
+	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error) {
+	var record models.VerificationRecord
+	err := postgres.DB.Where("user_id = ?", userID).First(&record).Error
+	if err != nil {
+		return nil, err
+
+	}
+	return &record, nil
+}
+
+func (r *userRepository) GetProfileByUserID(userID string) (*models.UserProfile, error) {
+	var profile models.UserProfile
+	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) UpdateProfile(profile *models.UserProfile) error {
+	// GORM's Save method automatically runs UPDATE if the record exists
+	return postgres.DB.Save(profile).Error
 }
