@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Gender string
@@ -34,4 +35,9 @@ type UserProfile struct {
 	PublicUrlSlug     string `gorm:"type:varchar(255);uniqueIndex"`
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+func (up *UserProfile) BeforeCreate(tx *gorm.DB) error {
+	up.ID = uuid.New()
+	return nil
 }
