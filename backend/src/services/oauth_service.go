@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"techguild-backend/src/dto"
@@ -22,20 +23,32 @@ func NewOAuthService(redisClient *redis.Client) *OAuthService {
 	}
 }
 
+func stringPtr(s string) *string {
+	return &s
+}
+
 func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, error) {
 
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 
 	if err != nil {
 
+		firstName := req.FullName
+		lastName := ""
+		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		}
+
 		user = &models.User{
-			Email:          req.Email,
-			FullName:       req.FullName,
-			PasswordHash:   "",
-			Status:         models.StatusActive,
-			EmailVerified:  true,
-			OAuthProvider:  "google",
-			OAuthID:        req.GoogleID,
+			Email:         req.Email,
+			FirstName:     firstName,
+			LastName:      lastName,
+			PasswordHash:  "",
+			Status:        models.StatusActive,
+			EmailVerified: true,
+			OAuthProvider: stringPtr("google"),
+			OAuthID:       stringPtr(req.GoogleID),
 		}
 
 		err = s.userRepo.CreateUser(user)
@@ -43,7 +56,9 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 			return nil, err
 		}
 
-		profile := &models.UserProfile{
+		// Not using user.FullName here as it doesn't exist.
+		// we already have firstName from above
+		profile := &models.IndividualProfile{
 			UserID: user.ID,
 		}
 
@@ -87,14 +102,22 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 
 	if err != nil {
 
+		firstName := req.FullName
+		lastName := ""
+		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		}
+
 		user = &models.User{
-			Email:           req.Email,
-			FullName:        req.FullName,
-			PasswordHash:   "",
-			Status:          models.StatusActive,
-			EmailVerified:   true,
-			OAuthProvider:   "github",
-			OAuthID:         req.GitHubID,
+			Email:         req.Email,
+			FirstName:     firstName,
+			LastName:      lastName,
+			PasswordHash:  "",
+			Status:        models.StatusActive,
+			EmailVerified: true,
+			OAuthProvider: stringPtr("github"),
+			OAuthID:       stringPtr(req.GitHubID),
 		}
 
 		err = s.userRepo.CreateUser(user)
@@ -102,7 +125,7 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 			return nil, err
 		}
 
-		profile := &models.UserProfile{
+		profile := &models.IndividualProfile{
 			UserID: user.ID,
 		}
 
