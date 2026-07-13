@@ -25,5 +25,6 @@ func ProfileRoutes(router *gin.Engine) {
 		profileGroup.POST("/client", controllers.CreateOrUpdateClientProfile)
 		profileGroup.GET("/me", controllers.GetMyProfile)
 		profileGroup.GET("/points", controllers.GetUserPoints)
+		profileGroup.POST("/export", controllers.ExportProfile)
 	}
 }
