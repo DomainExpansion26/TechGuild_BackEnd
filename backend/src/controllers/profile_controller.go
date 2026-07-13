@@ -259,6 +259,12 @@ func UploadAvatar(c *gin.Context) {
 		return
 	}
 
+	const maxFileSize = 5 * 1024 * 1024 // 5MB
+	if fileHeader.Size > maxFileSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file size exceeds 5MB limit"})
+		return
+	}
+
 	file, err := fileHeader.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
@@ -347,3 +353,21 @@ func GetUserPoints(c *gin.Context) {
 
 	c.JSON(http.StatusOK, points)
 }
+
+func ExportProfile(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	profileService := services.NewProfileService()
+	result, err := profileService.ExportUserData(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
