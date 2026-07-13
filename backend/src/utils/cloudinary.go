@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"mime/multipart"
@@ -57,6 +58,7 @@ func UploadImageToCloudinary(file multipart.File, filename string) (string, erro
 	resp, err := cld.Upload.Upload(ctx, file, uploader.UploadParams{
 		PublicID: filename,
 		Folder:   "avatars",
+		Eager:    "w_256,h_256,c_fill|w_512,h_512,c_fill",
 	})
 
 	if err != nil {
@@ -82,4 +84,28 @@ func DeleteFromCloudinary(publicID string, resourceType string) error {
 	})
 
 	return err
+}
+
+// UploadJSONToCloudinary uploads raw JSON bytes to Cloudinary as a raw file and returns the secure URL.
+// Used for GDPR/DPDP data exports.
+func UploadJSONToCloudinary(data []byte, filename string) (string, error) {
+	cld, err := getCloudinaryClient()
+	if err != nil {
+		return "", err
+	}
+
+	ctx := context.Background()
+
+	reader := bytes.NewReader(data)
+
+	resp, err := cld.Upload.Upload(ctx, reader, uploader.UploadParams{
+		PublicID:     filename,
+		Folder:       "exports",
+		ResourceType: "raw",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return resp.SecureURL, nil
 }
