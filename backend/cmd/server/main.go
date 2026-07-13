@@ -15,6 +15,7 @@ func main() {
 	migration.Migrate()
 
 	router := gin.Default()
+	router.Static("/uploads", "./uploads")
 	routes.AuthRoutes(router)
 	routes.OAuthRoutes(router)
 	routes.ProfileRoutes(router)
