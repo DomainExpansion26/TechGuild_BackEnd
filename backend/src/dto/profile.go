@@ -116,3 +116,9 @@ type UserPointsResponse struct {
 	AccountType     string `json:"account_type"`
 	ProfileComplete bool   `json:"profile_complete"`
 }
+
+type ExportResponse struct {
+	Message     string `json:"message"`
+	DownloadURL string `json:"download_url"`
+	ExpiresIn   string `json:"expires_in"`
+}

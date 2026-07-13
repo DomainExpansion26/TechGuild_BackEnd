@@ -1,7 +1,9 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -455,3 +457,68 @@ func (s *ProfileService) GetUserPoints(userID string) (*dto.UserPointsResponse, 
 		ProfileComplete: profileComplete,
 	}, nil
 }
+
+func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	// Collect all available profile data
+	exportData := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":             user.ID,
+			"first_name":     user.FirstName,
+			"last_name":      user.LastName,
+			"email":          user.Email,
+			"account_type":   user.AccountType,
+			"status":         user.Status,
+			"email_verified": user.EmailVerified,
+			"points":         user.Points,
+			"created_at":     user.CreatedAt,
+			"updated_at":     user.UpdatedAt,
+		},
+	}
+
+	if user.AccountType != nil {
+		switch *user.AccountType {
+		case models.AccountTypeIndividual:
+			if profile, err := s.userRepo.GetIndividualProfileByUserID(userID); err == nil {
+				exportData["profile"] = profile
+			}
+		case models.AccountTypeAgencyAdmin:
+			if profile, err := s.userRepo.GetAgencyProfileByUserID(userID); err == nil {
+				exportData["profile"] = profile
+			}
+		case models.AccountTypeClientAdmin:
+			if profile, err := s.userRepo.GetClientProfileByUserID(userID); err == nil {
+				exportData["profile"] = profile
+			}
+		}
+	}
+
+	exportData["exported_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Marshal to JSON
+	jsonData, err := json.MarshalIndent(exportData, "", "  ")
+	if err != nil {
+		return nil, errors.New("failed to generate export file")
+	}
+
+	// Upload to Cloudinary
+	filename := fmt.Sprintf("export-%s-%d", userID, time.Now().Unix())
+	downloadURL, err := utils.UploadJSONToCloudinary(jsonData, filename)
+	if err != nil {
+		return nil, errors.New("failed to upload export file")
+	}
+
+	// Email the download link to the user
+	go utils.SendDataExportEmail(user.Email, user.FirstName, downloadURL)
+
+	return &dto.ExportResponse{
+		Message:     "Your data export is ready. A download link has been sent to your email.",
+		DownloadURL: downloadURL,
+		ExpiresIn:   "never (Cloudinary raw files are permanent — delete manually if needed)",
+	}, nil
+}
+
