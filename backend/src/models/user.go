@@ -27,10 +27,10 @@ const (
 type User struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	FullName string `gorm:"type:varchar(255);not null"`
+	FirstName string `gorm:"type:varchar(100);not null"`
+	LastName  string `gorm:"type:varchar(100)"`
 
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
-
 
 	PasswordHash string `gorm:"type:text"`
 
@@ -42,9 +42,11 @@ type User struct {
 
 	EmailVerified bool `gorm:"default:false"`
 
-	OAuthProvider string `gorm:"type:varchar(20)"`
+	OAuthProvider *string `gorm:"type:varchar(20)"`
 
-	OAuthID string `gorm:"type:varchar(255);uniqueIndex"`
+	OAuthID *string `gorm:"type:varchar(255);uniqueIndex"`
+
+	Points int `gorm:"default:0"`
 
 	CreatedAt time.Time
 
