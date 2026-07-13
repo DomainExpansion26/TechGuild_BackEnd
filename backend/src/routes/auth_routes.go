@@ -1,9 +1,10 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
-
 	"techguild-backend/src/controllers"
+	"techguild-backend/src/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 func AuthRoutes(router *gin.Engine) {
@@ -18,6 +19,13 @@ func AuthRoutes(router *gin.Engine) {
 		auth.POST("/resend-verification", controllers.ResendVerificationEmail)
 		auth.POST("/forgot-password", controllers.ForgotPassword)
 		auth.POST("/reset-password", controllers.ResetPassword)
-		auth.POST("/change-password", controllers.ChangePassword)
+	}
+
+	authProtected := router.Group("/auth")
+	authProtected.Use(middleware.AuthMiddleware())
+	{
+		authProtected.POST("/register/account-type", controllers.SetAccountType)
+		authProtected.POST("/change-password", controllers.ChangePassword)
+		authProtected.DELETE("/account", controllers.DeleteAccount)
 	}
 }
