@@ -147,7 +147,9 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 	if user.Status == models.StatusPendingDeletion {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
-		_ = s.userRepo.UpdateUser(user)
+		if err := s.userRepo.UpdateUser(user); err != nil {
+			return nil, err
+		}
 	}
 
 	if user.Status != models.StatusActive {

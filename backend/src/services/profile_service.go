@@ -265,7 +265,7 @@ func (s *ProfileService) GetMyProfile(userID string) (interface{}, error) {
 func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return errors.New("user not found")
+		return errors.New("invalid email or password")
 	}
 
 	if !utils.CheckPassword(req.Password, user.PasswordHash) {
@@ -588,6 +588,10 @@ func (s *ProfileService) CheckSlugAvailability(slug string) (*dto.CheckSlugRespo
 		}, nil
 	}
 
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	return &dto.CheckSlugResponse{
 		Available: true,
 	}, nil
@@ -606,9 +610,14 @@ func (s *ProfileService) DeleteAccount(userID string, password string) error {
 	user.Status = models.StatusPendingDeletion
 	deletionDate := time.Now().Add(30 * 24 * time.Hour)
 	user.ScheduledDeletionDate = &deletionDate
-	_ = s.userRepo.UpdateUser(user)
 
-	_ = s.userRepo.RevokeAllSessions(userID)
+	if err := s.userRepo.UpdateUser(user); err != nil {
+		return err
+	}
+
+	if err := s.userRepo.RevokeAllSessions(userID); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -619,17 +628,24 @@ func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAcco
 		return ErrUserNotFound
 	}
 
-	if req.Email != "" {
+	if req.Email != "" && req.Email != user.Email {
 		if !utils.CheckPassword(req.Password, user.PasswordHash) {
 			return errors.New("invalid password for email update")
 		}
 		user.Email = req.Email
+		user.EmailVerified = false
+	}
+	if req.Phone != nil {
+		user.Phone = req.Phone
 	}
 	if req.NewPassword != "" {
 		if !utils.CheckPassword(req.Password, user.PasswordHash) {
 			return errors.New("invalid password for password update")
 		}
-		hashed, _ := utils.HashPassword(req.NewPassword)
+		hashed, err := utils.HashPassword(req.NewPassword)
+		if err != nil {
+			return errors.New("failed to hash password")
+		}
 		user.PasswordHash = hashed
 	}
 

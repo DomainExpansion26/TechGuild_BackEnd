@@ -70,7 +70,7 @@ func runCleanup() {
 					}
 					// Delete Resume
 					if publicID := extractCloudinaryPublicID(profile.ResumeURL); publicID != "" {
-						_ = utils.DeleteFromCloudinary(publicID, "image")
+						_ = utils.DeleteFromCloudinary(publicID, "raw")
 					}
 					// Hard delete profile
 					postgres.DB.Unscoped().Delete(&profile)
