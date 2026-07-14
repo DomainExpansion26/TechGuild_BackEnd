@@ -14,7 +14,7 @@ type VerificationRecordsRepository interface {
 	GetVerificationByUser(userID string) (*models.VerificationRecord, error)
 	GetVerificationByID(id string) (*models.VerificationRecord, error)
 	UpdateStatus(id string, status models.VerificationStatus, reason string) error
-
+	GetPendingVerifications() ([]models.VerificationRecord, error)
 	// Govt ID Dedup
 	CreateGovtHash(hash *models.GovtIDDedup) error
 	GovtHashExists(hash string) (bool, error)
@@ -39,7 +39,17 @@ func NewVerificationRecordsRepository() VerificationRecordsRepository {
 func (r *verificationRecordsRepository) CreateVerification(record *models.VerificationRecord) error {
 	return postgres.DB.Create(record).Error
 }
+func (r *verificationRecordsRepository) GetPendingVerifications() ([]models.VerificationRecord, error) {
 
+	var records []models.VerificationRecord
+
+	err := postgres.DB.
+		Where("status = ?", models.VerificationReview).
+		Order("created_at ASC").
+		Find(&records).Error
+
+	return records, err
+}
 func (r *verificationRecordsRepository) GetVerificationByUser(userID string) (*models.VerificationRecord, error) {
 
 	var record models.VerificationRecord

@@ -1,27 +1,40 @@
 package models
-// VerificationDocument stores encrypted document references
-// uploaded during the verification process.
-// Actual files are stored securely in Cloudflare.
-import (
-    "time"
 
-    "github.com/google/uuid"
-    "gorm.io/gorm"
+// VerificationDocument stores uploaded verification documents.
+// Only the document metadata is stored here.
+// Actual files are stored securely in Cloudinary.
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type VerificationDocument struct {
-    ID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-    VerificationRecordID uuid.UUID `gorm:"type:uuid;index;not null"`
+	VerificationRecordID uuid.UUID `gorm:"type:uuid;index;not null"`
 
-    DocumentType string `gorm:"size:50;not null"`
+	VerificationRecord VerificationRecord `gorm:"foreignKey:VerificationRecordID;constraint:OnDelete:CASCADE"`
 
-    FileURL string `gorm:"type:text;not null"`
+	// government_id, selfie, gst_certificate,
+	// pan_card, authorized_representative_id
+	DocumentType string `gorm:"size:50;not null"`
 
-    CreatedAt time.Time
+	// Cloudinary secure URL
+	FileURL string `gorm:"type:text;not null"`
+
+	// Cloudinary Public ID (used for delete/update)
+	PublicID string `gorm:"size:255"`
+
+	// image/jpeg, image/png, application/pdf
+	ContentType string `gorm:"size:100"`
+
+	CreatedAt time.Time
 }
 
 func (v *VerificationDocument) BeforeCreate(tx *gorm.DB) error {
-    v.ID = uuid.New()
-    return nil
+	v.ID = uuid.New()
+	return nil
 }

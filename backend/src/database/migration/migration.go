@@ -11,18 +11,25 @@ func Migrate() {
 
 	err := postgres.DB.AutoMigrate(
 
+		// Users
 		&models.User{},
 		&models.IndividualProfile{},
 		&models.AgencyProfile{},
 		&models.ClientProfile{},
 		&models.UserSession{},
+
+		// Verification
 		&models.VerificationRecord{},
-
+		&models.VerificationDocument{},
 		&models.GovernmentID{},
+		&models.GovtIDDedup{},
+		&models.BusinessPANDedup{},
 
+		// Rules
 		&models.RuleDocument{},
 		&models.PolicyChangeNotification{},
 
+		// Audit
 		&models.AuditLog{},
 	)
 
