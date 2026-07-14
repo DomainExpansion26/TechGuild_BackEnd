@@ -16,11 +16,11 @@ func SendVerificationEmail(toEmail string, token string) error {
 
 	auth := smtp.PlainAuth("", from, password, host)
 
-	backendURL := os.Getenv("BACKEND_URL")
+	frontendURL := os.Getenv("FRONTEND_URL")
 
 	verificationURL := fmt.Sprintf(
-		"%s/auth/verify-email?token=%s",
-		backendURL,
+		"%s/verify-email?token=%s",
+		frontendURL,
 		token,
 	)
 
@@ -104,3 +104,50 @@ func SendResetPasswordEmail(toEmail string, token string) error {
 		message,
 	)
 }
+
+func SendDataExportEmail(toEmail string, firstName string, downloadURL string) error {
+	from := os.Getenv("SMTP_EMAIL")
+	password := os.Getenv("SMTP_PASSWORD")
+	host := os.Getenv("SMTP_HOST")
+	port := os.Getenv("SMTP_PORT")
+
+	auth := smtp.PlainAuth("", from, password, host)
+
+	subject := "Subject: Your TechGuild Data Export is Ready\r\n"
+	mime := "MIME-Version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n"
+
+	body := fmt.Sprintf(`
+		<html>
+		<body style="font-family: Arial, sans-serif;">
+			<h2>Your Data Export is Ready</h2>
+			<p>Hi %s,</p>
+			<p>Your TechGuild data export has been generated. Click the button below to download your data.</p>
+			<a href="%s"
+			style="
+				background:#2563eb;
+				color:white;
+				padding:12px 20px;
+				text-decoration:none;
+				border-radius:6px;">
+				Download My Data
+			</a>
+			<br><br>
+			<p>This file contains all your personal data stored on TechGuild including your profile, account info, and activity.</p>
+			<p>If you did not request this export, please contact support immediately.</p>
+			<br>
+			<p>Regards,<br>TechGuild Team</p>
+		</body>
+		</html>
+	`, firstName, downloadURL)
+
+	message := []byte(subject + mime + body)
+
+	return smtp.SendMail(
+		host+":"+port,
+		auth,
+		from,
+		[]string{toEmail},
+		message,
+	)
+}
+

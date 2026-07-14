@@ -5,18 +5,23 @@ import (
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
+
+	"gorm.io/gorm"
 )
 
+// defining the lists of methods signatures so that it will talk to db
 type UserRepository interface {
 	CreateUser(user *models.User) error
-	CreateProfile(profile *models.UserProfile) error
+	CreateProfile(profile interface{}) error
 	CreateVerification(record *models.VerificationRecord) error
 	GetUserByID(userID string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
+	DeleteUser(userID string) error
 
 	UpdateUserStatus(userID string, status string) error
 	UpdateEmailVerified(userID string, verified bool) error
 	UpdateAccountType(userID string, accountType models.AccountType) error
+	AddUserPoints(userID string, points int) error
 
 	CreateSession(session *models.UserSession) error
 	GetSession(refreshToken string) (*models.UserSession, error)
@@ -24,6 +29,17 @@ type UserRepository interface {
 	UpdateRefreshToken(oldToken, newToken string) error
 	UpdatePassword(userID string, passwordHash string) error
 	RevokeAllSessions(userID string) error
+	GetIndividualProfileByUserID(userID string) (*models.IndividualProfile, error)
+	UpdateIndividualProfile(profile *models.IndividualProfile) error
+
+	GetAgencyProfileByUserID(userID string) (*models.AgencyProfile, error)
+	UpdateAgencyProfile(profile *models.AgencyProfile) error
+
+	GetClientProfileByUserID(userID string) (*models.ClientProfile, error)
+	UpdateClientProfile(profile *models.ClientProfile) error
+
+	GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error)
+	GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error)
 }
 
 type userRepository struct{}
@@ -36,7 +52,7 @@ func (r *userRepository) CreateUser(user *models.User) error {
 	return postgres.DB.Create(user).Error
 }
 
-func (r *userRepository) CreateProfile(profile *models.UserProfile) error {
+func (r *userRepository) CreateProfile(profile interface{}) error {
 	return postgres.DB.Create(profile).Error
 }
 
@@ -83,12 +99,23 @@ func (r *userRepository) UpdateEmailVerified(userID string, verified bool) error
 		Update("email_verified", verified).Error
 }
 
+func (r *userRepository) DeleteUser(userID string) error {
+	return postgres.DB.Where("id = ?", userID).Delete(&models.User{}).Error
+}
+
 func (r *userRepository) UpdateAccountType(userID string, accountType models.AccountType) error {
 
 	return postgres.DB.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("account_type", accountType).Error
+}
+
+func (r *userRepository) AddUserPoints(userID string, points int) error {
+	return postgres.DB.
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		UpdateColumn("points", gorm.Expr("points + ?", points)).Error
 }
 
 func (r *userRepository) CreateSession(session *models.UserSession) error {
@@ -140,4 +167,64 @@ func (r *userRepository) RevokeAllSessions(userID string) error {
 		Model(&models.UserSession{}).
 		Where("user_id = ?", userID).
 		Update("is_revoked", true).Error
+}
+
+// attach this function with userRepo struct
+func (r *userRepository) GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error) {
+	var profile models.IndividualProfile
+	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error) {
+	var record models.VerificationRecord
+	err := postgres.DB.Where("user_id = ?", userID).First(&record).Error
+	if err != nil {
+		return nil, err
+
+	}
+	return &record, nil
+}
+
+func (r *userRepository) GetIndividualProfileByUserID(userID string) (*models.IndividualProfile, error) {
+	var profile models.IndividualProfile
+	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) UpdateIndividualProfile(profile *models.IndividualProfile) error {
+	// GORM's Save method automatically runs UPDATE if the record exists
+	return postgres.DB.Save(profile).Error
+}
+
+func (r *userRepository) GetAgencyProfileByUserID(userID string) (*models.AgencyProfile, error) {
+	var profile models.AgencyProfile
+	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) UpdateAgencyProfile(profile *models.AgencyProfile) error {
+	return postgres.DB.Save(profile).Error
+}
+
+func (r *userRepository) GetClientProfileByUserID(userID string) (*models.ClientProfile, error) {
+	var profile models.ClientProfile
+	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) error {
+	return postgres.DB.Save(profile).Error
 }
