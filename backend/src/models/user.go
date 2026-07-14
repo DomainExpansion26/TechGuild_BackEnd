@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,15 +23,17 @@ const (
 	StatusActive              UserStatus = "active"
 	StatusSuspended           UserStatus = "suspended"
 	StatusRejected            UserStatus = "rejected"
+	StatusPendingDeletion     UserStatus = "pending_deletion"
+	StatusDeleted             UserStatus = "deleted"
 )
 
 type User struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	FullName string `gorm:"type:varchar(255);not null"`
+	FirstName string `gorm:"type:varchar(100);not null"`
+	LastName  string `gorm:"type:varchar(100)"`
 
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
-
 
 	PasswordHash string `gorm:"type:text"`
 
@@ -42,13 +45,20 @@ type User struct {
 
 	EmailVerified bool `gorm:"default:false"`
 
-	OAuthProvider string `gorm:"type:varchar(20)"`
+	OAuthProvider *string `gorm:"type:varchar(20)"`
 
-	OAuthID string `gorm:"type:varchar(255);uniqueIndex"`
+	OAuthID *string `gorm:"type:varchar(255);uniqueIndex"`
+
+	Points int `gorm:"default:0"`
+
+	NotificationPreferences datatypes.JSON `gorm:"type:jsonb"`
+	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
 
 	CreatedAt time.Time
 
 	UpdatedAt time.Time
+
+	ScheduledDeletionDate *time.Time
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {

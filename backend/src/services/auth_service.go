@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -35,9 +36,9 @@ func (s *AuthService) Register(req dto.RegisterRequest) error {
 	if err != nil {
 		return err
 	}
-	fullName := req.FirstName + " " + req.LastName
 	user := &models.User{
-		FullName:      fullName,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
 		Email:         req.Email,
 		PasswordHash:  hashedPassword,
 		Status:        models.StatusPendingVerification,
@@ -45,17 +46,6 @@ func (s *AuthService) Register(req dto.RegisterRequest) error {
 	}
 
 	err = s.userRepo.CreateUser(user)
-	if err != nil {
-		return err
-	}
-
-	profile := &models.UserProfile{
-		UserID: user.ID,
-		FirstName: req.FirstName,
-		LastName: req.LastName,
-	}
-
-	err = s.userRepo.CreateProfile(profile)
 	if err != nil {
 		return err
 	}
@@ -99,26 +89,26 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 	return nil
 }
 
-func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) error {
+func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.LoginResponse, error) {
 
 	userID, err := s.verificationRepo.GetVerificationToken(req.Token)
 	if err != nil {
-		return errors.New("invalid or expired verification link")
+		return nil, errors.New("invalid or expired verification link")
 	}
 
 	err = s.userRepo.UpdateEmailVerified(userID, true)
 	if err != nil {
-		return err
-	}
-
-	err = s.userRepo.UpdateUserStatus(userID, string(models.StatusActive))
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_ = s.verificationRepo.DeleteVerificationToken(req.Token)
 
-	return nil
+	// Add +10 points for verifying the email
+	_ = s.userRepo.AddUserPoints(userID, 10)
+
+	return &dto.LoginResponse{
+		Message: "Email verified successfully. Please select your account type to proceed.",
+	}, nil
 }
 
 func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest) error {
@@ -148,6 +138,16 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 
 	if !user.EmailVerified {
 		return nil, errors.New("please verify your email first")
+	}
+
+	if user.AccountType == nil || *user.AccountType == "" {
+		return nil, errors.New("please select an account type first")
+	}
+
+	if user.Status == models.StatusPendingDeletion {
+		user.Status = models.StatusActive
+		user.ScheduledDeletionDate = nil
+		_ = s.userRepo.UpdateUser(user)
 	}
 
 	if user.Status != models.StatusActive {
@@ -330,26 +330,28 @@ func (s *AuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginR
 
 	if err != nil {
 
+		// Parse FullName into FirstName and LastName
+		firstName := req.FullName
+		lastName := ""
+		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		}
+
 		user = &models.User{
-			FullName:       req.FullName,
-			Email:          req.Email,
-			EmailVerified:  true,
-			OAuthProvider:  "google",
-			OAuthID:        req.GoogleID,
-			Status:         models.StatusActive,
+			FirstName:     firstName,
+			LastName:      lastName,
+			Email:         req.Email,
+			EmailVerified: true,
+			OAuthProvider: stringPtr("google"),
+			OAuthID:       stringPtr(req.GoogleID),
+			Status:        models.StatusActive,
 		}
 
 		if err := s.userRepo.CreateUser(user); err != nil {
 			return nil, err
 		}
 
-		profile := &models.UserProfile{
-			UserID: user.ID,
-		}
-
-		if err := s.userRepo.CreateProfile(profile); err != nil {
-			return nil, err
-		}
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
@@ -386,26 +388,28 @@ func (s *AuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginR
 
 	if err != nil {
 
+		// Parse FullName into FirstName and LastName
+		firstName := req.FullName
+		lastName := ""
+		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
+			firstName = parts[0]
+			lastName = strings.Join(parts[1:], " ")
+		}
+
 		user = &models.User{
-			FullName:       req.FullName,
-			Email:          req.Email,
-			EmailVerified:  true,
-			OAuthProvider:  "github",
-			OAuthID:        req.GitHubID,
-			Status:         models.StatusActive,
+			FirstName:     firstName,
+			LastName:      lastName,
+			Email:         req.Email,
+			EmailVerified: true,
+			OAuthProvider: stringPtr("github"),
+			OAuthID:       stringPtr(req.GitHubID),
+			Status:        models.StatusActive,
 		}
 
 		if err := s.userRepo.CreateUser(user); err != nil {
 			return nil, err
 		}
 
-		profile := &models.UserProfile{
-			UserID: user.ID,
-		}
-
-		if err := s.userRepo.CreateProfile(profile); err != nil {
-			return nil, err
-		}
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
@@ -434,4 +438,13 @@ func (s *AuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginR
 		RefreshToken: refreshToken,
 		Message:      "GitHub login successful",
 	}, nil
+}
+
+func (s *AuthService) DeleteAccount(userID string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	return s.userRepo.DeleteUser(user.ID.String())
 }
