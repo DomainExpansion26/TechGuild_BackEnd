@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
@@ -29,25 +30,21 @@ func getUserIDFromContext(c *gin.Context) (string, error) {
 func CreateOrUpdateIndividualProfile(c *gin.Context) {
 	var req dto.CreateIndividualProfileRequest
 
-	// Support both JSON (if no files) and multipart form (if uploading files)
 	contentType := c.GetHeader("Content-Type")
-	
-	if contentType == "application/json" {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	} else {
-		// Multipart form data
+	if strings.HasPrefix(contentType, "multipart/form-data") {
 		profileData := c.PostForm("profile_data")
 		if profileData != "" {
 			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
 				return
 			}
+		} else {
+			if err := c.ShouldBind(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
-		// Handle Avatar upload
 		avatarFileHeader, err := c.FormFile("avatar")
 		if err == nil && avatarFileHeader != nil {
 			avatarFile, _ := avatarFileHeader.Open()
@@ -59,8 +56,6 @@ func CreateOrUpdateIndividualProfile(c *gin.Context) {
 			}
 			req.AvatarURL = avatarURL
 		}
-
-		// Handle Resume upload
 		resumeFileHeader, err := c.FormFile("resume")
 		if err == nil && resumeFileHeader != nil {
 			resumeFile, _ := resumeFileHeader.Open()
@@ -71,6 +66,11 @@ func CreateOrUpdateIndividualProfile(c *gin.Context) {
 				return
 			}
 			req.ResumeURL = resumeURL
+		}
+	} else {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
 		}
 	}
 
@@ -99,9 +99,39 @@ func CreateOrUpdateIndividualProfile(c *gin.Context) {
 
 func CreateOrUpdateAgencyProfile(c *gin.Context) {
 	var req dto.CreateAgencyProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+
+	contentType := c.GetHeader("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		profileData := c.PostForm("profile_data")
+		if profileData != "" {
+			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
+				return
+			}
+		} else {
+			if err := c.ShouldBind(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		// Handle Logo upload
+		logoFileHeader, err := c.FormFile("logo")
+		if err == nil && logoFileHeader != nil {
+			logoFile, _ := logoFileHeader.Open()
+			defer logoFile.Close()
+			logoURL, uploadErr := utils.UploadImageToCloudinary(logoFile, logoFileHeader.Filename)
+			if uploadErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload logo: " + uploadErr.Error()})
+				return
+			}
+			req.LogoURL = logoURL
+		}
+	} else {
+		if err := c.ShouldBind(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	userID, err := getUserIDFromContext(c)
@@ -129,9 +159,39 @@ func CreateOrUpdateAgencyProfile(c *gin.Context) {
 
 func CreateOrUpdateClientProfile(c *gin.Context) {
 	var req dto.CreateClientProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+
+	contentType := c.GetHeader("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		profileData := c.PostForm("profile_data")
+		if profileData != "" {
+			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
+				return
+			}
+		} else {
+			if err := c.ShouldBind(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
+
+		// Handle Logo upload
+		logoFileHeader, err := c.FormFile("logo")
+		if err == nil && logoFileHeader != nil {
+			logoFile, _ := logoFileHeader.Open()
+			defer logoFile.Close()
+			logoURL, uploadErr := utils.UploadImageToCloudinary(logoFile, logoFileHeader.Filename)
+			if uploadErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload logo: " + uploadErr.Error()})
+				return
+			}
+			req.LogoURL = logoURL
+		}
+	} else {
+		if err := c.ShouldBind(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	userID, err := getUserIDFromContext(c)
@@ -180,19 +240,13 @@ func GetMyProfile(c *gin.Context) {
 
 func SetAccountType(c *gin.Context) {
 	var req dto.SetAccountTypeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(401, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	profileService := services.NewProfileService()
-	err := profileService.SetAccountType(userID.(string), req.AccountType)
+	err := profileService.SetAccountType(req)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
@@ -286,6 +340,52 @@ func UploadAvatar(c *gin.Context) {
 	})
 }
 
+func UploadLogo(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileHeader, err := c.FormFile("logo")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logo image is required"})
+		return
+	}
+
+	ext := filepath.Ext(fileHeader.Filename)
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only JPG, PNG, and WebP images are allowed"})
+		return
+	}
+
+	const maxFileSize = 5 * 1024 * 1024 // 5MB
+	if fileHeader.Size > maxFileSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file size exceeds 5MB limit"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
+		return
+	}
+	defer file.Close()
+
+	filename := fmt.Sprintf("%s-logo-%d", userID, time.Now().Unix())
+
+	fileURL, err := utils.UploadImageToCloudinary(file, filename)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to cloudinary: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "logo uploaded successfully",
+		"logo_url": fileURL,
+	})
+}
+
 func DeleteAvatar(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -301,6 +401,23 @@ func DeleteAvatar(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "avatar deleted successfully"})
+}
+
+func DeleteLogo(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	profileService := services.NewProfileService()
+	err = profileService.DeleteLogo(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "logo deleted successfully"})
 }
 
 func DeleteResume(c *gin.Context) {
@@ -371,3 +488,68 @@ func ExportProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func CreateOrUpdateProfile(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	profileService := services.NewProfileService()
+	accountType, err := profileService.GetUserAccountType(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	switch accountType {
+	case "individual":
+		CreateOrUpdateIndividualProfile(c)
+	case "agency":
+		CreateOrUpdateAgencyProfile(c)
+	case "client":
+		CreateOrUpdateClientProfile(c)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account type"})
+	}
+}
+
+func CheckSlug(c *gin.Context) {
+	slug := c.Query("slug")
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "slug query parameter is required"})
+		return
+	}
+
+	profileService := services.NewProfileService()
+	resp, err := profileService.CheckSlugAvailability(slug)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func DeleteProfileAccount(c *gin.Context) {
+	var req dto.DeleteAccountRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	profileService := services.NewProfileService()
+	err = profileService.DeleteAccount(userID, req.Password)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "account successfully scheduled for deletion"})
+}

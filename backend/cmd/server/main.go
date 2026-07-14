@@ -7,12 +7,15 @@ import (
 
 	"techguild-backend/src/database/migration"
 	"techguild-backend/src/database/postgres"
+	"techguild-backend/src/jobs"
 	"techguild-backend/src/routes"
 )
 
 func main() {
 	postgres.ConnectDatabase()
 	migration.Migrate()
+
+	jobs.StartCleanupJob()
 
 	router := gin.Default()
 	router.Static("/uploads", "./uploads")

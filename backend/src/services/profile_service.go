@@ -14,6 +14,7 @@ import (
 	"techguild-backend/src/utils"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -96,10 +97,6 @@ func (s *ProfileService) CreateOrUpdateIndividualProfile(userID string, req dto.
 		return "", err
 	}
 
-	if isNew {
-		_ = s.userRepo.AddUserPoints(userID, 20)
-	}
-
 	s.checkAndActivateUser(userID)
 	return profile.PublicUrlSlug, nil
 }
@@ -156,10 +153,6 @@ func (s *ProfileService) CreateOrUpdateAgencyProfile(userID string, req dto.Crea
 	err = s.userRepo.UpdateAgencyProfile(profile)
 	if err != nil {
 		return "", err
-	}
-
-	if isNew {
-		_ = s.userRepo.AddUserPoints(userID, 20)
 	}
 
 	s.checkAndActivateUser(userID)
@@ -219,10 +212,6 @@ func (s *ProfileService) CreateOrUpdateClientProfile(userID string, req dto.Crea
 		return "", err
 	}
 
-	if isNew {
-		_ = s.userRepo.AddUserPoints(userID, 20)
-	}
-
 	s.checkAndActivateUser(userID)
 	return profile.PublicUrlSlug, nil
 }
@@ -273,17 +262,33 @@ func (s *ProfileService) GetMyProfile(userID string) (interface{}, error) {
 	}
 }
 
-func (s *ProfileService) SetAccountType(userID string, accountType string) error {
-	user, err := s.userRepo.GetUserByID(userID)
+func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
+	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return ErrUserNotFound
+		return errors.New("user not found")
+	}
+
+	if !utils.CheckPassword(req.Password, user.PasswordHash) {
+		return errors.New("invalid email or password")
+	}
+
+	if !user.EmailVerified {
+		return errors.New("please verify your email first")
 	}
 
 	if user.AccountType != nil && *user.AccountType != "" {
 		return errors.New("account type already set")
 	}
 
-	return s.userRepo.UpdateAccountType(userID, models.AccountType(accountType))
+	err = s.userRepo.UpdateAccountType(user.ID.String(), models.AccountType(req.AccountType))
+	if err != nil {
+		return err
+	}
+
+	// Add 20 points for completing account registration
+	_ = s.userRepo.AddUserPoints(user.ID.String(), 20)
+
+	return s.userRepo.UpdateUserStatus(user.ID.String(), string(models.StatusActive))
 }
 
 func (s *ProfileService) DeleteAvatar(userID string) error {
@@ -307,6 +312,45 @@ func (s *ProfileService) DeleteAvatar(userID string) error {
 	return s.userRepo.UpdateIndividualProfile(profile)
 }
 
+func (s *ProfileService) DeleteLogo(userID string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if user.AccountType != nil && *user.AccountType == models.AccountTypeAgencyAdmin {
+		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
+		if err != nil {
+			return errors.New("profile not found")
+		}
+		if profile.LogoURL == "" {
+			return errors.New("no logo to delete")
+		}
+		publicID := extractCloudinaryPublicID(profile.LogoURL)
+		if publicID != "" {
+			_ = utils.DeleteFromCloudinary(publicID, "image")
+		}
+		profile.LogoURL = ""
+		return s.userRepo.UpdateAgencyProfile(profile)
+	} else if user.AccountType != nil && *user.AccountType == models.AccountTypeClientAdmin {
+		profile, err := s.userRepo.GetClientProfileByUserID(userID)
+		if err != nil {
+			return errors.New("profile not found")
+		}
+		if profile.LogoURL == "" {
+			return errors.New("no logo to delete")
+		}
+		publicID := extractCloudinaryPublicID(profile.LogoURL)
+		if publicID != "" {
+			_ = utils.DeleteFromCloudinary(publicID, "image")
+		}
+		profile.LogoURL = ""
+		return s.userRepo.UpdateClientProfile(profile)
+	}
+
+	return errors.New("unauthorized: account type cannot have logo")
+}
+
 func (s *ProfileService) DeleteResume(userID string) error {
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 	if err != nil {
@@ -328,9 +372,6 @@ func (s *ProfileService) DeleteResume(userID string) error {
 	return s.userRepo.UpdateIndividualProfile(profile)
 }
 
-// extractCloudinaryPublicID extracts the public ID from a Cloudinary URL
-// e.g. https://res.cloudinary.com/xxx/image/upload/v123/avatars/filename.png -> avatars/filename
-// e.g. https://res.cloudinary.com/xxx/raw/upload/v123/resumes/filename.pdf -> resumes/filename
 func extractCloudinaryPublicID(url string) string {
 	// Find the "/upload/" part and take everything after the version segment
 	parts := strings.Split(url, "/upload/")
@@ -522,3 +563,108 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 	}, nil
 }
 
+func (s *ProfileService) GetUserAccountType(userID string) (string, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+	if user.AccountType == nil {
+		return "", errors.New("account type not set")
+	}
+	return string(*user.AccountType), nil
+}
+
+func (s *ProfileService) CheckSlugAvailability(slug string) (*dto.CheckSlugResponse, error) {
+	_, err := s.userRepo.GetIndividualProfileBySlug(slug)
+	if err == nil {
+		alternatives := []string{
+			slug + "-pro",
+			slug + "-1",
+			slug + "-official",
+		}
+		return &dto.CheckSlugResponse{
+			Available:    false,
+			Alternatives: alternatives,
+		}, nil
+	}
+
+	return &dto.CheckSlugResponse{
+		Available: true,
+	}, nil
+}
+
+func (s *ProfileService) DeleteAccount(userID string, password string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if !utils.CheckPassword(password, user.PasswordHash) {
+		return errors.New("invalid password")
+	}
+
+	user.Status = models.StatusPendingDeletion
+	deletionDate := time.Now().Add(30 * 24 * time.Hour)
+	user.ScheduledDeletionDate = &deletionDate
+	_ = s.userRepo.UpdateUser(user)
+
+	_ = s.userRepo.RevokeAllSessions(userID)
+
+	return nil
+}
+
+func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAccountRequest) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if req.Email != "" {
+		if !utils.CheckPassword(req.Password, user.PasswordHash) {
+			return errors.New("invalid password for email update")
+		}
+		user.Email = req.Email
+	}
+	if req.NewPassword != "" {
+		if !utils.CheckPassword(req.Password, user.PasswordHash) {
+			return errors.New("invalid password for password update")
+		}
+		hashed, _ := utils.HashPassword(req.NewPassword)
+		user.PasswordHash = hashed
+	}
+
+	return s.userRepo.UpdateUser(user)
+}
+
+func (s *ProfileService) UpdateNotifications(userID string, req dto.UpdateNotificationsRequest) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	b, _ := json.Marshal(req.Preferences)
+	user.NotificationPreferences = datatypes.JSON(b)
+
+	return s.userRepo.UpdateUser(user)
+}
+
+func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePrivacyRequest) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if user.AccountType != nil && *user.AccountType == models.AccountTypeIndividual {
+		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+		if err == nil {
+			profile.ProfileVisibility = req.ProfileVisibility
+			_ = s.userRepo.UpdateIndividualProfile(profile)
+		}
+	}
+
+	pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
+	b, _ := json.Marshal(pref)
+	user.PrivacySettings = datatypes.JSON(b)
+
+	return s.userRepo.UpdateUser(user)
+}
