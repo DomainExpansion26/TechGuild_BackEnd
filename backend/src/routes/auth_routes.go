@@ -10,7 +10,6 @@ func AuthRoutes(router *gin.Engine) {
 
 	auth := router.Group("/auth")
 	{
-		// Authentication
 		auth.POST("/register", controllers.Register)
 		auth.POST("/login", controllers.Login)
 		auth.POST("/logout", controllers.Logout)

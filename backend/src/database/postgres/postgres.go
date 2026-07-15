@@ -20,22 +20,8 @@ func ConnectDatabase() {
 	if err != nil {
 		log.Println(".env file not found")
 	}
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
-	sslmode := os.Getenv("DB_SSLMODE")
+	dsn := os.Getenv("DATABASE_URL")
 
-	if host == "" || port == "" || user == "" || dbname == "" {
-		log.Fatal("Missing DB environment variables")
-	}
-	dsn := "host=" + host +
-		" user=" + user +
-		" password=" + password +
-		" dbname=" + dbname +
-		" port=" + port +
-		" sslmode=" + sslmode
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal("Postgres connection failed:", err)

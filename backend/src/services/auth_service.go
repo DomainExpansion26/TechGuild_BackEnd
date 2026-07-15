@@ -35,9 +35,9 @@ func (s *AuthService) Register(req dto.RegisterRequest) error {
 	if err != nil {
 		return err
 	}
-
+	fullName := req.FirstName + " " + req.LastName
 	user := &models.User{
-		FullName:      req.FullName,
+		FullName:      fullName,
 		Email:         req.Email,
 		PasswordHash:  hashedPassword,
 		Status:        models.StatusPendingVerification,
@@ -51,6 +51,8 @@ func (s *AuthService) Register(req dto.RegisterRequest) error {
 
 	profile := &models.UserProfile{
 		UserID: user.ID,
+		FirstName: req.FirstName,
+		LastName: req.LastName,
 	}
 
 	err = s.userRepo.CreateProfile(profile)
