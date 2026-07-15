@@ -528,20 +528,15 @@ func (s *VerificationService) ApproveVerification(recordID string) error {
 		return err
 	}
 
-	//------------------------------------------
-	// Save Dedup Hash
-	//------------------------------------------
-
 	if record.Type == models.VerificationIndividual &&
 		record.GovtIDHash != "" {
 
 		err = s.verificationRecordsRepo.CreateGovtHash(
-		&models.GovtIDDedup{
-			GovtIDHash: record.GovtIDHash,
-			UserID:     record.UserID,
-		},
-	)
-
+			&models.GovtIDDedup{
+				GovtIDHash: record.GovtIDHash,
+				UserID:     record.UserID,
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -551,26 +546,18 @@ func (s *VerificationService) ApproveVerification(recordID string) error {
 		record.BusinessPANHash != "" {
 
 		err = s.verificationRecordsRepo.CreateBusinessHash(
-		&models.BusinessPANDedup{
-			PANHash: record.BusinessPANHash,
-			UserID:  record.UserID,
-		},
-	)
-
+			&models.BusinessPANDedup{
+				PANHash: record.BusinessPANHash,
+				UserID:  record.UserID,
+			},
+		)
 		if err != nil {
 			return err
 		}
 	}
 
-	//------------------------------------------
-	// TODO
-	// Send Notification
-	//------------------------------------------
-
-	//------------------------------------------
-	// TODO
-	// Audit Log
-	//------------------------------------------
+	// TODO: Send notification
+	// TODO: Create audit log
 
 	return nil
 }
@@ -584,7 +571,7 @@ func (s *VerificationService) RejectVerification(
 	reason string,
 ) error {
 
-	record, err := s.verificationRecordsRepo.GetVerificationByID(recordID)
+	_, err := s.verificationRecordsRepo.GetVerificationByID(recordID)
 	if err != nil {
 		return errors.New("verification record not found")
 	}
@@ -598,17 +585,8 @@ func (s *VerificationService) RejectVerification(
 		return err
 	}
 
-	//------------------------------------------
-	// TODO
-	// Notify User
-	//------------------------------------------
-
-	//------------------------------------------
-	// TODO
-	// Audit Log
-	//------------------------------------------
-
-	_ = record
+	// TODO: Send notification
+	// TODO: Create audit log
 
 	return nil
 }

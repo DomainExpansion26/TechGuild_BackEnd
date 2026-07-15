@@ -26,6 +26,10 @@ type VerificationRecordsRepository interface {
 	// Verification Documents
 	CreateDocument(document *models.VerificationDocument) error
 	GetDocuments(recordID string) ([]models.VerificationDocument, error)
+	//for admin for verification
+	GetVerificationQueue() ([]models.VerificationRecord, error)
+	ApproveVerification(id string) error
+	RejectVerification(id string, reason string) error
 }
 
 type verificationRecordsRepository struct{}
@@ -168,4 +172,37 @@ func (r *verificationRecordsRepository) GetDocuments(recordID string) ([]models.
 	}
 
 	return documents, nil
+}
+//method for admin to get the verification queue
+func (r *verificationRecordsRepository) GetVerificationQueue() ([]models.VerificationRecord, error) {
+
+	var records []models.VerificationRecord
+
+	err := postgres.DB.
+		Where("status = ?", models.VerificationReview).
+		Preload("User").
+		Order("created_at ASC").
+		Find(&records).Error
+
+	return records, err
+}
+//method for admin to approve and reject the verification
+func (r *verificationRecordsRepository) ApproveVerification(id string) error {
+
+	return postgres.DB.Model(&models.VerificationRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":      models.VerificationApproved,
+			"verified_at": time.Now(),
+		}).Error
+}
+
+func (r *verificationRecordsRepository) RejectVerification(id string, reason string) error {
+
+	return postgres.DB.Model(&models.VerificationRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":            models.VerificationRejected,
+			"rejection_reason":  reason,
+		}).Error
 }
