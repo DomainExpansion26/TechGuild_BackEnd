@@ -68,7 +68,7 @@ func VerifyEmail(c *gin.Context) {
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	err := authService.VerifyEmail(dto.VerifyEmailRequest{
+	res, err := authService.VerifyEmail(dto.VerifyEmailRequest{
 		Token: token,
 	})
 
@@ -79,9 +79,7 @@ func VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Email verified successfully",
-	})
+	c.JSON(http.StatusOK, res)
 }
 func ResendVerificationEmail(c *gin.Context) {
 
@@ -218,7 +216,7 @@ func ForgotPassword(c *gin.Context) {
 }
 func ChangePassword(c *gin.Context) {
 
-	userID := c.GetString("userID")
+	userID := c.GetString("user_id")
 
 	var req dto.ChangePasswordRequest
 
@@ -241,5 +239,23 @@ func ChangePassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, dto.ChangePasswordResponse{
 		Message: "Password changed successfully",
+	})
+}
+
+func DeleteAccount(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	err := authService.DeleteAccount(userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Account deleted successfully",
 	})
 }

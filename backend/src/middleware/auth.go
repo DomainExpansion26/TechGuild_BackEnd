@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -8,7 +9,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("your_secret_key")
+var jwtSecret []byte
+
+func getJwtSecret() []byte {
+	return []byte("your-access-secret")
+}
 
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -28,17 +33,18 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-			return jwtSecret, nil
+			return getJwtSecret(), nil
 		})
 
 		if err != nil || !token.Valid {
+			fmt.Println("JWT ERROR:", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			c.Abort()
 			return
 		}
 
 		claims := token.Claims.(*Claims)
-		c.Set("userID", claims.UserID)
+		c.Set("user_id", claims.UserID)
 
 		c.Next()
 	}

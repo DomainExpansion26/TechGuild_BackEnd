@@ -12,7 +12,9 @@ func Migrate() {
 	err := postgres.DB.AutoMigrate(
 
 		&models.User{},
-		&models.UserProfile{},
+		&models.IndividualProfile{},
+		&models.AgencyProfile{},
+		&models.ClientProfile{},
 		&models.UserSession{},
 		&models.VerificationRecord{},
 
