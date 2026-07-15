@@ -35,6 +35,8 @@ type User struct {
 
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
 
+	Phone *string `gorm:"type:varchar(20);uniqueIndex"`
+
 	PasswordHash string `gorm:"type:text"`
 
 	TwoFASecret string `gorm:"type:text"`
