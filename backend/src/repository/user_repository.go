@@ -17,7 +17,6 @@ type UserRepository interface {
 	GetUserByID(userID string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
 	DeleteUser(userID string) error
-	UpdateUser(user *models.User) error
 	UpdateUserStatus(userID string, status string) error
 	UpdateEmailVerified(userID string, verified bool) error
 	UpdateAccountType(userID string, accountType models.AccountType) error
@@ -232,6 +231,3 @@ func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) erro
 	return postgres.DB.Save(profile).Error
 }
 
-func (r *userRepository) UpdateUser(user *models.User) error {
-	return postgres.DB.Save(user).Error
-}
