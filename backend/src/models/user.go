@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,8 @@ const (
 	StatusActive              UserStatus = "active"
 	StatusSuspended           UserStatus = "suspended"
 	StatusRejected            UserStatus = "rejected"
+	StatusPendingDeletion     UserStatus = "pending_deletion"
+	StatusDeleted             UserStatus = "deleted"
 )
 
 type User struct {
@@ -31,6 +34,8 @@ type User struct {
 	LastName  string `gorm:"type:varchar(100)"`
 
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`
+
+	Phone *string `gorm:"type:varchar(20);uniqueIndex"`
 
 	PasswordHash string `gorm:"type:text"`
 
@@ -48,9 +53,14 @@ type User struct {
 
 	Points int `gorm:"default:0"`
 
+	NotificationPreferences datatypes.JSON `gorm:"type:jsonb"`
+	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
+
 	CreatedAt time.Time
 
 	UpdatedAt time.Time
+
+	ScheduledDeletionDate *time.Time
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {

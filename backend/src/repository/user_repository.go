@@ -40,6 +40,7 @@ type UserRepository interface {
 
 	GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error)
 	GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error)
+	UpdateUser(user *models.User) error
 }
 
 type userRepository struct{}
@@ -229,4 +230,8 @@ func (r *userRepository) GetClientProfileByUserID(userID string) (*models.Client
 
 func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) error {
 	return postgres.DB.Save(profile).Error
+}
+
+func (r *userRepository) UpdateUser(user *models.User) error {
+	return postgres.DB.Save(user).Error
 }

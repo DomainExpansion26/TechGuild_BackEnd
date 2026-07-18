@@ -2,70 +2,70 @@ package dto
 
 type CreateIndividualProfileRequest struct {
 	// Basic Info
-	Phone             *string `json:"phone"`
-	DateOfBirth       *string `json:"date_of_birth"` // typically parseable date string
-	Gender            string  `json:"gender"`
-	AvatarURL         string  `json:"avatar_url"`
-	Bio               string  `json:"bio" binding:"max=500"`
-	Country           string  `json:"country"`
-	State             string  `json:"state"`
-	City              string  `json:"city"`
-	Headline          string  `json:"headline" binding:"max=150"`
-	PreferredLanguage string  `json:"preferred_language"`
-	TimeZone          string  `json:"timezone"`
-	CountryCode       string  `json:"country_code"`
+	Phone             *string `json:"phone" form:"phone"`
+	DateOfBirth       *string `json:"date_of_birth" form:"date_of_birth"` // typically parseable date string
+	Gender            string  `json:"gender" form:"gender"`
+	AvatarURL         string  `json:"avatar_url" form:"avatar_url"`
+	Bio               string  `json:"bio" binding:"max=500" form:"bio"`
+	Country           string  `json:"country" form:"country"`
+	State             string  `json:"state" form:"state"`
+	City              string  `json:"city" form:"city"`
+	Headline          string  `json:"headline" binding:"max=150" form:"headline"`
+	PreferredLanguage string  `json:"preferred_language" form:"preferred_language"`
+	TimeZone          string  `json:"timezone" form:"timezone"`
+	CountryCode       string  `json:"country_code" form:"country_code"`
 
 	// Freelancer Specific Fields
-	ExperienceLevel   string   `json:"experience_level"`
-	Availability      string   `json:"availability"`
-	Skills            []string `json:"skills"`
-	ToolsTechnologies []string `json:"tools_technologies"`
-	ServiceCategories []string `json:"service_categories"`
+	ExperienceLevel   string   `json:"experience_level" form:"experience_level"`
+	Availability      string   `json:"availability" form:"availability"`
+	Skills            []string `json:"skills" form:"skills"`
+	ToolsTechnologies []string `json:"tools_technologies" form:"tools_technologies"`
+	ServiceCategories []string `json:"service_categories" form:"service_categories"`
 
-	PortfolioURL string `json:"portfolio_url"`
-	GithubURL    string `json:"github_url"`
-	LinkedinURL  string `json:"linkedin_url"`
-	ResumeURL    string `json:"resume_url"`
+	PortfolioURL string `json:"portfolio_url" form:"portfolio_url"`
+	GithubURL    string `json:"github_url" form:"github_url"`
+	LinkedinURL  string `json:"linkedin_url" form:"linkedin_url"`
+	ResumeURL    string `json:"resume_url" form:"resume_url"`
 
-	TermsConfirmed    bool   `json:"terms_confirmed"`
-	ProfileVisibility string `json:"profile_visibility"`
+	TermsConfirmed    bool   `json:"terms_confirmed" form:"terms_confirmed"`
+	ProfileVisibility string `json:"profile_visibility" form:"profile_visibility"`
 }
 
 type CreateAgencyProfileRequest struct {
-	AgencyName      string   `json:"agency_name" binding:"required"`
-	LogoURL         string   `json:"logo_url"`
-	Description     string   `json:"description" binding:"max=1000"`
-	WebsiteURL      string   `json:"website_url"`
-	ServicesOffered []string `json:"services_offered"`
-	Industries      []string `json:"industries"`
-	TeamSize        string   `json:"team_size"`
+	AgencyName      string   `json:"agency_name" binding:"required" form:"agency_name"`
+	LogoURL         string   `json:"logo_url" form:"logo_url"`
+	Description     string   `json:"description" binding:"max=1000" form:"description"`
+	WebsiteURL      string   `json:"website_url" form:"website_url"`
+	ServicesOffered []string `json:"services_offered" form:"services_offered"`
+	Industries      []string `json:"industries" form:"industries"`
+	TeamSize        string   `json:"team_size" form:"team_size"`
 
-	ContactName    string  `json:"contact_name"`
-	Phone          *string `json:"phone"`
-	RegistrationNo string  `json:"registration_no"`
-	Country        string  `json:"country"`
-	State          string  `json:"state"`
-	City           string  `json:"city"`
-	TimeZone       string  `json:"timezone"`
-	CountryCode    string  `json:"country_code"`
+	ContactName    string  `json:"contact_name" form:"contact_name"`
+	Phone          *string `json:"phone" form:"phone"`
+	RegistrationNo string  `json:"registration_no" form:"registration_no"`
+	Country        string  `json:"country" form:"country"`
+	State          string  `json:"state" form:"state"`
+	City           string  `json:"city" form:"city"`
+	TimeZone       string  `json:"timezone" form:"timezone"`
+	CountryCode    string  `json:"country_code" form:"country_code"`
 }
 
 type CreateClientProfileRequest struct {
-	CompanyName  string   `json:"company_name" binding:"required"`
-	LogoURL      string   `json:"logo_url"`
-	Industry     string   `json:"industry"`
-	WebsiteURL   string   `json:"website_url"`
-	ProjectTypes []string `json:"project_types"`
-	BudgetRange  string   `json:"budget_range"`
-	TeamSize     string   `json:"team_size"`
+	CompanyName  string   `json:"company_name" binding:"required" form:"company_name"`
+	LogoURL      string   `json:"logo_url" form:"logo_url"`
+	Industry     string   `json:"industry" form:"industry"`
+	WebsiteURL   string   `json:"website_url" form:"website_url"`
+	ProjectTypes []string `json:"project_types" form:"project_types"`
+	BudgetRange  string   `json:"budget_range" form:"budget_range"`
+	TeamSize     string   `json:"team_size" form:"team_size"`
 
-	ContactName string  `json:"contact_name"`
-	Phone       *string `json:"phone"`
-	Country     string  `json:"country"`
-	State       string  `json:"state"`
-	City        string  `json:"city"`
-	TimeZone    string  `json:"timezone"`
-	CountryCode string  `json:"country_code"`
+	ContactName string  `json:"contact_name" form:"contact_name"`
+	Phone       *string `json:"phone" form:"phone"`
+	Country     string  `json:"country" form:"country"`
+	State       string  `json:"state" form:"state"`
+	City        string  `json:"city" form:"city"`
+	TimeZone    string  `json:"timezone" form:"timezone"`
+	CountryCode string  `json:"country_code" form:"country_code"`
 }
 
 type CreateProfileResponse struct {
@@ -74,6 +74,8 @@ type CreateProfileResponse struct {
 }
 
 type SetAccountTypeRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required"`
 	AccountType string `json:"account_type" binding:"required,oneof=individual agency client"`
 }
 
@@ -121,4 +123,13 @@ type ExportResponse struct {
 	Message     string `json:"message"`
 	DownloadURL string `json:"download_url"`
 	ExpiresIn   string `json:"expires_in"`
+}
+
+type CheckSlugResponse struct {
+	Available    bool     `json:"available"`
+	Alternatives []string `json:"alternatives,omitempty"`
+}
+
+type DeleteAccountRequest struct {
+	Password string `json:"password" binding:"required"`
 }

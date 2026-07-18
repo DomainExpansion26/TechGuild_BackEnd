@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"techguild-backend/src/dto"
@@ -102,47 +101,13 @@ func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.LoginRespons
 		return nil, err
 	}
 
-	err = s.userRepo.UpdateUserStatus(userID, string(models.StatusActive))
-	if err != nil {
-		return nil, err
-	}
-
 	_ = s.verificationRepo.DeleteVerificationToken(req.Token)
 
 	// Add +10 points for verifying the email
 	_ = s.userRepo.AddUserPoints(userID, 10)
 
-	accessToken, err := utils.GenerateAccessToken(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	refreshToken, err := utils.GenerateRefreshToken(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return nil, errors.New("invalid user id format")
-	}
-
-	session := &models.UserSession{
-		UserID:       userUUID,
-		RefreshToken: refreshToken,
-		IsRevoked:    false,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
-	}
-
-	err = s.userRepo.CreateSession(session)
-	if err != nil {
-		return nil, err
-	}
-
 	return &dto.LoginResponse{
-		Message:      "Email verified and logged in successfully",
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		Message: "Email verified successfully. Please select your account type to proceed.",
 	}, nil
 }
 
@@ -173,6 +138,18 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
 
 	if !user.EmailVerified {
 		return nil, errors.New("please verify your email first")
+	}
+
+	if user.AccountType == nil || *user.AccountType == "" {
+		return nil, errors.New("please select an account type first")
+	}
+
+	if user.Status == models.StatusPendingDeletion {
+		user.Status = models.StatusActive
+		user.ScheduledDeletionDate = nil
+		if err := s.userRepo.UpdateUser(user); err != nil {
+			return nil, err
+		}
 	}
 
 	if user.Status != models.StatusActive {

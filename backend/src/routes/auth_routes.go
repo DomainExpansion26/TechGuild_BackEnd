@@ -19,12 +19,12 @@ func AuthRoutes(router *gin.Engine) {
 		auth.POST("/resend-verification", controllers.ResendVerificationEmail)
 		auth.POST("/forgot-password", controllers.ForgotPassword)
 		auth.POST("/reset-password", controllers.ResetPassword)
+		auth.POST("/register/account-type", controllers.SetAccountType)
 	}
 
 	authProtected := router.Group("/auth")
 	authProtected.Use(middleware.AuthMiddleware())
 	{
-		authProtected.POST("/register/account-type", controllers.SetAccountType)
 		authProtected.POST("/change-password", controllers.ChangePassword)
 		authProtected.DELETE("/account", controllers.DeleteAccount)
 	}
