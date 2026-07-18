@@ -17,7 +17,6 @@ type UserRepository interface {
 	GetUserByID(userID string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
 	DeleteUser(userID string) error
-
 	UpdateUserStatus(userID string, status string) error
 	UpdateEmailVerified(userID string, verified bool) error
 	UpdateAccountType(userID string, accountType models.AccountType) error
@@ -122,7 +121,9 @@ func (r *userRepository) AddUserPoints(userID string, points int) error {
 func (r *userRepository) CreateSession(session *models.UserSession) error {
 	return postgres.DB.Create(session).Error
 }
-
+func (r *userRepository) UpdateUser(user *models.User) error {
+	return postgres.DB.Save(user).Error
+}
 func (r *userRepository) GetSession(refreshToken string) (*models.UserSession, error) {
 
 	var session models.UserSession
@@ -230,6 +231,3 @@ func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) erro
 	return postgres.DB.Save(profile).Error
 }
 
-func (r *userRepository) UpdateUser(user *models.User) error {
-	return postgres.DB.Save(user).Error
-}

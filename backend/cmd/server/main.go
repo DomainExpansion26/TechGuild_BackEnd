@@ -22,6 +22,7 @@ func main() {
 	routes.AuthRoutes(router)
 	routes.OAuthRoutes(router)
 	routes.ProfileRoutes(router)
+	routes.VerificationRoutes(router)
 	log.Println("Server running on :8080")
 	if err := router.Run(":8080"); err != nil {
 		log.Fatal(err)

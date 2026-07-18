@@ -109,3 +109,25 @@ func UploadJSONToCloudinary(data []byte, filename string) (string, error) {
 
 	return resp.SecureURL, nil
 }
+// UploadVerificationDocument uploads verification documents
+// (Aadhaar, PAN, GST, Selfie, etc.) to Cloudinary.
+func UploadVerificationDocument(file multipart.File, filename string) (string, error) {
+
+	cld, err := getCloudinaryClient()
+	if err != nil {
+		return "", err
+	}
+
+	ctx := context.Background()
+
+	resp, err := cld.Upload.Upload(ctx, file, uploader.UploadParams{
+		PublicID: filename,
+		Folder:   "verification_documents",
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return resp.SecureURL, nil
+}
