@@ -8,7 +8,7 @@
 
 // @license.name MIT
 
-// @host localhost:8080
+// @host https://techguild-backend.onrender.com
 // @BasePath /
 
 // @securityDefinitions.apikey BearerAuth

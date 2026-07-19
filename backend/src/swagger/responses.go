@@ -23,10 +23,6 @@ type LoginUnauthorizedResponse struct {
 	Error string `json:"error" example:"Invalid email or password"`
 }
 
-type UploadResumeResponse struct {
-	Message   string `json:"message" example:"resume uploaded successfully"`
-	ResumeURL string `json:"resume_url" example:"https://res.cloudinary.com/demo/raw/upload/v123456/resume.pdf"`
-}
 
 type UploadAvatarResponse struct {
 	Message   string `json:"message" example:"avatar uploaded successfully"`
@@ -46,10 +42,32 @@ type UpdateAccountSettingsResponse struct {
 	Message string `json:"message" example:"account settings updated successfully"`
 }
 
+type UpdatePrivacySettingsResponse struct {
+	Message string `json:"message" example:"privacy settings updated successfully"`
+}
+type UploadResumeResponse struct {
+	Message   string `json:"message" example:"resume uploaded successfully"`
+	ResumeURL string `json:"resume_url" example:"https://example.com/resume.pdf"`
+}
+
+type DeleteResumeResponse struct {
+    Message string `json:"message" example:"resume deleted successfully"`
+}
+type DeleteLogoResponse struct {
+    Message string `json:"message" example:"logo deleted successfully"`
+}
+type DeleteProfileAccountResponse struct {
+	Message string `json:"message" example:"account successfully scheduled for deletion"`
+}
+type UpdateAccountResponse struct {
+	Message string `json:"message" example:"account settings updated successfully"`
+}
+
 type UpdateNotificationsResponse struct {
 	Message string `json:"message" example:"notifications updated successfully"`
 }
 
-type UpdatePrivacySettingsResponse struct {
+type UpdatePrivacySettingsResponsestruct struct {
 	Message string `json:"message" example:"privacy settings updated successfully"`
 }
+

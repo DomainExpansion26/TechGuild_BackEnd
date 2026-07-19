@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param request body dto.UpdateAccountRequest true "Account settings"
-// @Success 200 {object} dto.UpdateAccountSettingsResponse
+// @Success 200 {object} swagger.UpdateAccountResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -52,7 +52,7 @@ func UpdateAccountSettings(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.UpdateNotificationsRequest true "Notification settings"
-// @Success 200 {object} dto.UpdateNotificationsResponse
+// @Success 200 {object} swagger.UpdateNotificationsResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -88,7 +88,7 @@ func UpdateNotifications(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.UpdatePrivacyRequest true "Privacy settings"
-// @Success 200 {object} dto.UpdatePrivacySettingsResponse
+// @Success 200 {object} swagger.UpdatePrivacySettingsResponse
 // @Failure 400 {object} map[string]string "Invalid request"
 // @Failure 401 {object} map[string]string "Unauthorized"
 // @Failure 500 {object} map[string]string "Internal server error"

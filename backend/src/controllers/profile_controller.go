@@ -269,11 +269,11 @@ func CreateOrUpdateClientProfile(c *gin.Context) {
 
 // GetMyProfile godoc
 // @Summary Get my profile
-// @Description Returns the authenticated user's profile.
+// @Description Returns the authenticated user's profile based on their account type (Individual, Agency, or Client).
 // @Tags Profile
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.GetProfileResponse
+// @Success 200 {object} interface{}
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -336,7 +336,7 @@ func SetAccountType(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param resume formData file true "Resume PDF"
-// @Success 200 {object} dto.UploadResumeResponse
+// @Success 200 {object} swagger.UploadResumeResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -388,7 +388,7 @@ func UploadResume(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param avatar formData file true "Avatar image"
-// @Success 200 {object} dto.UploadAvatarResponse
+// @Success 200 {object} swagger.UploadAvatarResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -447,7 +447,7 @@ func UploadAvatar(c *gin.Context) {
 // @Accept multipart/form-data
 // @Produce json
 // @Param logo formData file true "Logo image"
-// @Success 200 {object} dto.UploadLogoResponse
+// @Success 200 {object} swagger.UploadLogoResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -504,7 +504,7 @@ func UploadLogo(c *gin.Context) {
 // @Tags Profile
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.DeleteAvatarResponse
+// @Success 200 {object} swagger.DeleteAvatarResponse
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /profile/avatar [delete]
@@ -531,7 +531,7 @@ func DeleteAvatar(c *gin.Context) {
 // @Tags Profile
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.DeleteLogoResponse
+// @Success 200 {object} swagger.DeleteLogoResponse
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /profile/logo [delete]
@@ -558,7 +558,7 @@ func DeleteLogo(c *gin.Context) {
 // @Tags Profile
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.DeleteResumeResponse
+// @Success 200 {object} swagger.DeleteResumeResponse
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /profile/resume [delete]
@@ -640,7 +640,7 @@ func GetUserPoints(c *gin.Context) {
 // @Tags Profile
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.ExportProfileResponse
+// @Success 200 {object} dto.ExportResponse
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /profile/export [get]
@@ -736,7 +736,7 @@ func CheckSlug(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.DeleteAccountRequest true "Delete account request"
-// @Success 200 {object} dto.DeleteProfileAccountResponse
+// @Success 200 {object} swagger.DeleteProfileAccountResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Router /profile/delete-account [delete]
