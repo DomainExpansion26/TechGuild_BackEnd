@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_"techguild-backend/src/swagger"
 )
 
 func getUserIDFromContext(c *gin.Context) (string, error) {

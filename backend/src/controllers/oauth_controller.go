@@ -11,6 +11,7 @@ import (
 	"techguild-backend/src/services"
 
 	"github.com/gin-gonic/gin"
+	_"techguild-backend/src/swagger"
 )
 
 type GoogleUser struct {

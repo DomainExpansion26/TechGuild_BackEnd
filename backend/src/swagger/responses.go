@@ -41,3 +41,15 @@ type UploadLogoResponse struct {
 type DeleteAvatarResponse struct {
 	Message string `json:"message" example:"avatar deleted successfully"`
 }
+
+type UpdateAccountSettingsResponse struct {
+	Message string `json:"message" example:"account settings updated successfully"`
+}
+
+type UpdateNotificationsResponse struct {
+	Message string `json:"message" example:"notifications updated successfully"`
+}
+
+type UpdatePrivacySettingsResponse struct {
+	Message string `json:"message" example:"privacy settings updated successfully"`
+}
