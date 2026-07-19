@@ -7,8 +7,8 @@
 // @contact.email support@techguild.com
 
 // @license.name MIT
-
 // @host https://techguild-backend.onrender.com
+
 // @BasePath /
 
 // @securityDefinitions.apikey BearerAuth

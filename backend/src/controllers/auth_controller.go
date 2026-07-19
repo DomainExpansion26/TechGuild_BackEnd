@@ -5,11 +5,8 @@ import (
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
-	_ "techguild-backend/src/swagger"
-
-	"github.com/gin-gonic/gin"
+	_"techguild-backend/src/swagger"
 )
-
 // Register godoc
 //
 //	@Summary		Register a new user
