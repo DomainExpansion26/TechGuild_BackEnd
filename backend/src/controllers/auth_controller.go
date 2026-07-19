@@ -6,8 +6,19 @@ import (
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	_"techguild-backend/src/swagger"
 )
-
+// Register godoc
+//
+//	@Summary		Register a new user
+//	@Description	Register a new TechGuild user account and send an email verification link.
+//	@Tags			Authentication
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		dto.RegisterRequest	true	"Registration Request"
+//	@Success		201		{object}	swagger.RegisterSuccessResponse
+//	@Failure		400		{object}	swagger.RegisterErrorResponse
+//	@Router			/auth/register [post]
 func Register(c *gin.Context) {
 
 	var req dto.RegisterRequest
@@ -33,6 +44,19 @@ func Register(c *gin.Context) {
 		"message": "Registration successful. Please check your email to verify your account.",
 	})
 }
+
+// Login godoc
+//
+//	@Summary		User Login
+//	@Description	Authenticate a user using email and password and return JWT access and refresh tokens.
+//	@Tags			Authentication
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		dto.LoginRequest	true	"Login Request"
+//	@Success		200		{object}	swagger.LoginSuccessResponse
+//	@Failure		400		{object}	swagger.LoginBadRequestResponse
+//	@Failure		401		{object}	swagger.LoginUnauthorizedResponse
+//	@Router			/auth/login [post]
 func Login(c *gin.Context) {
 
 	var req dto.LoginRequest
