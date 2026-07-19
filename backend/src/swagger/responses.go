@@ -71,3 +71,6 @@ type UpdatePrivacySettingsResponsestruct struct {
 	Message string `json:"message" example:"privacy settings updated successfully"`
 }
 
+type ErrorResponse struct {
+	Error string `json:"error" example:"error message"`
+}

@@ -10,8 +10,9 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 
+	_ "techguild-backend/src/swagger"
+
 	"github.com/gin-gonic/gin"
-	_"techguild-backend/src/swagger"
 )
 
 type GoogleUser struct {
@@ -43,6 +44,7 @@ func GoogleLogin(c *gin.Context) {
 
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
+
 // GoogleCallback godoc
 // @Summary Google OAuth callback
 // @Description Handles Google OAuth callback and authenticates the user.
@@ -51,8 +53,8 @@ func GoogleLogin(c *gin.Context) {
 // @Produce json
 // @Param code query string true "Google authorization code"
 // @Success 200 {object} dto.LoginResponse
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /oauth/google/callback [get]
 func GoogleCallback(c *gin.Context) {
 
@@ -133,8 +135,8 @@ func GitHubLogin(c *gin.Context) {
 // @Produce json
 // @Param code query string true "GitHub authorization code"
 // @Success 200 {object} dto.LoginResponse
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /oauth/github/callback [get]
 func GitHubCallback(c *gin.Context) {
 

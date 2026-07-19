@@ -5,9 +5,11 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 
+	_ "techguild-backend/src/swagger"
+
 	"github.com/gin-gonic/gin"
-	_"techguild-backend/src/swagger"
 )
+
 // UpdateAccountSettings godoc
 // @Summary Update account settings
 // @Description Updates the authenticated user's account settings.
@@ -17,9 +19,9 @@ import (
 // @Produce json
 // @Param request body dto.UpdateAccountRequest true "Account settings"
 // @Success 200 {object} swagger.UpdateAccountResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /settings/account [put]
 func UpdateAccountSettings(c *gin.Context) {
 	var req dto.UpdateAccountRequest
@@ -53,9 +55,9 @@ func UpdateAccountSettings(c *gin.Context) {
 // @Produce json
 // @Param request body dto.UpdateNotificationsRequest true "Notification settings"
 // @Success 200 {object} swagger.UpdateNotificationsResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /settings/notifications [put]
 func UpdateNotifications(c *gin.Context) {
 	var req dto.UpdateNotificationsRequest
@@ -89,9 +91,9 @@ func UpdateNotifications(c *gin.Context) {
 // @Produce json
 // @Param request body dto.UpdatePrivacyRequest true "Privacy settings"
 // @Success 200 {object} swagger.UpdatePrivacySettingsResponse
-// @Failure 400 {object} map[string]string "Invalid request"
-// @Failure 401 {object} map[string]string "Unauthorized"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
+// @Failure 401 {object} swagger.ErrorResponse "Unauthorized"
+// @Failure 500 {object} swagger.ErrorResponse "Internal server error"
 // @Router /settings/privacy [put]
 func UpdatePrivacySettings(c *gin.Context) {
 	var req dto.UpdatePrivacyRequest

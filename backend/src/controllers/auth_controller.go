@@ -2,12 +2,14 @@ package controllers
 
 import (
 	"net/http"
-	"github.com/gin-gonic/gin"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
-	_"techguild-backend/src/swagger"
+	_ "techguild-backend/src/swagger"
+
+	"github.com/gin-gonic/gin"
 )
+
 // Register godoc
 //
 //	@Summary		Register a new user
@@ -89,7 +91,7 @@ func Login(c *gin.Context) {
 // @Produce json
 // @Param token query string true "Email verification token"
 // @Success 200 {object} dto.VerifyEmailResponse
-// @Failure 400 {object} map[string]string "Invalid or expired token"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid or expired token"
 // @Router /auth/verify-email [get]
 func VerifyEmail(c *gin.Context) {
 
@@ -125,7 +127,7 @@ func VerifyEmail(c *gin.Context) {
 // @Produce json
 // @Param request body dto.ResendVerificationRequest true "Resend verification request"
 // @Success 200 {object} dto.ResendVerificationResponse
-// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
 // @Router /auth/resend-verification [post]
 func ResendVerificationEmail(c *gin.Context) {
 
@@ -161,8 +163,8 @@ func ResendVerificationEmail(c *gin.Context) {
 // @Produce json
 // @Param request body dto.LogoutRequest true "Logout request"
 // @Success 200 {object} dto.LogoutResponse
-// @Failure 400 {object} map[string]string "Invalid request"
-// @Failure 500 {object} map[string]string "Internal server error"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
+// @Failure 500 {object} swagger.ErrorResponse "Internal server error"
 // @Router /auth/logout [post]
 func Logout(c *gin.Context) {
 
@@ -198,8 +200,8 @@ func Logout(c *gin.Context) {
 // @Produce json
 // @Param request body dto.RefreshTokenRequest true "Refresh token request"
 // @Success 200 {object} dto.RefreshTokenResponse
-// @Failure 400 {object} map[string]string "Invalid request"
-// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
+// @Failure 401 {object} swagger.ErrorResponse "Unauthorized"
 // @Router /auth/refresh-token [post]
 func RefreshToken(c *gin.Context) {
 
@@ -234,7 +236,7 @@ func RefreshToken(c *gin.Context) {
 // @Param token query string true "Password reset token"
 // @Param request body dto.ResetPasswordRequest true "Reset password request"
 // @Success 200 {object} dto.ResetPasswordResponse
-// @Failure 400 {object} map[string]string "Invalid or expired token"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid or expired token"
 // @Router /auth/reset-password [post]
 func ResetPassword(c *gin.Context) {
 
@@ -280,7 +282,7 @@ func ResetPassword(c *gin.Context) {
 // @Produce json
 // @Param request body dto.ForgotPasswordRequest true "Forgot password request"
 // @Success 200 {object} dto.ForgotPasswordResponse
-// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
 // @Router /auth/forgot-password [post]
 func ForgotPassword(c *gin.Context) {
 
@@ -317,8 +319,8 @@ func ForgotPassword(c *gin.Context) {
 // @Produce json
 // @Param request body dto.ChangePasswordRequest true "Change password request"
 // @Success 200 {object} dto.ChangePasswordResponse
-// @Failure 400 {object} map[string]string "Invalid request"
-// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 400 {object} swagger.ErrorResponse "Invalid request"
+// @Failure 401 {object} swagger.ErrorResponse "Unauthorized"
 // @Router /auth/change-password [post]
 func ChangePassword(c *gin.Context) {
 
@@ -354,9 +356,9 @@ func ChangePassword(c *gin.Context) {
 // @Tags Authentication
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 401 {object} map[string]string "Unauthorized"
+// @Success 200 {object} swagger.ErrorResponse
+// @Failure 400 {object} swagger.ErrorResponse "Bad request"
+// @Failure 401 {object} swagger.ErrorResponse "Unauthorized"
 // @Router /auth/delete-account [delete]
 func DeleteAccount(c *gin.Context) {
 	userID := c.GetString("user_id")

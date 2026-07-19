@@ -15,7 +15,6 @@ import (
 // POST /verification/identity/submit
 // ==========================
 
-
 // SubmitIdentityVerification godoc
 // @Summary Submit identity verification
 // @Description Submits an individual's identity verification request with government ID and selfie.
@@ -30,8 +29,8 @@ import (
 // @Param govt_id_document formData file true "Government ID Document"
 // @Param selfie formData file true "Selfie"
 // @Success 201 {object} dto.IdentityVerificationResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
 // @Router /verification/identity/submit [post]
 func SubmitIdentityVerification(c *gin.Context) {
 
@@ -95,8 +94,8 @@ func SubmitIdentityVerification(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} dto.IdentityVerificationStatusResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
 // @Router /verification/identity/status [get]
 
 func GetIdentityVerificationStatus(c *gin.Context) {
@@ -121,7 +120,6 @@ func GetIdentityVerificationStatus(c *gin.Context) {
 // POST /verification/business/submit
 // ==========================
 
-
 // SubmitBusinessVerification godoc
 // @Summary Submit business verification
 // @Description Submits a business verification request with the required business documents.
@@ -136,8 +134,8 @@ func GetIdentityVerificationStatus(c *gin.Context) {
 // @Param pan_card formData file true "PAN Card"
 // @Param authorized_representative_id formData file true "Authorized Representative ID"
 // @Success 201 {object} dto.BusinessVerificationResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
 // @Router /verification/business/submit [post]
 func SubmitBusinessVerification(c *gin.Context) {
 
@@ -202,7 +200,6 @@ func SubmitBusinessVerification(c *gin.Context) {
 // POST /verification/resubmit/:record_id
 // ==========================
 
-
 // ResubmitVerification godoc
 // @Summary Resubmit verification
 // @Description Resubmits a rejected verification request.
@@ -214,8 +211,8 @@ func SubmitBusinessVerification(c *gin.Context) {
 // @Param reason formData string false "Additional comments"
 // @Param govt_id_document formData file true "Updated Government ID Document"
 // @Success 200 {object} dto.ResubmitVerificationResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
 // @Router /verification/resubmit/{record_id} [post]
 func ResubmitVerification(c *gin.Context) {
 
@@ -262,7 +259,6 @@ func ResubmitVerification(c *gin.Context) {
 // GET /admin/verification/queue
 // ==========================
 
-
 // GetVerificationQueue godoc
 // @Summary Get verification queue
 // @Description Returns the list of pending verification requests for administrators.
@@ -270,7 +266,7 @@ func ResubmitVerification(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} dto.VerificationQueueItem
-// @Failure 500 {object} map[string]string
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /admin/verification/queue [get]
 func GetVerificationQueue(c *gin.Context) {
 
@@ -292,7 +288,6 @@ func GetVerificationQueue(c *gin.Context) {
 // POST /admin/verification/:id/approve
 // ==========================
 
-
 // ApproveVerification godoc
 // @Summary Approve verification
 // @Description Approves a verification request.
@@ -301,7 +296,7 @@ func GetVerificationQueue(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Verification Record ID"
 // @Success 200 {object} dto.AdminApproveResponse
-// @Failure 400 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
 // @Router /admin/verification/{id}/approve [post]
 func ApproveVerification(c *gin.Context) {
 
@@ -327,7 +322,6 @@ func ApproveVerification(c *gin.Context) {
 // POST /admin/verification/:id/reject
 // ==========================
 
-
 // RejectVerification godoc
 // @Summary Reject verification
 // @Description Rejects a verification request with a reason.
@@ -338,7 +332,7 @@ func ApproveVerification(c *gin.Context) {
 // @Param id path string true "Verification Record ID"
 // @Param request body dto.AdminRejectRequest true "Rejection reason"
 // @Success 200 {object} dto.AdminRejectResponse
-// @Failure 400 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
 // @Router /admin/verification/{id}/reject [post]
 func RejectVerification(c *gin.Context) {
 

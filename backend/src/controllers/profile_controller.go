@@ -12,8 +12,9 @@ import (
 	"techguild-backend/src/utils"
 	"time"
 
+	_ "techguild-backend/src/swagger"
+
 	"github.com/gin-gonic/gin"
-	_"techguild-backend/src/swagger"
 )
 
 func getUserIDFromContext(c *gin.Context) (string, error) {
@@ -27,6 +28,7 @@ func getUserIDFromContext(c *gin.Context) (string, error) {
 	}
 	return userID, nil
 }
+
 // CreateOrUpdateIndividualProfile godoc
 // @Summary Create or update individual profile
 // @Description Creates or updates the authenticated user's individual profile.
@@ -39,10 +41,10 @@ func getUserIDFromContext(c *gin.Context) (string, error) {
 // @Param avatar formData file false "Avatar image"
 // @Param resume formData file false "Resume PDF"
 // @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 404 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/individual [post]
 func CreateOrUpdateIndividualProfile(c *gin.Context) {
 	var req dto.CreateIndividualProfileRequest
@@ -125,10 +127,10 @@ func CreateOrUpdateIndividualProfile(c *gin.Context) {
 // @Param profile_data formData string false "Agency profile JSON"
 // @Param logo formData file false "Agency logo"
 // @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 404 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/agency [post]
 func CreateOrUpdateAgencyProfile(c *gin.Context) {
 	var req dto.CreateAgencyProfileRequest
@@ -190,7 +192,6 @@ func CreateOrUpdateAgencyProfile(c *gin.Context) {
 	})
 }
 
-
 // CreateOrUpdateClientProfile godoc
 // @Summary Create or update client profile
 // @Description Creates or updates the authenticated user's client profile.
@@ -202,10 +203,10 @@ func CreateOrUpdateAgencyProfile(c *gin.Context) {
 // @Param profile_data formData string false "Client profile JSON"
 // @Param logo formData file false "Company logo"
 // @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 404 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/client [post]
 func CreateOrUpdateClientProfile(c *gin.Context) {
 	var req dto.CreateClientProfileRequest
@@ -274,9 +275,9 @@ func CreateOrUpdateClientProfile(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} interface{}
-// @Failure 401 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 404 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/me [get]
 func GetMyProfile(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -299,7 +300,6 @@ func GetMyProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
-
 // SetAccountType godoc
 // @Summary Set account type
 // @Description Sets the user's account type.
@@ -307,8 +307,8 @@ func GetMyProfile(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.SetAccountTypeRequest true "Account type"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
+// @Success 200 {object} swagger.ErrorResponse
+// @Failure 400 {object} swagger.ErrorResponse
 // @Router /profile/account-type [post]
 func SetAccountType(c *gin.Context) {
 	var req dto.SetAccountTypeRequest
@@ -327,7 +327,6 @@ func SetAccountType(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "account type set successfully"})
 }
 
-
 // UploadResume godoc
 // @Summary Upload resume
 // @Description Uploads a PDF resume to Cloudinary.
@@ -337,9 +336,9 @@ func SetAccountType(c *gin.Context) {
 // @Produce json
 // @Param resume formData file true "Resume PDF"
 // @Success 200 {object} swagger.UploadResumeResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/upload/resume [post]
 func UploadResume(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -389,9 +388,9 @@ func UploadResume(c *gin.Context) {
 // @Produce json
 // @Param avatar formData file true "Avatar image"
 // @Success 200 {object} swagger.UploadAvatarResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/upload/avatar [post]
 func UploadAvatar(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -448,9 +447,9 @@ func UploadAvatar(c *gin.Context) {
 // @Produce json
 // @Param logo formData file true "Logo image"
 // @Success 200 {object} swagger.UploadLogoResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/upload/logo [post]
 func UploadLogo(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -505,8 +504,8 @@ func UploadLogo(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} swagger.DeleteAvatarResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/avatar [delete]
 func DeleteAvatar(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -532,8 +531,8 @@ func DeleteAvatar(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} swagger.DeleteLogoResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/logo [delete]
 func DeleteLogo(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -559,8 +558,8 @@ func DeleteLogo(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} swagger.DeleteResumeResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/resume [delete]
 func DeleteResume(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -579,7 +578,6 @@ func DeleteResume(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "resume deleted successfully"})
 }
 
-
 // GetPublicProfile godoc
 // @Summary Get public profile
 // @Description Retrieves a public profile using its unique slug.
@@ -587,8 +585,8 @@ func DeleteResume(c *gin.Context) {
 // @Produce json
 // @Param slug path string true "Profile slug"
 // @Success 200 {object} dto.PublicProfileResponse
-// @Failure 400 {object} map[string]string
-// @Failure 404 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 404 {object} swagger.ErrorResponse
 // @Router /profile/public/{slug} [get]
 func GetPublicProfile(c *gin.Context) {
 	slug := c.Param("slug")
@@ -614,8 +612,8 @@ func GetPublicProfile(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} dto.UserPointsResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/points [get]
 func GetUserPoints(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -641,8 +639,8 @@ func GetUserPoints(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} dto.ExportResponse
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/export [get]
 func ExportProfile(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -669,9 +667,9 @@ func ExportProfile(c *gin.Context) {
 // @Accept json,multipart/form-data
 // @Produce json
 // @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile [post]
 func CreateOrUpdateProfile(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -699,7 +697,6 @@ func CreateOrUpdateProfile(c *gin.Context) {
 	}
 }
 
-
 // CheckSlug godoc
 // @Summary Check slug availability
 // @Description Checks whether a profile slug is available.
@@ -707,8 +704,8 @@ func CreateOrUpdateProfile(c *gin.Context) {
 // @Produce json
 // @Param slug query string true "Profile slug"
 // @Success 200 {object} dto.CheckSlugResponse
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
 // @Router /profile/check-slug [get]
 func CheckSlug(c *gin.Context) {
 	slug := c.Query("slug")
@@ -727,7 +724,6 @@ func CheckSlug(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-
 // DeleteProfileAccount godoc
 // @Summary Delete account
 // @Description Schedules the authenticated user's account for deletion after verifying the password.
@@ -737,8 +733,8 @@ func CheckSlug(c *gin.Context) {
 // @Produce json
 // @Param request body dto.DeleteAccountRequest true "Delete account request"
 // @Success 200 {object} swagger.DeleteProfileAccountResponse
-// @Failure 400 {object} map[string]string
-// @Failure 401 {object} map[string]string
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 401 {object} swagger.ErrorResponse
 // @Router /profile/delete-account [delete]
 func DeleteProfileAccount(c *gin.Context) {
 	var req dto.DeleteAccountRequest

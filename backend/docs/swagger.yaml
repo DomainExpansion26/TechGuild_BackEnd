@@ -492,6 +492,12 @@ definitions:
         example: resume deleted successfully
         type: string
     type: object
+  swagger.ErrorResponse:
+    properties:
+      error:
+        example: error message
+        type: string
+    type: object
   swagger.LoginBadRequestResponse:
     properties:
       error:
@@ -607,9 +613,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Approve verification
@@ -642,9 +646,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Reject verification
@@ -665,9 +667,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get verification queue
@@ -695,15 +695,11 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Change password
@@ -718,21 +714,15 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "400":
           description: Bad request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete account
@@ -760,9 +750,7 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Forgot password
       tags:
       - Authentication
@@ -819,15 +807,11 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Logout user
       tags:
       - Authentication
@@ -853,15 +837,11 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Refresh access token
       tags:
       - Authentication
@@ -914,9 +894,7 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Resend verification email
       tags:
       - Authentication
@@ -947,9 +925,7 @@ paths:
         "400":
           description: Invalid or expired token
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Reset password
       tags:
       - Authentication
@@ -975,9 +951,7 @@ paths:
         "400":
           description: Invalid or expired token
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Verify email
       tags:
       - Authentication
@@ -1002,15 +976,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: GitHub OAuth callback
       tags:
       - OAuth
@@ -1046,15 +1016,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Google OAuth callback
       tags:
       - OAuth
@@ -1086,21 +1052,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create or update profile
@@ -1124,15 +1084,11 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Set account type
       tags:
       - Profile
@@ -1166,27 +1122,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create or update agency profile
@@ -1205,15 +1153,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete avatar
@@ -1238,15 +1182,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Check slug availability
       tags:
       - Profile
@@ -1280,27 +1220,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create or update client profile
@@ -1329,15 +1261,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete account
@@ -1356,15 +1284,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Export profile
@@ -1404,27 +1328,19 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create or update individual profile
@@ -1443,15 +1359,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete logo
@@ -1470,21 +1382,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get my profile
@@ -1503,15 +1409,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get user points
@@ -1536,15 +1438,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       summary: Get public profile
       tags:
       - Profile
@@ -1561,15 +1459,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Delete resume
@@ -1596,21 +1490,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload avatar
@@ -1637,21 +1525,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload logo
@@ -1678,21 +1560,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Upload resume
@@ -1720,21 +1596,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update account settings
@@ -1762,21 +1632,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update notification settings
@@ -1804,21 +1668,15 @@ paths:
         "400":
           description: Invalid request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "500":
           description: Internal server error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update privacy settings
@@ -1871,15 +1729,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Submit business verification
@@ -1931,15 +1785,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Submit identity verification
@@ -1975,15 +1825,11 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/swagger.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Resubmit verification
