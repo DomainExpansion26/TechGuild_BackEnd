@@ -80,6 +80,17 @@ func Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
+
+// VerifyEmail godoc
+// @Summary Verify email
+// @Description Verifies a user's email address using the verification token sent via email.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param token query string true "Email verification token"
+// @Success 200 {object} dto.VerifyEmailResponse
+// @Failure 400 {object} map[string]string "Invalid or expired token"
+// @Router /auth/verify-email [get]
 func VerifyEmail(c *gin.Context) {
 
 	token := c.Query("token")
@@ -105,6 +116,17 @@ func VerifyEmail(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
+
+// ResendVerificationEmail godoc
+// @Summary Resend verification email
+// @Description Sends a new email verification link to an unverified user.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body dto.ResendVerificationRequest true "Resend verification request"
+// @Success 200 {object} dto.ResendVerificationResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Router /auth/resend-verification [post]
 func ResendVerificationEmail(c *gin.Context) {
 
 	var req dto.ResendVerificationRequest
@@ -130,6 +152,18 @@ func ResendVerificationEmail(c *gin.Context) {
 		Message: "Verification email sent successfully",
 	})
 }
+
+// Logout godoc
+// @Summary Logout user
+// @Description Invalidates the refresh token and logs the user out.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body dto.LogoutRequest true "Logout request"
+// @Success 200 {object} dto.LogoutResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /auth/logout [post]
 func Logout(c *gin.Context) {
 
 	var req dto.LogoutRequest
@@ -155,6 +189,18 @@ func Logout(c *gin.Context) {
 		Message: "Logout successful",
 	})
 }
+
+// RefreshToken godoc
+// @Summary Refresh access token
+// @Description Generates a new access token using a valid refresh token.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body dto.RefreshTokenRequest true "Refresh token request"
+// @Success 200 {object} dto.RefreshTokenResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /auth/refresh-token [post]
 func RefreshToken(c *gin.Context) {
 
 	var req dto.RefreshTokenRequest
@@ -178,6 +224,18 @@ func RefreshToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, res)
 }
+
+// ResetPassword godoc
+// @Summary Reset password
+// @Description Resets the user's password using the password reset token.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param token query string true "Password reset token"
+// @Param request body dto.ResetPasswordRequest true "Reset password request"
+// @Success 200 {object} dto.ResetPasswordResponse
+// @Failure 400 {object} map[string]string "Invalid or expired token"
+// @Router /auth/reset-password [post]
 func ResetPassword(c *gin.Context) {
 
 	token := c.Query("token")
@@ -213,6 +271,17 @@ func ResetPassword(c *gin.Context) {
 		Message: "Password reset successfully",
 	})
 }
+
+// ForgotPassword godoc
+// @Summary Forgot password
+// @Description Sends a password reset link to the user's registered email address.
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body dto.ForgotPasswordRequest true "Forgot password request"
+// @Success 200 {object} dto.ForgotPasswordResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Router /auth/forgot-password [post]
 func ForgotPassword(c *gin.Context) {
 
 	var req dto.ForgotPasswordRequest
@@ -238,6 +307,19 @@ func ForgotPassword(c *gin.Context) {
 		Message: "Password reset link sent successfully",
 	})
 }
+
+// ChangePassword godoc
+// @Summary Change password
+// @Description Changes the password of the authenticated user.
+// @Tags Authentication
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body dto.ChangePasswordRequest true "Change password request"
+// @Success 200 {object} dto.ChangePasswordResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /auth/change-password [post]
 func ChangePassword(c *gin.Context) {
 
 	userID := c.GetString("user_id")
@@ -266,6 +348,16 @@ func ChangePassword(c *gin.Context) {
 	})
 }
 
+// DeleteAccount godoc
+// @Summary Delete account
+// @Description Permanently deletes the authenticated user's account.
+// @Tags Authentication
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Router /auth/delete-account [delete]
 func DeleteAccount(c *gin.Context) {
 	userID := c.GetString("user_id")
 
