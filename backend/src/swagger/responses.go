@@ -22,3 +22,22 @@ type LoginBadRequestResponse struct {
 type LoginUnauthorizedResponse struct {
 	Error string `json:"error" example:"Invalid email or password"`
 }
+
+type UploadResumeResponse struct {
+	Message   string `json:"message" example:"resume uploaded successfully"`
+	ResumeURL string `json:"resume_url" example:"https://res.cloudinary.com/demo/raw/upload/v123456/resume.pdf"`
+}
+
+type UploadAvatarResponse struct {
+	Message   string `json:"message" example:"avatar uploaded successfully"`
+	AvatarURL string `json:"avatar_url" example:"https://res.cloudinary.com/demo/image/upload/v123456/avatar.jpg"`
+}
+
+type UploadLogoResponse struct {
+	Message string `json:"message" example:"logo uploaded successfully"`
+	LogoURL string `json:"logo_url" example:"https://res.cloudinary.com/demo/image/upload/v123456/logo.png"`
+}
+
+type DeleteAvatarResponse struct {
+	Message string `json:"message" example:"avatar deleted successfully"`
+}
