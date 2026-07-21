@@ -26,7 +26,7 @@ func main() {
 	routes.OAuthRoutes(router)
 	routes.ProfileRoutes(router)
 	routes.VerificationRoutes(router)
-	routes.ProjectRoutes(router) // <-- Add this line
+	routes.ProjectRoutes(router) 
 
 	log.Println("Server running on :8080")
 
