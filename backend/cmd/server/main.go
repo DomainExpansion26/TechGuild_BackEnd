@@ -18,12 +18,18 @@ func main() {
 	jobs.StartCleanupJob()
 
 	router := gin.Default()
+
 	router.Static("/uploads", "./uploads")
+
+	// Routes
 	routes.AuthRoutes(router)
 	routes.OAuthRoutes(router)
 	routes.ProfileRoutes(router)
 	routes.VerificationRoutes(router)
+	routes.ProjectRoutes(router) // <-- Add this line
+
 	log.Println("Server running on :8080")
+
 	if err := router.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}
