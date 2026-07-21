@@ -10,6 +10,8 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 
+	_ "techguild-backend/src/swagger"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,6 +30,14 @@ type GitHubUser struct {
 	Email     string `json:"email"`
 	AvatarURL string `json:"avatar_url"`
 }
+
+// GoogleLogin godoc
+// @Summary Login with Google
+// @Description Redirects the user to Google's OAuth consent screen.
+// @Tags OAuth
+// @Produce json
+// @Success 307 "Redirect to Google OAuth"
+// @Router /oauth/google/login [get]
 func GoogleLogin(c *gin.Context) {
 
 	url := config.GoogleOAuthConfig.AuthCodeURL("state-token")
@@ -35,6 +45,17 @@ func GoogleLogin(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
+// GoogleCallback godoc
+// @Summary Google OAuth callback
+// @Description Handles Google OAuth callback and authenticates the user.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Param code query string true "Google authorization code"
+// @Success 200 {object} dto.LoginResponse
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
+// @Router /oauth/google/callback [get]
 func GoogleCallback(c *gin.Context) {
 
 	code := c.Query("code")
@@ -91,12 +112,32 @@ func GoogleCallback(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// GitHubLogin godoc
+// @Summary Login with GitHub
+// @Description Redirects the user to GitHub's OAuth authorization page.
+// @Tags OAuth
+// @Produce json
+// @Success 307 "Redirect to GitHub OAuth"
+// @Router /oauth/github/login [get]
 func GitHubLogin(c *gin.Context) {
 
 	url := config.GitHubOAuthConfig.AuthCodeURL("state-token")
 
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
+
+// GitHubCallback godoc
+// @Summary GitHub OAuth callback
+// @Description Handles GitHub OAuth callback and authenticates the user.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Param code query string true "GitHub authorization code"
+// @Success 200 {object} dto.LoginResponse
+// @Failure 400 {object} swagger.ErrorResponse
+// @Failure 500 {object} swagger.ErrorResponse
+// @Router /oauth/github/callback [get]
 func GitHubCallback(c *gin.Context) {
 
 	code := c.Query("code")
