@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -81,10 +82,17 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 		return err
 	}
 
-	err = utils.SendVerificationEmail(email, token)
-	if err != nil {
-		return err
-	}
+	// Send email asynchronously
+	go func(email, token string) {
+		log.Printf("Sending verification email to %s", email)
+
+		if err := utils.SendVerificationEmail(email, token); err != nil {
+			log.Printf("Failed to send verification email to %s: %v", email, err)
+			return
+		}
+
+		log.Printf("Verification email sent successfully to %s", email)
+	}(email, token)
 
 	return nil
 }
