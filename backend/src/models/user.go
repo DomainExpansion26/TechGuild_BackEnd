@@ -55,7 +55,8 @@ type User struct {
 
 	NotificationPreferences datatypes.JSON `gorm:"type:jsonb"`
 	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
-
+	// Relationships of user with its projects, applications, and other entities
+	Applications []ProjectApplication `gorm:"foreignKey:ApplicantID"`
 	CreatedAt time.Time
 
 	UpdatedAt time.Time

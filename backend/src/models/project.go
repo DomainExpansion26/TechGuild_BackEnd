@@ -57,6 +57,8 @@ type Project struct {
 	Skills []ProjectSkill `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE"`
 	// Attachments
 	Attachments []ProjectAttachment `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE"`
+	// Applications related to the project by agency and freelancers
+	Applications []ProjectApplication `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE"`
 	// Visibility
 	Visibility ProjectVisibility `gorm:"type:varchar(20);default:'public'"`
 
