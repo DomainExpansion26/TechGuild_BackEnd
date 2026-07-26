@@ -57,6 +57,11 @@ type User struct {
 	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
 	// Relationships of user with its projects, applications, and other entities
 	Applications []ProjectApplication `gorm:"foreignKey:ApplicantID"`
+
+	//contracts 
+	ClientContracts []ProjectContract `gorm:"foreignKey:ClientID"`
+
+	FreelancerContracts []ProjectContract `gorm:"foreignKey:FreelancerID"`
 	CreatedAt time.Time
 
 	UpdatedAt time.Time
