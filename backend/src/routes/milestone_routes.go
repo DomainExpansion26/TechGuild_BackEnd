@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterMilestoneRoutes(router *gin.Engine) {
+func MilestoneRoutes(router *gin.Engine) {
 
 	milestoneController := controllers.NewMilestoneController()
 

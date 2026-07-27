@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterSubmissionRoutes(router *gin.Engine) {
+func SubmissionRoutes(router *gin.Engine) {
 
 	submissionController := controllers.NewSubmissionController()
 
