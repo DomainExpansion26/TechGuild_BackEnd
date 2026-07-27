@@ -150,6 +150,20 @@ func (r *ContractRepository) FindByFreelancer(
 	return contracts, err
 }
 
+
+// Activate Contract
+
+func (r *ContractRepository) ActivateContract(
+	contractID uuid.UUID,
+) error {
+
+	return postgres.DB.
+		Model(&models.ProjectContract{}).
+		Where("id = ?", contractID).
+		Update("status", models.ContractActive).Error
+}
+
+
 //complete the contract
 
 func (r *ContractRepository) CompleteContract(
@@ -159,7 +173,10 @@ func (r *ContractRepository) CompleteContract(
 	return postgres.DB.
 		Model(&models.ProjectContract{}).
 		Where("id = ?", contractID).
-		Update("status", models.ContractCompleted).Error
+		Updates(map[string]interface{}{
+			"status":       models.ContractCompleted,
+			"completed_at": postgres.DB.NowFunc(),
+		}).Error
 }
 
 // Cancel Contract

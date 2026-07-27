@@ -59,3 +59,10 @@ type SubmissionListResponse struct {
 	Submissions []SubmissionResponse `json:"submissions"`
 	Total       int                  `json:"total"`
 }
+
+//update submission
+type UpdateSubmissionRequest struct {
+	Message       string `json:"message"`
+	SubmissionURL string `json:"submission_url"`
+	AttachmentURL string `json:"attachment_url"`
+}

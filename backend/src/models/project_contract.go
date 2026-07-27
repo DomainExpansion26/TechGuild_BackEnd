@@ -46,7 +46,7 @@ type ProjectContract struct {
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
-
+	CompletedAt *time.Time
 	Milestones []ProjectMilestone `gorm:"foreignKey:ContractID;constraint:OnDelete:CASCADE"`
 }
 

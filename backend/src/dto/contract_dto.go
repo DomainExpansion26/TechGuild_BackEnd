@@ -39,33 +39,26 @@ type CompleteContractResponse struct {
 //contract response
 
 type ContractResponse struct {
-	ID string `json:"id"`
+	ID                 string  `json:"id"`
+	ProjectID          string  `json:"project_id"`
+	ApplicationID      string  `json:"application_id"`
+	ClientID           string  `json:"client_id"`
+	FreelancerID       string  `json:"freelancer_id"`
 
-	ProjectID string `json:"project_id"`
+	ContractAmount     float64 `json:"contract_amount"`
+	Currency           string  `json:"currency"`
 
-	ApplicationID string `json:"application_id"`
+	Status             string  `json:"status"`
 
-	ClientID string `json:"client_id"`
+	SignedByClient     bool    `json:"signed_by_client"`
+	SignedByFreelancer bool    `json:"signed_by_freelancer"`
 
-	FreelancerID string `json:"freelancer_id"`
+	StartDate          string  `json:"start_date,omitempty"`
+	ExpectedEndDate    string  `json:"expected_end_date,omitempty"`
+	CompletedAt        string  `json:"completed_at,omitempty"`
 
-	ContractAmount float64 `json:"contract_amount"`
-
-	Currency string `json:"currency"`
-
-	StartDate string `json:"start_date,omitempty"`
-
-	ExpectedEndDate string `json:"expected_end_date,omitempty"`
-
-	Status string `json:"status"`
-
-	SignedByClient bool `json:"signed_by_client"`
-
-	SignedByFreelancer bool `json:"signed_by_freelancer"`
-
-	CreatedAt string `json:"created_at"`
-
-	UpdatedAt string `json:"updated_at"`
+	CreatedAt          string  `json:"created_at"`
+	UpdatedAt          string  `json:"updated_at"`
 }
 
 //contract list response
