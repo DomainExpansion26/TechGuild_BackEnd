@@ -10,9 +10,9 @@ import (
 type TeamMemberRole string
 
 const (
-	TeamLeader TeamMemberRole = "leader"
-	TeamAdmin  TeamMemberRole = "admin"
-	TeamMemberRoleMember TeamMemberRole = "member"
+	TeamRoleLeader TeamMemberRole = "leader"
+	TeamRoleAdmin  TeamMemberRole = "admin"
+	TeamRoleMember TeamMemberRole = "member"
 )
 
 type TeamMemberStatus string
@@ -22,6 +22,7 @@ const (
 	MemberActive  TeamMemberStatus = "active"
 	MemberRemoved TeamMemberStatus = "removed"
 )
+
 
 type TeamMember struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
@@ -35,7 +36,7 @@ type TeamMember struct {
 	User   User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 
 	// Member Details
-	Role   TeamMemberRole   `gorm:"type:varchar(20);default:'member'"`
+	Role TeamMemberRole `gorm:"type:varchar(20);default:'member'"`
 	Status TeamMemberStatus `gorm:"type:varchar(20);default:'pending'"`
 
 	JoinedAt *time.Time
