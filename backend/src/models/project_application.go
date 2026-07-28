@@ -38,6 +38,8 @@ type ProjectApplication struct {
 
 	EstimatedDuration string `gorm:"size:100"`
 
+	//project contract relationship
+	Contract *ProjectContract `gorm:"foreignKey:ApplicationID"`
 	// Application Status
 
 	Status ApplicationStatus `gorm:"type:varchar(30);default:'pending'"`

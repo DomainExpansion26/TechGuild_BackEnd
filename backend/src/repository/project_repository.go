@@ -50,6 +50,7 @@ func (r *ProjectRepository) FindByID(projectID string) (*models.Project, error) 
 	return &project, nil
 }
 
+
 func (r *ProjectRepository) FindByClient(clientID string) ([]models.Project, error) {
 
 	var projects []models.Project

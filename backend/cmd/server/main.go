@@ -14,6 +14,7 @@
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
+
 package main
 
 import (
@@ -28,7 +29,9 @@ import (
 )
 
 func main() {
+
 	postgres.ConnectDatabase()
+
 	migration.Migrate()
 
 	jobs.StartCleanupJob()
@@ -54,6 +57,15 @@ func main() {
 
 	// Project Applications
 	routes.ProjectApplicationRoutes(router)
+
+	// Contracts
+	routes.ContractRoutes(router)
+
+	// Milestones
+	routes.MilestoneRoutes(router)
+
+	// Submissions
+	routes.SubmissionRoutes(router)
 
 	log.Println("Server running on :8080")
 
