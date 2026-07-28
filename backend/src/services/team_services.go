@@ -375,3 +375,191 @@ func (s *TeamService) LeaveTeam(
 
 	return s.teamRepo.DeleteMember(member)
 }
+
+//create protfolio
+func (s *TeamService) CreatePortfolio(
+	leaderID string,
+	teamID string,
+	req dto.CreatePortfolioRequest,
+) error {
+
+	team, err := s.teamRepo.FindByUUID(teamID)
+	if err != nil {
+		return errors.New("team not found")
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("only team leader can add portfolio")
+	}
+
+	portfolio := models.TeamPortfolio{
+		TeamID:      team.ID,
+		Title:       req.Title,
+		Description: req.Description,
+		ImageURL:    req.ImageURL,
+		ProjectURL:  req.ProjectURL,
+		GithubURL:   req.GithubURL,
+	}
+
+	return s.teamRepo.CreatePortfolio(&portfolio)
+}
+
+//update portfolio
+func (s *TeamService) UpdatePortfolio(
+	leaderID string,
+	portfolioID string,
+	req dto.UpdatePortfolioRequest,
+) error {
+
+	id, err := uuid.Parse(portfolioID)
+	if err != nil {
+		return errors.New("invalid portfolio id")
+	}
+
+	portfolio, err := s.teamRepo.FindPortfolioByID(id)
+	if err != nil {
+		return errors.New("portfolio not found")
+	}
+
+	team, err := s.teamRepo.FindByID(portfolio.TeamID)
+	if err != nil {
+		return err
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("unauthorized")
+	}
+
+	if req.Title != "" {
+		portfolio.Title = req.Title
+	}
+
+	if req.Description != "" {
+		portfolio.Description = req.Description
+	}
+
+	if req.ImageURL != "" {
+		portfolio.ImageURL = req.ImageURL
+	}
+
+	if req.ProjectURL != "" {
+		portfolio.ProjectURL = req.ProjectURL
+	}
+
+	if req.GithubURL != "" {
+		portfolio.GithubURL = req.GithubURL
+	}
+
+	return s.teamRepo.UpdatePortfolio(portfolio)
+}
+
+//delete portfolio
+func (s *TeamService) DeletePortfolio(
+	leaderID string,
+	portfolioID string,
+) error {
+
+	id, err := uuid.Parse(portfolioID)
+	if err != nil {
+		return errors.New("invalid portfolio id")
+	}
+
+	portfolio, err := s.teamRepo.FindPortfolioByID(id)
+	if err != nil {
+		return errors.New("portfolio not found")
+	}
+
+	team, err := s.teamRepo.FindByID(portfolio.TeamID)
+	if err != nil {
+		return err
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("unauthorized")
+	}
+
+	return s.teamRepo.DeletePortfolio(portfolio)
+}
+
+//skill services 
+func (s *TeamService) AddSkill(
+	leaderID string,
+	teamID string,
+	req dto.AddSkillRequest,
+) error {
+
+	team, err := s.teamRepo.FindByUUID(teamID)
+	if err != nil {
+		return errors.New("team not found")
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("unauthorized")
+	}
+
+	skill := models.TeamSkill{
+		TeamID:          team.ID,
+		SkillName:       req.SkillName,
+		ExperienceLevel: req.ExperienceLevel,
+	}
+
+	return s.teamRepo.AddSkill(&skill)
+}
+
+func (s *TeamService) UpdateSkill(
+	leaderID string,
+	skillID string,
+	req dto.AddSkillRequest,
+) error {
+
+	id, err := uuid.Parse(skillID)
+	if err != nil {
+		return errors.New("invalid skill id")
+	}
+
+	skill, err := s.teamRepo.FindSkillByID(id)
+	if err != nil {
+		return errors.New("skill not found")
+	}
+
+	team, err := s.teamRepo.FindByID(skill.TeamID)
+	if err != nil {
+		return err
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("unauthorized")
+	}
+
+	skill.SkillName = req.SkillName
+	skill.ExperienceLevel = req.ExperienceLevel
+
+	return s.teamRepo.UpdateSkill(skill)
+}
+
+func (s *TeamService) DeleteSkill(
+	leaderID string,
+	skillID string,
+) error {
+
+	id, err := uuid.Parse(skillID)
+	if err != nil {
+		return errors.New("invalid skill id")
+	}
+
+	skill, err := s.teamRepo.FindSkillByID(id)
+	if err != nil {
+		return errors.New("skill not found")
+	}
+
+	team, err := s.teamRepo.FindByID(skill.TeamID)
+	if err != nil {
+		return err
+	}
+
+	if team.LeaderID.String() != leaderID {
+		return errors.New("unauthorized")
+	}
+
+	return s.teamRepo.DeleteSkill(skill)
+}
