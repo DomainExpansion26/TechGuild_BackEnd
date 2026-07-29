@@ -11,7 +11,6 @@ func Migrate() {
 
 	err := postgres.DB.AutoMigrate(
 
-		
 		// Users & Profiles
 		&models.User{},
 		&models.IndividualProfile{},
@@ -19,7 +18,6 @@ func Migrate() {
 		&models.ClientProfile{},
 		&models.UserSession{},
 
-		
 		// Verification
 		&models.VerificationRecord{},
 		&models.VerificationDocument{},
@@ -27,16 +25,13 @@ func Migrate() {
 		&models.GovtIDDedup{},
 		&models.BusinessPANDedup{},
 
-		
 		// Rules & Notifications
 		&models.RuleDocument{},
 		&models.PolicyChangeNotification{},
 
-		
 		// Audit
 		&models.AuditLog{},
 
-		
 		// Projects
 		&models.Project{},
 		&models.ProjectSkill{},
@@ -45,6 +40,13 @@ func Migrate() {
 		&models.ProjectContract{},
 		&models.ProjectMilestone{},
 		&models.ProjectSubmission{},
+
+		// Team Collaboration
+		&models.Team{},
+		&models.TeamMember{},
+		&models.TeamInvitation{},
+		&models.TeamPortfolio{},
+		&models.TeamSkill{},
 	)
 
 	if err != nil {
