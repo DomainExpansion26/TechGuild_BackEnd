@@ -11,41 +11,40 @@ func Migrate() {
 
 	err := postgres.DB.AutoMigrate(
 
-		// =========================
-		// Users
-		// =========================
+		
+		// Users & Profiles
 		&models.User{},
 		&models.IndividualProfile{},
 		&models.AgencyProfile{},
 		&models.ClientProfile{},
 		&models.UserSession{},
 
-		// =========================
+		
 		// Verification
-		// =========================
 		&models.VerificationRecord{},
 		&models.VerificationDocument{},
 		&models.GovernmentID{},
 		&models.GovtIDDedup{},
 		&models.BusinessPANDedup{},
 
-		// =========================
-		// Rules
-		// =========================
+		
+		// Rules & Notifications
 		&models.RuleDocument{},
 		&models.PolicyChangeNotification{},
 
-		// =========================
+		
 		// Audit
-		// =========================
 		&models.AuditLog{},
 
-		// =========================
+		
 		// Projects
-		// =========================
 		&models.Project{},
 		&models.ProjectSkill{},
 		&models.ProjectAttachment{},
+		&models.ProjectApplication{},
+		&models.ProjectContract{},
+		&models.ProjectMilestone{},
+		&models.ProjectSubmission{},
 	)
 
 	if err != nil {
