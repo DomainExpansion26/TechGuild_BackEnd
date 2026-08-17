@@ -3,8 +3,9 @@ package services
 import (
 	"errors"
 	"log"
-	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/redis/go-redis/v9"
 
@@ -14,21 +15,32 @@ import (
 	"techguild-backend/src/utils"
 )
 
+const dummyHash = "$2a$10$N9qo8uLOickgx2ZMRZoMy.MrqQKBrEmYq5YoZLxs6VJ1J7bDVU1Aa"
+
 type AuthService struct {
 	userRepo         repository.UserRepository
 	verificationRepo *repository.VerificationRepository
+	blacklistRepo    *repository.TokenBlacklistRepository
 }
 
 func NewAuthService(redisClient *redis.Client) *AuthService {
 	return &AuthService{
 		userRepo:         repository.NewUserRepository(),
 		verificationRepo: repository.NewVerificationRepository(redisClient),
+		blacklistRepo:    repository.NewTokenBlacklistRepository(redisClient),
 	}
 }
 
 func (s *AuthService) Register(req dto.RegisterRequest) error {
+	req.Email = utils.NormalizeEmail(req.Email)
+	req.FirstName = utils.NormalizeName(req.FirstName)
+	req.LastName = utils.NormalizeName(req.LastName)
 
-	existingUser, _ := s.userRepo.GetUserByEmail(req.Email)
+	existingUser, err := s.userRepo.GetUserByEmail(req.Email)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("something went wrong while checking for existing user")
+	}
+
 	if existingUser != nil {
 		return errors.New("email already exists")
 	}
@@ -47,20 +59,24 @@ func (s *AuthService) Register(req dto.RegisterRequest) error {
 	}
 
 	err = s.userRepo.CreateUser(user)
+
 	if err != nil {
-		return err
+		if utils.IsDuplicateKeyError(err) {
+			return errors.New("email already exists")
+		}
+		return errors.New("something went wrong please try again later")
 	}
 
-	verification := &models.VerificationRecord{
-		UserID: user.ID,
-		Type:   "email",
-		Status: "pending",
-	}
+	// verification := &models.VerificationRecord{
+	// 	UserID: user.ID,
+	// 	Type:   "email",
+	// 	Status: "pending",
+	// }
 
-	err = s.userRepo.CreateVerification(verification)
-	if err != nil {
-		return err
-	}
+	// err = s.userRepo.CreateVerification(verification)
+	// if err != nil {
+	// 	return err
+	// }
 
 	err = s.SendVerificationEmail(user.ID.String(), user.Email)
 	if err != nil {
@@ -82,26 +98,74 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 		return err
 	}
 
+	go sendWithRetry(email, token, userID)
+
 	// Send email asynchronously
-	go func(email, token string) {
-		log.Printf("Sending verification email to %s", email)
+	// go func(email, token string) {
+	// 	log.Printf("Sending verification email to %s", email)
 
-		if err := utils.SendVerificationEmail(email, token); err != nil {
-			log.Printf("Failed to send verification email to %s: %v", email, err)
-			return
-		}
+	// 	if err := utils.SendVerificationEmail(email, token); err != nil {
+	// 		log.Printf("Failed to send verification email to %s: %v", email, err)
+	// 		return
+	// 	}
 
-		log.Printf("Verification email sent successfully to %s", email)
-	}(email, token)
+	// 	log.Printf("Verification email sent successfully to %s", email)
+	// }(email, token)
 
 	return nil
 }
 
-func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.LoginResponse, error) {
+func sendWithRetry(email, token, userID string) {
+	const maxAttempts = 3
+	backoff := 2 * time.Second
 
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := utils.SendVerificationEmail(email, token)
+		if err == nil {
+			log.Printf("Verification email sent to %s (attempt %d)", email, attempt)
+			return
+		}
+
+		log.Printf("Attempt %d failed to send verification email to %s: %v", attempt, email, err)
+
+		if attempt < maxAttempts {
+			time.Sleep(backoff)
+			backoff *= 2 // Exponential backoff 2, 4s
+		}
+	}
+	// Saare attempts fail — ab isse "silently lost" nahi hone denge
+	log.Printf("CRITICAL: verification email permanently failed for user_id=%s email=%s", userID, email)
+	// TODO: yaha ek persistent failure record daalo (DB table ya monitoring alert)
+}
+
+func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.VerifyEmailResponse, error) {
+
+	_, err := s.verificationRepo.GoConsumeVerificationToken(req.Token)
+	if err == nil {
+		// Token was already used.
+		// This can happen because of an email security scanner
+		// or because the user clicked the same link again.
+		return &dto.VerifyEmailResponse{
+			Message: "This verification link has already been used. If you haven't verified your email yet, please request a new verification email.",
+		}, nil
+	}
 	userID, err := s.verificationRepo.GetVerificationToken(req.Token)
 	if err != nil {
 		return nil, errors.New("invalid or expired verification link")
+	}
+
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// check email already verified
+	if user.EmailVerified {
+		_ = s.verificationRepo.SaveConsumedVerificationToken(req.Token, userID)
+
+		return &dto.VerifyEmailResponse{
+			Message: "Email Already Verified.Please Select Your Account type to proceed",
+		}, nil
 	}
 
 	err = s.userRepo.UpdateEmailVerified(userID, true)
@@ -109,18 +173,31 @@ func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.LoginRespons
 		return nil, err
 	}
 
-	_ = s.verificationRepo.DeleteVerificationToken(req.Token)
+	if user.Status == models.StatusPendingVerification {
+		if err := s.userRepo.UpdateUserStatus(userID, string(models.StatusActive)); err != nil {
+			return nil, err
+		}
+	}
+
+	// 7. Save consumed marker.
+	// DON'T immediately delete the original token.
+	err = s.verificationRepo.SaveConsumedVerificationToken(req.Token, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// _ = s.verificationRepo.DeleteVerificationToken(req.Token)
 
 	// Add +10 points for verifying the email
 	_ = s.userRepo.AddUserPoints(userID, 10)
 
-	return &dto.LoginResponse{
+	return &dto.VerifyEmailResponse{
 		Message: "Email verified successfully. Please select your account type to proceed.",
 	}, nil
 }
 
 func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest) error {
-
+	req.Email = utils.NormalizeEmail(req.Email)
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
 		return errors.New("user not found")
@@ -133,132 +210,143 @@ func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest)
 	return s.SendVerificationEmail(user.ID.String(), user.Email)
 }
 
-func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, error) {
-
+func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, error) {
+	req.Email = utils.NormalizeEmail(req.Email)
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return nil, errors.New("invalid email or password")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Perform a dummy password check to mitigate timing attacks
+			utils.CheckPassword(req.Password, dummyHash)
+			return nil, "", errors.New("invalid email or password")
+		}
+		return nil, "", errors.New("invalid email or password")
 	}
 
 	if !utils.CheckPassword(req.Password, user.PasswordHash) {
-		return nil, errors.New("invalid email or password")
+		return nil, "", errors.New("invalid email or password")
 	}
 
 	if !user.EmailVerified {
-		return nil, errors.New("please verify your email first")
+		return nil, "", errors.New("please verify your email first")
 	}
 
 	if user.AccountType == nil || *user.AccountType == "" {
-		return nil, errors.New("please select an account type first")
+		return nil, "", errors.New("please select an account type first")
 	}
 
 	if user.Status == models.StatusPendingDeletion {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
 		if err := s.userRepo.UpdateUser(user); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
 	if user.Status != models.StatusActive {
-		return nil, errors.New("account is not active")
+		return nil, "", errors.New("account is not active")
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	session := &models.UserSession{
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
 		IsRevoked:    false,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
+		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 
 	err = s.userRepo.CreateSession(session)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	return &dto.LoginResponse{
-		Message:      "Login successful",
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	}, nil
+		Message:     "Login successful",
+		AccessToken: accessToken,
+		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+	}, refreshToken, nil
 }
-func (s *AuthService) Logout(req dto.LogoutRequest) error {
+func (s *AuthService) Logout(refreshToken string) error {
 
-	session, err := s.userRepo.GetSession(req.RefreshToken)
+	if refreshToken == "" {
+		return errors.New("refresh token is missing")
+	}
+	return s.userRepo.RevokeSession(refreshToken)
+}
+
+func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshTokenResponse, string, error) {
+
+	session, err := s.userRepo.GetSession(oldToken)
 	if err != nil {
-		return errors.New("invalid session")
+		return nil, "", errors.New("invalid refresh token")
 	}
 
 	if session.IsRevoked {
-		return errors.New("already logged out")
-	}
-
-	err = s.userRepo.RevokeSession(req.RefreshToken)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *AuthService) RefreshToken(req dto.RefreshTokenRequest) (*dto.RefreshTokenResponse, error) {
-
-	session, err := s.userRepo.GetSession(req.RefreshToken)
-	if err != nil {
-		return nil, errors.New("invalid refresh token")
-	}
-
-	if session.IsRevoked {
-		return nil, errors.New("refresh token revoked")
+		_ = s.userRepo.RevokeAllSessions(session.UserID.String())
+		return nil, "", errors.New("refresh token revoked")
 	}
 
 	if session.ExpiresAt.Before(time.Now()) {
-		return nil, errors.New("refresh token expired")
+		return nil, "", errors.New("refresh token expired")
 	}
 
-	claims, err := utils.ValidateRefreshToken(req.RefreshToken)
+	claims, err := utils.ValidateRefreshToken(oldToken)
 	if err != nil {
-		return nil, errors.New("invalid refresh token")
+		return nil, "", errors.New("invalid refresh token")
 	}
 
 	userID, ok := claims["user_id"].(string)
 	if !ok {
-		return nil, errors.New("invalid token")
+		return nil, "", errors.New("invalid token")
 	}
 
 	newAccessToken, err := utils.GenerateAccessToken(userID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	newRefreshToken, err := utils.GenerateRefreshToken(userID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	err = s.userRepo.UpdateRefreshToken(req.RefreshToken, newRefreshToken)
+	err = s.userRepo.UpdateRefreshToken(oldToken, newRefreshToken)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+
+	// UpdateRefreshToken (overwrite) ki jagah revoke + naya session
+	if err := s.userRepo.RevokeSessionByID(session.ID); err != nil {
+		return nil, "", err
+	}
+
+	newSession := &models.UserSession{
+		UserID:       session.UserID,
+		RefreshToken: newRefreshToken,
+		IsRevoked:    false,
+		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
+	}
+	if err := s.userRepo.CreateSession(newSession); err != nil {
+		return nil, "", err
 	}
 
 	return &dto.RefreshTokenResponse{
-		AccessToken:  newAccessToken,
-		RefreshToken: newRefreshToken,
-	}, nil
+		AccessToken: newAccessToken,
+		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+	}, newRefreshToken, nil
 }
 
 func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
 
+	req.Email = utils.NormalizeEmail(req.Email)
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
 		return errors.New("user not found")
@@ -287,7 +375,10 @@ func (s *AuthService) ResetPassword(req dto.ResetPasswordRequest) error {
 		return errors.New("invalid or expired reset link")
 	}
 
-	userID := claims["user_id"].(string)
+	userID, ok := claims["user_id"].(string)
+	if !ok || userID == "" {
+		return errors.New("Invalid reset token payload")
+	}
 
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
@@ -334,122 +425,6 @@ func (s *AuthService) ChangePassword(userID string, req dto.ChangePasswordReques
 	return nil
 }
 
-func (s *AuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, error) {
-
-	user, err := s.userRepo.GetUserByEmail(req.Email)
-
-	if err != nil {
-
-		// Parse FullName into FirstName and LastName
-		firstName := req.FullName
-		lastName := ""
-		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
-			firstName = parts[0]
-			lastName = strings.Join(parts[1:], " ")
-		}
-
-		user = &models.User{
-			FirstName:     firstName,
-			LastName:      lastName,
-			Email:         req.Email,
-			EmailVerified: true,
-			OAuthProvider: stringPtr("google"),
-			OAuthID:       stringPtr(req.GoogleID),
-			Status:        models.StatusActive,
-		}
-
-		if err := s.userRepo.CreateUser(user); err != nil {
-			return nil, err
-		}
-
-	}
-
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	session := &models.UserSession{
-		UserID:       user.ID,
-		RefreshToken: refreshToken,
-		IsRevoked:    false,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
-	}
-
-	if err := s.userRepo.CreateSession(session); err != nil {
-		return nil, err
-	}
-
-	return &dto.GoogleLoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		Message:      "Google login successful",
-	}, nil
-}
-
-func (s *AuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginResponse, error) {
-
-	user, err := s.userRepo.GetUserByEmail(req.Email)
-
-	if err != nil {
-
-		// Parse FullName into FirstName and LastName
-		firstName := req.FullName
-		lastName := ""
-		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
-			firstName = parts[0]
-			lastName = strings.Join(parts[1:], " ")
-		}
-
-		user = &models.User{
-			FirstName:     firstName,
-			LastName:      lastName,
-			Email:         req.Email,
-			EmailVerified: true,
-			OAuthProvider: stringPtr("github"),
-			OAuthID:       stringPtr(req.GitHubID),
-			Status:        models.StatusActive,
-		}
-
-		if err := s.userRepo.CreateUser(user); err != nil {
-			return nil, err
-		}
-
-	}
-
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	session := &models.UserSession{
-		UserID:       user.ID,
-		RefreshToken: refreshToken,
-		IsRevoked:    false,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
-	}
-
-	if err := s.userRepo.CreateSession(session); err != nil {
-		return nil, err
-	}
-
-	return &dto.GitHubLoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		Message:      "GitHub login successful",
-	}, nil
-}
-
 func (s *AuthService) DeleteAccount(userID string) error {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
@@ -457,4 +432,14 @@ func (s *AuthService) DeleteAccount(userID string) error {
 	}
 
 	return s.userRepo.DeleteUser(user.ID.String())
+}
+
+func (s *AuthService) BlacklistAccessToken(accessToken string) error {
+	claims, err := utils.ParseAccessTokenUnverifiedExpiry(accessToken)
+	if err != nil {
+		return err
+	}
+
+	ttl := time.Until(claims.ExpiresAt.Time)
+	return s.blacklistRepo.Blacklist(utils.HashToken(accessToken), ttl)
 }

@@ -8,7 +8,7 @@ import (
 
 func OAuthRoutes(router *gin.Engine) {
 
-	auth := router.Group("/auth")
+	auth := router.Group("/oauth")
 	{
 		auth.GET("/google/login", controllers.GoogleLogin)
 		auth.GET("/google/callback", controllers.GoogleCallback)
