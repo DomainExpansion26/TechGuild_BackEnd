@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/smtp"
 	"os"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func SendVerificationEmail(toEmail string, token string) error {
@@ -24,8 +27,16 @@ func SendVerificationEmail(toEmail string, token string) error {
 		token,
 	)
 
-	subject := "Subject: Verify your TechGuild Email\r\n"
-	mime := "MIME-Version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n"
+	headers := fmt.Sprintf(
+		"From: TechGuild <%s>\r\n"+
+			"To: %s\r\n"+
+			"Subject: Verify your TechGuild Email\r\n"+
+			"Date: %s\r\n"+
+			"Message-ID: <%s@techguild.com>\r\n"+
+			"MIME-Version: 1.0\r\n"+
+			"Content-Type: text/html; charset=\"UTF-8\"\r\n\r\n",
+		from, toEmail, time.Now().Format(time.RFC1123Z), uuid.New().String(),
+	)
 
 	body := fmt.Sprintf(`
 		<html>
@@ -58,7 +69,7 @@ func SendVerificationEmail(toEmail string, token string) error {
 		</html>
 	`, verificationURL)
 
-	message := []byte(subject + mime + body)
+	message := []byte(headers + body)
 
 	return smtp.SendMail(
 		host+":"+port,
@@ -80,8 +91,14 @@ func SendResetPasswordEmail(toEmail string, token string) error {
 
 	resetLink := os.Getenv("FRONTEND_URL") + "/reset-password?token=" + token
 
-	subject := "Subject: TechGuild Password Reset\r\n"
-
+	headers := fmt.Sprintf(
+		"From: TechGuild <%s>\r\n"+
+			"To: %s\r\n"+
+			"Subject: TechGuild Password Reset\r\n"+
+			"Date: %s\r\n"+
+			"Message-ID: <%s@techguild.com>\r\n\r\n",
+		from, toEmail, time.Now().Format(time.RFC1123Z), uuid.New().String(),
+	)
 	body := fmt.Sprintf(
 		"Hello,\r\n\r\n"+
 			"You requested to reset your password.\r\n\r\n"+
@@ -94,7 +111,7 @@ func SendResetPasswordEmail(toEmail string, token string) error {
 		resetLink,
 	)
 
-	message := []byte(subject + "\r\n" + body)
+	message := []byte(headers + body)
 
 	return smtp.SendMail(
 		host+":"+port,
@@ -113,8 +130,16 @@ func SendDataExportEmail(toEmail string, firstName string, downloadURL string) e
 
 	auth := smtp.PlainAuth("", from, password, host)
 
-	subject := "Subject: Your TechGuild Data Export is Ready\r\n"
-	mime := "MIME-Version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n"
+	headers := fmt.Sprintf(
+		"From: TechGuild <%s>\r\n"+
+			"To: %s\r\n"+
+			"Subject: Your TechGuild Data Export is Ready\r\n"+
+			"Date: %s\r\n"+
+			"Message-ID: <%s@techguild.com>\r\n"+
+			"MIME-Version: 1.0\r\n"+
+			"Content-Type: text/html; charset=\"UTF-8\"\r\n\r\n",
+		from, toEmail, time.Now().Format(time.RFC1123Z), uuid.New().String(),
+	)
 
 	body := fmt.Sprintf(`
 		<html>
@@ -140,7 +165,7 @@ func SendDataExportEmail(toEmail string, firstName string, downloadURL string) e
 		</html>
 	`, firstName, downloadURL)
 
-	message := []byte(subject + mime + body)
+	message := []byte(headers + body)
 
 	return smtp.SendMail(
 		host+":"+port,
@@ -150,4 +175,3 @@ func SendDataExportEmail(toEmail string, firstName string, downloadURL string) e
 		message,
 	)
 }
-

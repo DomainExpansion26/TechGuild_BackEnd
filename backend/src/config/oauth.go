@@ -2,15 +2,23 @@ package config
 
 import (
 	"os"
+
+	"github.com/joho/godotenv"
+)
+
+func getEnv(key string) string {
+	_ = godotenv.Load()
+	return os.Getenv(key)
+}
+
+var (
+	GoogleClientID     = getEnv("GOOGLE_CLIENT_ID")
+	GoogleClientSecret = getEnv("GOOGLE_CLIENT_SECRET")
+	GoogleRedirectURL  = getEnv("GOOGLE_REDIRECT_URL")
 )
 
 var (
-	GoogleClientID     = os.Getenv("GOOGLE_CLIENT_ID")
-	GoogleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
-	GoogleRedirectURL  = os.Getenv("GOOGLE_REDIRECT_URL")
-)
-var (
-	GitHubClientID     = os.Getenv("GITHUB_CLIENT_ID")
-	GitHubClientSecret = os.Getenv("GITHUB_CLIENT_SECRET")
-	GitHubRedirectURL  = os.Getenv("GITHUB_REDIRECT_URL")
+	GitHubClientID     = getEnv("GITHUB_CLIENT_ID")
+	GitHubClientSecret = getEnv("GITHUB_CLIENT_SECRET")
+	GitHubRedirectURL  = getEnv("GITHUB_REDIRECT_URL")
 )

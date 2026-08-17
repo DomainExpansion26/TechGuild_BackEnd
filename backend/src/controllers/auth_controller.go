@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"net/http"
+	"strings"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 	_ "techguild-backend/src/swagger"
+	"techguild-backend/src/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -72,7 +74,7 @@ func Login(c *gin.Context) {
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	res, err := authService.Login(req)
+	res, refreshToken, err := authService.Login(req)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": err.Error(),
@@ -80,6 +82,16 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		refreshToken,
+		int(utils.RefreshTokenTTL.Seconds()),
+		"/",
+		"",
+		true, //Secure
+		true, //httponly
+	)
 	c.JSON(http.StatusOK, res)
 }
 
@@ -168,25 +180,39 @@ func ResendVerificationEmail(c *gin.Context) {
 // @Router /auth/logout [post]
 func Logout(c *gin.Context) {
 
-	var req dto.LogoutRequest
+	token, err := c.Cookie("refresh_token")
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err != nil {
+		var req dto.LogoutRequest
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+			token = req.RefreshToken
+		}
 	}
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	err := authService.Logout(req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+	if err := authService.Logout(token); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// blacklist the access token
+	authHeader := c.GetHeader("Authorization")
+	if accessToken := strings.TrimPrefix(authHeader, "Bearer "); accessToken != "" {
+		_ = authService.BlacklistAccessToken(accessToken)
+	}
+
+	// Cookie clear karo — same Path/Secure/HttpOnly/SameSite settings ke sath, Max-Age negative do
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		"",
+		-1,
+		"/",
+		"",
+		true,
+		true,
+	)
 	c.JSON(http.StatusOK, dto.LogoutResponse{
 		Message: "Logout successful",
 	})
@@ -205,18 +231,25 @@ func Logout(c *gin.Context) {
 // @Router /auth/refresh-token [post]
 func RefreshToken(c *gin.Context) {
 
-	var req dto.RefreshTokenRequest
+	oldToken, err := c.Cookie("refresh_token")
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+	if err != nil {
+		var req dto.RefreshTokenRequest
+		if bindErr := c.ShouldBindJSON(&req); bindErr == nil {
+			oldToken = req.RefreshToken
+		}
+	}
+
+	if oldToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "refresh token missing",
 		})
 		return
 	}
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	res, err := authService.RefreshToken(req)
+	res, newRefreshToken, err := authService.RefreshToken(oldToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": err.Error(),
@@ -224,6 +257,16 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		"refresh_token",
+		newRefreshToken,
+		int(utils.RefreshTokenTTL.Seconds()),
+		"/",
+		"",
+		true,
+		true,
+	)
 	c.JSON(http.StatusOK, res)
 }
 
