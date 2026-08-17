@@ -44,8 +44,16 @@ func main() {
 	router := gin.Default()
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	
+
 	router.Static("/uploads", "./uploads")
+
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "TechGuild API is running"})
+	})
+
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 
 	// Authentication
 	routes.AuthRoutes(router)
