@@ -4,11 +4,30 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"os"
-	"github.com/golang-jwt/jwt/v5"
+	"sync"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
-var verificationSecret = []byte(os.Getenv("JWT_SECRET"))
+
+var (
+	verificationSecret     []byte
+	verificationSecretOnce sync.Once
+)
+
+func getVerificationSecret() []byte {
+	verificationSecretOnce.Do(func() {
+		v := os.Getenv("JWT_SECRET")
+		if v == "" {
+			log.Fatalf("missing requried env var : JWT_SECRET")
+		}
+		verificationSecret = []byte(v)
+	})
+	return verificationSecret
+}
+
 func GenerateVerificationToken(userID string) (string, error) {
 
 	bytes := make([]byte, 32)
@@ -23,14 +42,20 @@ func GenerateVerificationToken(userID string) (string, error) {
 func ValidateVerificationToken(tokenStr string) (jwt.MapClaims, error) {
 
 	token, err := jwt.ParseWithClaims(tokenStr, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(verificationSecret), nil
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return getVerificationSecret(), nil
 	})
 
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
 
-	claims := token.Claims.(jwt.MapClaims)
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
 
 	if claims["type"] != "email_verification" {
 		return nil, errors.New("invalid verification token")
@@ -48,19 +73,25 @@ func GenerateResetPasswordToken(userID string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	return token.SignedString([]byte(verificationSecret))
+	return token.SignedString(getVerificationSecret())
 }
 func ValidateResetPasswordToken(tokenStr string) (jwt.MapClaims, error) {
 
 	token, err := jwt.ParseWithClaims(tokenStr, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(verificationSecret), nil
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("Unexpected signing method")
+		}
+		return getVerificationSecret(), nil
 	})
 
 	if err != nil || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
 
-	claims := token.Claims.(jwt.MapClaims)
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
 
 	if claims["type"] != "password_reset" {
 		return nil, errors.New("invalid reset token")
