@@ -19,6 +19,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
@@ -47,12 +48,16 @@ func main() {
 
 	router.Static("/uploads", "./uploads")
 
+	router.HEAD("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
 	router.GET("/", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "TechGuild API is running"})
+		c.JSON(http.StatusOK, gin.H{"message": "TechGuild API is running"})
 	})
 
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Authentication
