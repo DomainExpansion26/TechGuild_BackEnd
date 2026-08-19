@@ -18,10 +18,10 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Message      string `json:"message"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
+	Message     string `json:"message"`
+	AccessToken string `json:"access_token"`
+	// RefreshToken string `json:"refresh_token"`
+	ExpiresIn int `json:"expires_in"`
 }
 
 type VerifyEmailRequest struct {
@@ -41,7 +41,7 @@ type ResendVerificationResponse struct {
 }
 
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `json:"refresh_token" binding:"required"` //if mobile app support need remove bidning
 }
 
 type LogoutResponse struct {
@@ -49,12 +49,13 @@ type LogoutResponse struct {
 }
 
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type RefreshTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken string `json:"access_token"`
+	// RefreshToken string `json:"refresh_token"`
+	ExpiresIn int `json:"expires_in"`
 }
 
 type ForgotPasswordRequest struct {
@@ -66,7 +67,7 @@ type ForgotPasswordResponse struct {
 }
 
 type ResetPasswordRequest struct {
-	Token       string `json:"token" binding:"required"`
+	Token       string `json:"token"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`
 }
 

@@ -11,15 +11,18 @@ import (
 	"techguild-backend/src/utils"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 type OAuthService struct {
 	userRepo repository.UserRepository
+	redis    *redis.Client
 }
 
 func NewOAuthService(redisClient *redis.Client) *OAuthService {
 	return &OAuthService{
 		userRepo: repository.NewUserRepository(),
+		redis:    redisClient,
 	}
 }
 
@@ -27,11 +30,17 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, error) {
+func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, string, error) {
+
+	req.Email = utils.NormalizeEmail(req.Email)
 
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", errors.New("something went wrong please try again")
+	}
+
+	if user == nil {
 
 		firstName := req.FullName
 		lastName := ""
@@ -53,29 +62,44 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 
 		err = s.userRepo.CreateUser(user)
 		if err != nil {
-			return nil, err
+			if utils.IsDuplicateKeyError(err) {
+				return nil, "", errors.New("user with this email already exists")
+			}
+			return nil, "", err
 		}
 
 		// Not using user.FullName here as it doesn't exist.
 		// we already have firstName from above
 		profile := &models.IndividualProfile{
-			UserID: user.ID,
+			UserID:        user.ID,
+			PublicUrlSlug: utils.GenerateSlug(firstName),
 		}
 
 		err = s.userRepo.CreateProfile(profile)
 		if err != nil {
-			return nil, err
+			return nil, "", err
+		}
+	} else {
+		if user.Status == models.StatusPendingDeletion {
+			user.Status = models.StatusActive
+			user.ScheduledDeletionDate = nil
+			if err := s.userRepo.UpdateUser(user); err != nil {
+				return nil, "", err
+			}
+		}
+		if user.Status != models.StatusActive {
+			return nil, "", errors.New("user account is not active")
 		}
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	session := &models.UserSession{
@@ -87,20 +111,25 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 
 	err = s.userRepo.CreateSession(session)
 	if err != nil {
-		return nil, errors.New("failed to create session")
+		return nil, "", errors.New("failed to create session")
 	}
 
 	return &dto.GoogleLoginResponse{
-		Message:      "Google login successful",
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	}, nil
+		Message:     "Google login successful",
+		AccessToken: accessToken,
+		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+	}, refreshToken, nil
 }
-func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginResponse, error) {
+func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginResponse, string, error) {
+
+	req.Email = utils.NormalizeEmail(req.Email)
 
 	user, err := s.userRepo.GetUserByEmail(req.Email)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", errors.New("something went wrong please try again")
+	}
 
-	if err != nil {
+	if user == nil {
 
 		firstName := req.FullName
 		lastName := ""
@@ -122,27 +151,43 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 
 		err = s.userRepo.CreateUser(user)
 		if err != nil {
-			return nil, err
+			if utils.IsDuplicateKeyError(err) {
+				return nil, "", errors.New("user with this email already exists")
+			}
+			return nil, "", err
 		}
 
 		profile := &models.IndividualProfile{
-			UserID: user.ID,
+			UserID:        user.ID,
+			PublicUrlSlug: utils.GenerateSlug(firstName),
+			AvatarURL:     req.Avatar,
 		}
 
 		err = s.userRepo.CreateProfile(profile)
 		if err != nil {
-			return nil, err
+			return nil, "", err
+		}
+	} else {
+		if user.Status == models.StatusPendingDeletion {
+			user.Status = models.StatusActive
+			user.ScheduledDeletionDate = nil
+			if err := s.userRepo.UpdateUser(user); err != nil {
+				return nil, "", err
+			}
+		}
+		if user.Status != models.StatusActive {
+			return nil, "", errors.New("user account is not active")
 		}
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	session := &models.UserSession{
@@ -154,12 +199,12 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 
 	err = s.userRepo.CreateSession(session)
 	if err != nil {
-		return nil, errors.New("failed to create session")
+		return nil, "", errors.New("failed to create session")
 	}
 
 	return &dto.GitHubLoginResponse{
-		Message:      "GitHub login successful",
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	}, nil
+		Message:     "GitHub login successful",
+		AccessToken: accessToken,
+		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+	}, refreshToken, nil
 }

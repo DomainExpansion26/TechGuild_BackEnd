@@ -2,10 +2,13 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
+	"techguild-backend/src/utils"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -40,6 +43,9 @@ type UserRepository interface {
 	GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error)
 	GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error)
 	UpdateUser(user *models.User) error
+
+	GetSessionByToken(refreshToken string) (*models.UserSession, error)
+	RevokeSessionByID(sessionID uuid.UUID) error
 }
 
 type userRepository struct{}
@@ -119,6 +125,7 @@ func (r *userRepository) AddUserPoints(userID string, points int) error {
 }
 
 func (r *userRepository) CreateSession(session *models.UserSession) error {
+	session.RefreshToken = utils.HashToken(session.RefreshToken)
 	return postgres.DB.Create(session).Error
 }
 func (r *userRepository) UpdateUser(user *models.User) error {
@@ -127,11 +134,13 @@ func (r *userRepository) UpdateUser(user *models.User) error {
 func (r *userRepository) GetSession(refreshToken string) (*models.UserSession, error) {
 
 	var session models.UserSession
+	hashed := utils.HashToken(refreshToken)
 
 	err := postgres.DB.
-		Where("refresh_token = ? AND is_revoked = false", refreshToken).
+		Where("refresh_token = ? AND expires_at > ?", hashed, time.Now()).
 		First(&session).Error
-
+	// NOTE: is_revoked filter removed from WHERE (fixes Bug 3 reuse-detection too) —
+	// caller must check session.IsRevoked explicitly after fetch.
 	if err != nil {
 		return nil, errors.New("session not found")
 	}
@@ -139,20 +148,39 @@ func (r *userRepository) GetSession(refreshToken string) (*models.UserSession, e
 	return &session, nil
 }
 
-func (r *userRepository) RevokeSession(refreshToken string) error {
+func (r *userRepository) GetSessionByToken(refreshToken string) (*models.UserSession, error) {
+	var session models.UserSession
+	hashed := utils.HashToken(refreshToken)
+	err := postgres.DB.Where("refresh_token = ?", hashed).First(&session).Error
+	if err != nil {
+		return nil, errors.New("session not found")
+	}
+	return &session, nil
+}
 
+func (r *userRepository) RevokeSession(refreshToken string) error {
+	hashed := utils.HashToken(refreshToken)
 	return postgres.DB.
 		Model(&models.UserSession{}).
-		Where("refresh_token = ?", refreshToken).
+		Where("refresh_token = ?", hashed).
 		Update("is_revoked", true).Error
 }
 
-func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
-
+func (r *userRepository) RevokeSessionByID(sessionID uuid.UUID) error {
 	return postgres.DB.
 		Model(&models.UserSession{}).
-		Where("refresh_token = ? AND is_revoked = false", oldToken).
-		Update("refresh_token", newToken).Error
+		Where("id = ?", sessionID).
+		Update("is_revoked", true).Error
+}
+
+// FIX (Bug 2): hash the NEW token before storing
+func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
+	oldHashed := utils.HashToken(oldToken)
+	newHashed := utils.HashToken(newToken)
+	return postgres.DB.
+		Model(&models.UserSession{}).
+		Where("refresh_token = ? AND is_revoked = false", oldHashed).
+		Update("refresh_token", newHashed).Error
 }
 
 func (r *userRepository) UpdatePassword(userID string, passwordHash string) error {
@@ -230,4 +258,3 @@ func (r *userRepository) GetClientProfileByUserID(userID string) (*models.Client
 func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) error {
 	return postgres.DB.Save(profile).Error
 }
-
