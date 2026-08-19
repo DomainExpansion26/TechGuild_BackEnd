@@ -1,11 +1,19 @@
 package routes
 
 import (
+	"context"
 	"techguild-backend/src/controllers"
 	"techguild-backend/src/middleware"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/gin-gonic/gin"
 )
+
+func RegisterAuthRoutes(api huma.API) {
+	huma.Get(api, "/health-huma", func(ctx context.Context, input *struct{}) (*struct{ Body string }, error) {
+		return &struct{ Body string }{Body: "ok"}, nil
+	})
+}
 
 func AuthRoutes(router *gin.Engine) {
 

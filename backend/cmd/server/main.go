@@ -21,6 +21,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humagin"
 	"github.com/gin-gonic/gin"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -43,6 +45,13 @@ func main() {
 	jobs.StartCleanupJob()
 
 	router := gin.Default()
+
+	config := huma.DefaultConfig("TechGuild Backend API", "1.0.0")
+	config.Info.Description = "Backend API for TechGuild Platform."
+	api := humagin.New(router, config)
+
+	// naye Huma routes register karo
+	routes.RegisterAuthRoutes(api)
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
