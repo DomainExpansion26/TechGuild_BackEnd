@@ -23,6 +23,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -46,8 +47,19 @@ func main() {
 
 	router := gin.Default()
 
+	// CORS — Zudoku (ya kisi bhi frontend) se requests allow karne ke liye
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3001", "https://your-zudoku-domain.com"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}))
+
 	config := huma.DefaultConfig("TechGuild Backend API", "1.0.0")
 	config.Info.Description = "Backend API for TechGuild Platform."
+	config.Servers = []*huma.Server{
+		{URL: "http://localhost:8080"},
+	}
 	api := humagin.New(router, config)
 
 	// naye Huma routes register karo
@@ -69,7 +81,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Authentication
+	// Authentication (SetAccountType — Gin, baaki sab Huma me migrate ho chuka)
 	routes.AuthRoutes(router)
 
 	// OAuth
