@@ -9,6 +9,8 @@ import (
 	"techguild-backend/src/repository"
 	"techguild-backend/src/utils"
 
+	"techguild-backend/src/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -77,6 +79,32 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Set("user_id", claims.UserID)
 		c.Set("access_token", tokenString)
+		c.Next()
+	}
+}
+
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetString("user_id")
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: user ID missing"})
+			c.Abort()
+			return
+		}
+
+		var user models.User
+		if err := postgres.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: user not found"})
+			c.Abort()
+			return
+		}
+
+		if user.AccountType == nil || *user.AccountType != models.AccountTypeAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Admin access required"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }

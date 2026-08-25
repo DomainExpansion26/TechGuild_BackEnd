@@ -143,7 +143,7 @@ func (r *verificationRecordsRepository) BusinessHashExists(hash string) (bool, e
 
 	err := postgres.DB.
 		Model(&models.BusinessPANDedup{}).
-		Where("business_pan_hash = ?", hash).
+		Where("pan_hash = ?", hash).
 		Count(&count).Error
 
 	if err != nil {
