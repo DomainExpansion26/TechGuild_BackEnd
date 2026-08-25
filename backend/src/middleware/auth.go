@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"techguild-backend/src/database/postgres"
@@ -14,7 +15,12 @@ import (
 )
 
 func getJwtSecret() []byte {
-	return []byte("your-access-secret")
+	secret := os.Getenv("JWT_ACCESS_SECRET")
+	if secret == "" {
+		fmt.Println("JWT ERROR: JWT_ACCESS_SECRET is not set")
+		return nil
+	}
+	return []byte(secret)
 }
 
 type Claims struct {

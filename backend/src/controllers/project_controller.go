@@ -1,226 +1,182 @@
 package controllers
 
 import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
+	"context"
 
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
-// create a new project
-func CreateProject(c *gin.Context) {
+// ---------- CreateProject ----------
 
-	clientID := c.GetString("user_id")
-
-	var req dto.CreateProjectRequest
-
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func CreateProjectHandler(ctx context.Context, input *dto.CreateProjectInput) (*dto.CreateProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	projectService := services.NewProjectService()
-
-	res, err := projectService.CreateProject(clientID, req)
+	res, err := projectService.CreateProject(clientID, input.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusCreated, res)
+	return &dto.CreateProjectOutput{Body: *res}, nil
 }
 
-// update a project
-func UpdateProject(c *gin.Context) {
+// ---------- UpdateProject ----------
 
-	clientID := c.GetString("user_id")
-	projectID := c.Param("project_id")
-
-	var req dto.UpdateProjectRequest
-
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func UpdateProjectHandler(ctx context.Context, input *dto.UpdateProjectInput) (*dto.UpdateProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	projectService := services.NewProjectService()
-
-		res, err := projectService.UpdateProject(clientID, projectID, req)
+	res, err := projectService.UpdateProject(clientID, input.ID, input.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.UpdateProjectOutput{Body: *res}, nil
 }
 
-// delete a project
-func DeleteProject(c *gin.Context) {
+// ---------- DeleteProject ----------
 
-	clientID := c.GetString("user_id")
-	projectID := c.Param("project_id")
-
-	projectService := services.NewProjectService()
-
-	err := projectService.DeleteProject(clientID, projectID)
+func DeleteProjectHandler(ctx context.Context, input *dto.DeleteProjectInput) (*dto.DeleteProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.DeleteProjectResponse{
-		Message: "Project deleted successfully",
-	})
-}
-
-// publish project
-func PublishProject(c *gin.Context) {
-
-	clientID := c.GetString("user_id")
-	projectID := c.Param("project_id")
-
 	projectService := services.NewProjectService()
-
-	err := projectService.PublishProject(clientID, projectID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := projectService.DeleteProject(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.PublishProjectResponse{
-		Message: "Project published successfully",
-	})
+	return &dto.DeleteProjectOutput{
+		Body: dto.DeleteProjectResponse{Message: "Project deleted successfully"},
+	}, nil
 }
 
-// close project
-func CloseProject(c *gin.Context) {
+// ---------- PublishProject ----------
 
-	clientID := c.GetString("user_id")
-	projectID := c.Param("project_id")
-
-	projectService := services.NewProjectService()
-
-	err := projectService.CloseProject(clientID, projectID)
+func PublishProjectHandler(ctx context.Context, input *dto.PublishProjectInput) (*dto.PublishProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.CloseProjectResponse{
-		Message: "Project closed successfully",
-	})
-}
-
-// reopen project
-func ReopenProject(c *gin.Context) {
-
-	clientID := c.GetString("user_id")
-	projectID := c.Param("project_id")
-
 	projectService := services.NewProjectService()
-
-	err := projectService.ReopenProject(clientID, projectID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := projectService.PublishProject(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.ReopenProjectResponse{
-		Message: "Project reopened successfully",
-	})
+	return &dto.PublishProjectOutput{
+		Body: dto.PublishProjectResponse{Message: "Project published successfully"},
+	}, nil
 }
 
-// get project by id
-func GetProjectByID(c *gin.Context) {
+// ---------- CloseProject ----------
 
-	projectID := c.Param("project_id")
-
-	projectService := services.NewProjectService()
-
-	res, err := projectService.GetProjectByID(projectID)
+func CloseProjectHandler(ctx context.Context, input *dto.CloseProjectInput) (*dto.CloseProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	projectService := services.NewProjectService()
+	if err := projectService.CloseProject(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.CloseProjectOutput{
+		Body: dto.CloseProjectResponse{Message: "Project closed successfully"},
+	}, nil
 }
 
-// get my projects
-func GetMyProjects(c *gin.Context) {
+// ---------- ReopenProject ----------
 
-	clientID := c.GetString("user_id")
+func ReopenProjectHandler(ctx context.Context, input *dto.ReopenProjectInput) (*dto.ReopenProjectOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
 
 	projectService := services.NewProjectService()
+	if err := projectService.ReopenProject(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
 
+	return &dto.ReopenProjectOutput{
+		Body: dto.ReopenProjectResponse{Message: "Project reopened successfully"},
+	}, nil
+}
+
+// ---------- GetProjectByID ----------
+
+func GetProjectByIDHandler(ctx context.Context, input *dto.GetProjectByIDInput) (*dto.GetProjectByIDOutput, error) {
+	projectService := services.NewProjectService()
+	res, err := projectService.GetProjectByID(input.ID)
+	if err != nil {
+		return nil, huma.Error404NotFound(err.Error())
+	}
+
+	return &dto.GetProjectByIDOutput{Body: *res}, nil
+}
+
+// ---------- GetMyProjects ----------
+
+func GetMyProjectsHandler(ctx context.Context, input *dto.GetMyProjectsInput) (*dto.GetMyProjectsOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	projectService := services.NewProjectService()
 	res, err := projectService.GetMyProjects(clientID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.GetMyProjectsOutput{Body: *res}, nil
 }
 
-// browse published projects
-func BrowseProjects(c *gin.Context) {
+// ---------- BrowseProjects ----------
 
+func BrowseProjectsHandler(ctx context.Context, input *dto.BrowseProjectsInput) (*dto.BrowseProjectsOutput, error) {
 	projectService := services.NewProjectService()
-
 	res, err := projectService.BrowseProjects()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.BrowseProjectsOutput{Body: *res}, nil
 }
 
-// search projects
-func SearchProjects(c *gin.Context) {
+// ---------- SearchProjects ----------
 
-	var req dto.SearchProjectRequest
-
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func SearchProjectsHandler(ctx context.Context, input *dto.SearchProjectsInput) (*dto.SearchProjectsOutput, error) {
+	req := dto.SearchProjectRequest{
+		Keyword:         input.Keyword,
+		Category:        input.Category,
+		MinBudget:       input.MinBudget,
+		MaxBudget:       input.MaxBudget,
+		ExperienceLevel: input.ExperienceLevel,
+		ProjectType:     input.ProjectType,
+		Visibility:      input.Visibility,
+		Page:            input.Page,
+		Limit:           input.Limit,
 	}
 
 	projectService := services.NewProjectService()
-
 	res, err := projectService.SearchProjects(req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.SearchProjectsOutput{Body: *res}, nil
 }

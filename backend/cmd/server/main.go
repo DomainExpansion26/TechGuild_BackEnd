@@ -20,24 +20,26 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "techguild-backend/docs"
-
+	"techguild-backend/src/config"
 	"techguild-backend/src/database/migration"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/jobs"
+	"techguild-backend/src/middleware"
 	"techguild-backend/src/routes"
 )
 
 func main() {
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	postgres.ConnectDatabase()
 
@@ -47,26 +49,10 @@ func main() {
 
 	router := gin.Default()
 
-	// CORS — Zudoku (ya kisi bhi frontend) se requests allow karne ke liye
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3001", "https://your-zudoku-domain.com"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		AllowCredentials: true,
-	}))
+	// Allowed origins are env-driven (FRONTEND_URL + ZUDOKU_URL, comma-separated).
+	router.Use(middleware.CORS(cfg))
 
-	config := huma.DefaultConfig("TechGuild Backend API", "1.0.0")
-	config.Info.Description = "Backend API for TechGuild Platform."
-	config.Servers = []*huma.Server{
-		{URL: "http://localhost:8080"},
-	}
-	api := humagin.New(router, config)
-
-	// naye Huma routes register karo
-	routes.RegisterAuthRoutes(api)
-
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
+	// ---- public / unversioned routes ----
 	router.Static("/uploads", "./uploads")
 
 	router.HEAD("/", func(c *gin.Context) {
@@ -81,35 +67,41 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Authentication (SetAccountType — Gin, baaki sab Huma me migrate ho chuka)
-	routes.AuthRoutes(router)
+	apiConfig := huma.DefaultConfig("TechGuild Backend API", "1.0.0")
+	apiConfig.Info.Description = "Backend API for TechGuild Platform."
 
-	// OAuth
-	routes.OAuthRoutes(router)
+	publicURL := os.Getenv("SERVER_PUBLIC_URL")
+	if publicURL == "" {
+		publicURL = "http://localhost:8080"
+	}
+	apiConfig.Servers = []*huma.Server{{URL: publicURL}}
 
-	// Profile
-	routes.ProfileRoutes(router)
+	// JWT Bearer auth scheme — Zudoku/playground Authorize dialog ke liye.
+	apiConfig.Components = &huma.Components{
+		SecuritySchemes: map[string]*huma.SecurityScheme{
+			"BearerAuth": {
+				Type:         "http",
+				Scheme:       "bearer",
+				BearerFormat: "JWT",
+			},
+		},
+	}
+	// Default: sab routes ko bearerAuth chahiye (protected). Public routes
+	apiConfig.Security = []map[string][]string{{"BearerAuth": {}}}
 
-	// Verification
-	routes.VerificationRoutes(router)
+	api := humagin.New(router, apiConfig)
 
-	// Projects
-	routes.ProjectRoutes(router)
-
-	// Project Applications
-	routes.ProjectApplicationRoutes(router)
-
-	// Contracts
-	routes.ContractRoutes(router)
-
-	// Milestones
-	routes.MilestoneRoutes(router)
-
-	// Submissions
-	routes.SubmissionRoutes(router)
-
-	//team
-	routes.TeamRoutes(router)
+	// naye Huma routes register karo
+	routes.RegisterAuthRoutes(api)
+	routes.RegisterContractRoutes(api)
+	routes.RegisterProfileRoutes(api)
+	routes.RegisterOAuthRoutes(api)
+	routes.RegisterMilestoneRoutes(api)
+	routes.RegisterProjectRoutes(api)
+	routes.RegisterProjectApplicationRoutes(api)
+	routes.RegisterSubmissionRoutes(api)
+	routes.RegisterTeamRoutes(api)
+	routes.RegisterVerificationRoutes(api)
 
 	log.Println("Server running on :8080")
 

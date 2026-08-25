@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 
 	_ "techguild-backend/src/swagger"
 
@@ -30,7 +31,7 @@ func UpdateAccountSettings(c *gin.Context) {
 		return
 	}
 
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -66,7 +67,7 @@ func UpdateNotifications(c *gin.Context) {
 		return
 	}
 
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -102,7 +103,7 @@ func UpdatePrivacySettings(c *gin.Context) {
 		return
 	}
 
-	userID, err := getUserIDFromContext(c)
+	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

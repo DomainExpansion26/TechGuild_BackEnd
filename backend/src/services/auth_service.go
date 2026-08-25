@@ -282,7 +282,7 @@ func (s *AuthService) Logout(refreshToken string) error {
 	return s.userRepo.RevokeSession(refreshToken)
 }
 
-func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshTokenResponse, string, error) {
+func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, string, error) {
 
 	session, err := s.userRepo.GetSession(oldToken)
 	if err != nil {
@@ -338,7 +338,7 @@ func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshTokenResponse, 
 		return nil, "", err
 	}
 
-	return &dto.RefreshTokenResponse{
+	return &dto.RefreshResponse{
 		AccessToken: newAccessToken,
 		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
 	}, newRefreshToken, nil
