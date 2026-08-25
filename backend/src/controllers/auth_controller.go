@@ -16,38 +16,21 @@ import (
 
 // ---------- Register ----------
 
-type RegisterInput struct {
-	Body dto.RegisterRequest
-}
-type RegisterOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
-}
-
-func RegisterHandler(ctx context.Context, input *RegisterInput) (*RegisterOutput, error) {
+func RegisterHandler(ctx context.Context, input *dto.RegisterInput) (*dto.RegisterOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
 	if err := authService.Register(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	out := &RegisterOutput{}
+	out := &dto.RegisterOutput{}
 	out.Body.Message = "Registration successful. Please check your email to verify your account."
 	return out, nil
 }
 
 // ---------- Login ----------
 
-type LoginInput struct {
-	Body dto.LoginRequest
-}
-type LoginOutput struct {
-	SetCookie string `header:"Set-Cookie"`
-	Body      dto.LoginResponse
-}
-
-func LoginHandler(ctx context.Context, input *LoginInput) (*LoginOutput, error) {
+func LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
 	res, refreshToken, err := authService.Login(input.Body)
@@ -65,7 +48,7 @@ func LoginHandler(ctx context.Context, input *LoginInput) (*LoginOutput, error) 
 		SameSite: http.SameSiteStrictMode,
 	}
 
-	return &LoginOutput{
+	return &dto.LoginOutput{
 		SetCookie: cookie.String(),
 		Body:      *res,
 	}, nil
@@ -73,14 +56,7 @@ func LoginHandler(ctx context.Context, input *LoginInput) (*LoginOutput, error) 
 
 // ---------- VerifyEmail ----------
 
-type VerifyEmailInput struct {
-	Token string `query:"token" required:"true" doc:"Email verification token"`
-}
-type VerifyEmailOutput struct {
-	Body dto.VerifyEmailResponse
-}
-
-func VerifyEmailHandler(ctx context.Context, input *VerifyEmailInput) (*VerifyEmailOutput, error) {
+func VerifyEmailHandler(ctx context.Context, input *dto.VerifyEmailInput) (*dto.VerifyEmailOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
 	res, err := authService.VerifyEmail(dto.VerifyEmailRequest{Token: input.Token})
@@ -88,43 +64,26 @@ func VerifyEmailHandler(ctx context.Context, input *VerifyEmailInput) (*VerifyEm
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &VerifyEmailOutput{Body: *res}, nil
+	return &dto.VerifyEmailOutput{Body: *res}, nil
 }
 
 // ---------- ResendVerificationEmail ----------
 
-type ResendVerificationInput struct {
-	Body dto.ResendVerificationRequest
-}
-type ResendVerificationOutput struct {
-	Body dto.ResendVerificationResponse
-}
-
-func ResendVerificationEmailHandler(ctx context.Context, input *ResendVerificationInput) (*ResendVerificationOutput, error) {
+func ResendVerificationEmailHandler(ctx context.Context, input *dto.ResendVerificationInput) (*dto.ResendVerificationOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
 	if err := authService.ResendVerificationEmail(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &ResendVerificationOutput{
+	return &dto.ResendVerificationOutput{
 		Body: dto.ResendVerificationResponse{Message: "Verification email sent successfully"},
 	}, nil
 }
 
 // ---------- Logout ----------
 
-type LogoutInput struct {
-	RefreshTokenCookie string `cookie:"refresh_token"`
-	Authorization      string `header:"Authorization"`
-	Body               dto.LogoutRequest
-}
-type LogoutOutput struct {
-	SetCookie string `header:"Set-Cookie"`
-	Body      dto.LogoutResponse
-}
-
-func LogoutHandler(ctx context.Context, input *LogoutInput) (*LogoutOutput, error) {
+func LogoutHandler(ctx context.Context, input *dto.LogoutInput) (*dto.LogoutOutput, error) {
 	token := input.RefreshTokenCookie
 	if token == "" {
 		token = input.Body.RefreshToken
@@ -150,7 +109,7 @@ func LogoutHandler(ctx context.Context, input *LogoutInput) (*LogoutOutput, erro
 		SameSite: http.SameSiteStrictMode,
 	}
 
-	return &LogoutOutput{
+	return &dto.LogoutOutput{
 		SetCookie: clearCookie.String(),
 		Body:      dto.LogoutResponse{Message: "Logout successful"},
 	}, nil
@@ -158,16 +117,7 @@ func LogoutHandler(ctx context.Context, input *LogoutInput) (*LogoutOutput, erro
 
 // ---------- RefreshToken ----------
 
-type RefreshTokenInput struct {
-	RefreshTokenCookie string `cookie:"refresh_token"`
-	Body               dto.RefreshTokenRequest
-}
-type RefreshTokenOutput struct {
-	SetCookie string `header:"Set-Cookie"`
-	Body      dto.RefreshTokenResponse
-}
-
-func RefreshTokenHandler(ctx context.Context, input *RefreshTokenInput) (*RefreshTokenOutput, error) {
+func RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dto.RefreshTokenOutput, error) {
 	oldToken := input.RefreshTokenCookie
 	if oldToken == "" {
 		oldToken = input.Body.RefreshToken
@@ -194,7 +144,7 @@ func RefreshTokenHandler(ctx context.Context, input *RefreshTokenInput) (*Refres
 		SameSite: http.SameSiteStrictMode,
 	}
 
-	return &RefreshTokenOutput{
+	return &dto.RefreshTokenOutput{
 		SetCookie: cookie.String(),
 		Body:      *res,
 	}, nil
@@ -202,15 +152,7 @@ func RefreshTokenHandler(ctx context.Context, input *RefreshTokenInput) (*Refres
 
 // ---------- ResetPassword ----------
 
-type ResetPasswordInput struct {
-	Token string `query:"token" required:"true" doc:"Password reset token"`
-	Body  dto.ResetPasswordRequest
-}
-type ResetPasswordOutput struct {
-	Body dto.ResetPasswordResponse
-}
-
-func ResetPasswordHandler(ctx context.Context, input *ResetPasswordInput) (*ResetPasswordOutput, error) {
+func ResetPasswordHandler(ctx context.Context, input *dto.ResetPasswordInput) (*dto.ResetPasswordOutput, error) {
 	input.Body.Token = input.Token
 
 	authService := services.NewAuthService(postgres.RedisDB)
@@ -219,42 +161,28 @@ func ResetPasswordHandler(ctx context.Context, input *ResetPasswordInput) (*Rese
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &ResetPasswordOutput{
+	return &dto.ResetPasswordOutput{
 		Body: dto.ResetPasswordResponse{Message: "Password reset successfully"},
 	}, nil
 }
 
 // ---------- ForgotPassword ----------
 
-type ForgotPasswordInput struct {
-	Body dto.ForgotPasswordRequest
-}
-type ForgotPasswordOutput struct {
-	Body dto.ForgotPasswordResponse
-}
-
-func ForgotPasswordHandler(ctx context.Context, input *ForgotPasswordInput) (*ForgotPasswordOutput, error) {
+func ForgotPasswordHandler(ctx context.Context, input *dto.ForgotPasswordInput) (*dto.ForgotPasswordOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
 	if err := authService.ForgotPassword(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &ForgotPasswordOutput{
+	return &dto.ForgotPasswordOutput{
 		Body: dto.ForgotPasswordResponse{Message: "Password reset link sent successfully"},
 	}, nil
 }
 
 // ---------- ChangePassword (protected) ----------
 
-type ChangePasswordInput struct {
-	Body dto.ChangePasswordRequest
-}
-type ChangePasswordOutput struct {
-	Body dto.ChangePasswordResponse
-}
-
-func ChangePasswordHandler(ctx context.Context, input *ChangePasswordInput) (*ChangePasswordOutput, error) {
+func ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) (*dto.ChangePasswordOutput, error) {
 	userID, _ := ctx.Value(middleware.UserIDKey).(string)
 
 	authService := services.NewAuthService(postgres.RedisDB)
@@ -263,21 +191,14 @@ func ChangePasswordHandler(ctx context.Context, input *ChangePasswordInput) (*Ch
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &ChangePasswordOutput{
+	return &dto.ChangePasswordOutput{
 		Body: dto.ChangePasswordResponse{Message: "Password changed successfully"},
 	}, nil
 }
 
 // ---------- DeleteAccount (protected) ----------
 
-type DeleteAccountInput struct{}
-type DeleteAccountOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
-}
-
-func DeleteAccountHandler(ctx context.Context, input *DeleteAccountInput) (*DeleteAccountOutput, error) {
+func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*dto.DeleteAccountOutput, error) {
 	userID, _ := ctx.Value(middleware.UserIDKey).(string)
 
 	authService := services.NewAuthService(postgres.RedisDB)
@@ -286,7 +207,7 @@ func DeleteAccountHandler(ctx context.Context, input *DeleteAccountInput) (*Dele
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	out := &DeleteAccountOutput{}
+	out := &dto.DeleteAccountOutput{}
 	out.Body.Message = "Account deleted successfully"
 	return out, nil
 }

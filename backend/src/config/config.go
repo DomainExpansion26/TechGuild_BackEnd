@@ -19,4 +19,7 @@ type Config struct {
 
 	JWTSecret        string
 	JWTRefreshSecret string
+
+	FrontendURL string
+	ZudokuURL   string
 }
