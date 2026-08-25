@@ -38,6 +38,20 @@ type VerificationRecord struct {
 	GovtIDHash string `gorm:"size:64"`
 
 	BusinessPANHash string `gorm:"size:64"`
+
+	// Business Information
+	BusinessName       string `gorm:"size:255"`
+	GSTNumber          string `gorm:"size:50"`
+	RegistrationNumber string `gorm:"size:100"`
+	Website            string `gorm:"size:255"`
+	Country            string `gorm:"size:100"`
+
+	// Bank Details
+	BankName          string `gorm:"size:100"`
+	AccountHolderName string `gorm:"size:255"`
+	AccountNumber     string `gorm:"size:100"`
+	IFSCCode          string `gorm:"size:50"`
+
 	// Reason returned by admin if rejected
 	RejectionReason string `gorm:"type:text"`
 	// Previous verification record in case of resubmission

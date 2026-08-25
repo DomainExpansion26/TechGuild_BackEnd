@@ -50,7 +50,7 @@ func (s *VerificationService) SubmitIdentityVerification(
 
 	existingRecord, _ := s.verificationRecordsRepo.GetVerificationByUser(userID)
 
-	if existingRecord != nil &&
+	if existingRecord != nil && existingRecord.Type != "email" &&
 		(existingRecord.Status == models.VerificationPending ||
 			existingRecord.Status == models.VerificationReview) {
 
@@ -117,10 +117,11 @@ func (s *VerificationService) SubmitIdentityVerification(
 	// -----------------------------
 
 	record := &models.VerificationRecord{
-		UserID: uuid.MustParse(userID),
-		Type:   models.VerificationIndividual,
-		Status: models.VerificationPending,
-		Vendor: "hyperverge",
+		UserID:     uuid.MustParse(userID),
+		Type:       models.VerificationIndividual,
+		Status:     models.VerificationPending,
+		Vendor:     "hyperverge",
+		GovtIDHash: govtHash,
 	}
 
 	err = s.verificationRecordsRepo.CreateVerification(record)
@@ -189,16 +190,31 @@ func (s *VerificationService) GetIdentityVerificationStatus(
 	}, nil
 }
 
-// =====================================================
-// Submit Business Verification
-// =====================================================
+func (s *VerificationService) GetVerificationStatus(
+	userID string,
+) (*dto.VerificationStatusResponse, error) {
 
+	record, err := s.verificationRecordsRepo.GetVerificationByUser(userID)
+	if err != nil {
+		return nil, errors.New("verification record not found")
+	}
+
+	return &dto.VerificationStatusResponse{
+		Type:            string(record.Type),
+		Status:          string(record.Status),
+		RejectionReason: record.RejectionReason,
+	}, nil
+}
+
+// =====================================================
 func (s *VerificationService) SubmitBusinessVerification(
 	userID string,
 	req dto.BusinessVerificationRequest,
 	gstCertificate *multipart.FileHeader,
+	incorporationCertificate *multipart.FileHeader,
 	panCard *multipart.FileHeader,
-	authorizedRepresentative *multipart.FileHeader,
+	businessRegistration *multipart.FileHeader,
+	cancelledCheque *multipart.FileHeader,
 ) (*dto.BusinessVerificationResponse, error) {
 
 	//----------------------------------------------------
@@ -225,7 +241,7 @@ func (s *VerificationService) SubmitBusinessVerification(
 
 	record, _ := s.verificationRecordsRepo.GetVerificationByUser(userID)
 
-	if record != nil &&
+	if record != nil && record.Type != "email" &&
 		(record.Status == models.VerificationPending ||
 			record.Status == models.VerificationReview) {
 
@@ -248,21 +264,6 @@ func (s *VerificationService) SubmitBusinessVerification(
 	}
 
 	//----------------------------------------------------
-	// TODO
-	// Verify GST Returns
-	//----------------------------------------------------
-
-	//----------------------------------------------------
-	// TODO
-	// Verify MCA Representative
-	//----------------------------------------------------
-
-	//----------------------------------------------------
-	// TODO
-	// ₹1 Bank Verification
-	//----------------------------------------------------
-
-	//----------------------------------------------------
 	// Upload GST Certificate
 	//----------------------------------------------------
 
@@ -275,6 +276,24 @@ func (s *VerificationService) SubmitBusinessVerification(
 	gstURL, err := utils.UploadVerificationDocument(
 		gstFile,
 		fmt.Sprintf("%s_gst_%s", userID, uuid.New().String()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	//----------------------------------------------------
+	// Upload Incorporation Certificate
+	//----------------------------------------------------
+
+	incFile, err := incorporationCertificate.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer incFile.Close()
+
+	incURL, err := utils.UploadVerificationDocument(
+		incFile,
+		fmt.Sprintf("%s_inc_%s", userID, uuid.New().String()),
 	)
 	if err != nil {
 		return nil, err
@@ -299,18 +318,36 @@ func (s *VerificationService) SubmitBusinessVerification(
 	}
 
 	//----------------------------------------------------
-	// Upload Authorized Representative ID
+	// Upload Business Registration
 	//----------------------------------------------------
 
-	repFile, err := authorizedRepresentative.Open()
+	regFile, err := businessRegistration.Open()
 	if err != nil {
 		return nil, err
 	}
-	defer repFile.Close()
+	defer regFile.Close()
 
-	repURL, err := utils.UploadVerificationDocument(
-		repFile,
-		fmt.Sprintf("%s_rep_%s", userID, uuid.New().String()),
+	regURL, err := utils.UploadVerificationDocument(
+		regFile,
+		fmt.Sprintf("%s_reg_%s", userID, uuid.New().String()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	//----------------------------------------------------
+	// Upload Cancelled Cheque
+	//----------------------------------------------------
+
+	chequeFile, err := cancelledCheque.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer chequeFile.Close()
+
+	chequeURL, err := utils.UploadVerificationDocument(
+		chequeFile,
+		fmt.Sprintf("%s_cheque_%s", userID, uuid.New().String()),
 	)
 	if err != nil {
 		return nil, err
@@ -321,10 +358,20 @@ func (s *VerificationService) SubmitBusinessVerification(
 	//----------------------------------------------------
 
 	newRecord := &models.VerificationRecord{
-		UserID: uuid.MustParse(userID),
-		Type:   models.VerificationBusiness,
-		Status: models.VerificationReview,
-		Vendor: "manual_review",
+		UserID:             uuid.MustParse(userID),
+		Type:               models.VerificationBusiness,
+		Status:             models.VerificationReview,
+		Vendor:             "manual_review",
+		BusinessPANHash:    panHash,
+		BusinessName:       req.BusinessName,
+		GSTNumber:          req.GSTNumber,
+		RegistrationNumber: req.RegistrationNumber,
+		Website:            req.Website,
+		Country:            req.Country,
+		BankName:           req.BankName,
+		AccountHolderName:  req.AccountHolderName,
+		AccountNumber:      req.BankAccountNumber,
+		IFSCCode:           req.BankIFSC,
 	}
 
 	err = s.verificationRecordsRepo.CreateVerification(newRecord)
@@ -344,18 +391,27 @@ func (s *VerificationService) SubmitBusinessVerification(
 		},
 		{
 			VerificationRecordID: newRecord.ID,
+			DocumentType:         "incorporation_certificate",
+			FileURL:              incURL,
+		},
+		{
+			VerificationRecordID: newRecord.ID,
 			DocumentType:         "pan_card",
 			FileURL:              panURL,
 		},
 		{
 			VerificationRecordID: newRecord.ID,
-			DocumentType:         "authorized_representative_id",
-			FileURL:              repURL,
+			DocumentType:         "business_registration",
+			FileURL:              regURL,
+		},
+		{
+			VerificationRecordID: newRecord.ID,
+			DocumentType:         "cancelled_cheque",
+			FileURL:              chequeURL,
 		},
 	}
 
 	for _, document := range documents {
-
 		err := s.verificationRecordsRepo.CreateDocument(document)
 		if err != nil {
 			return nil, err
