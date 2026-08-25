@@ -1,7 +1,12 @@
 package controllers
 
 import (
+	"fmt"
+	"mime/multipart"
 	"net/http"
+	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -9,6 +14,22 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 )
+
+func validateUploadedFile(file *multipart.FileHeader) error {
+	// Size limit: 5MB (5 * 1024 * 1024 bytes)
+	const MaxFileSize = 5 * 1024 * 1024
+	if file.Size > MaxFileSize {
+		return fmt.Errorf("file %s exceeds the maximum limit of 5MB", file.Filename)
+	}
+
+	// Extension check
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if ext != ".pdf" && ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
+		return fmt.Errorf("file %s has an unsupported format. Allowed formats are: .pdf, .png, .jpeg", file.Filename)
+	}
+
+	return nil
+}
 
 // ==========================
 // Submit Individual Verification
@@ -22,10 +43,8 @@ import (
 // @Security BearerAuth
 // @Accept multipart/form-data
 // @Produce json
-// @Param full_name formData string true "Full Name"
 // @Param govt_id_type formData string true "Government ID Type"
 // @Param govt_id_number formData string true "Government ID Number"
-// @Param profile_data formData string false "Additional verification data"
 // @Param govt_id_document formData file true "Government ID Document"
 // @Param selfie formData file true "Selfie"
 // @Success 201 {object} dto.IdentityVerificationResponse
@@ -50,12 +69,20 @@ func SubmitIdentityVerification(c *gin.Context) {
 		})
 		return
 	}
+	if err := validateUploadedFile(govtIDDocument); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	selfie, err := c.FormFile("selfie")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "selfie is required",
 		})
+		return
+	}
+	if err := validateUploadedFile(selfie); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -73,7 +100,11 @@ func SubmitIdentityVerification(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		statusCode := http.StatusBadRequest
+		if err.Error() == "this government ID is already associated with another account" {
+			statusCode = http.StatusConflict
+		}
+		c.JSON(statusCode, gin.H{
 			"error": err.Error(),
 		})
 		return
@@ -93,7 +124,7 @@ func SubmitIdentityVerification(c *gin.Context) {
 // @Tags Verification
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} dto.IdentityVerificationStatusResponse
+// @Success 200 {object} dto.IdentityStatusResponse
 // @Failure 400 {object} swagger.ErrorResponse
 // @Failure 401 {object} swagger.ErrorResponse
 // @Router /verification/identity/status [get]
@@ -105,6 +136,23 @@ func GetIdentityVerificationStatus(c *gin.Context) {
 	verificationService := services.NewVerificationService(postgres.RedisDB)
 
 	res, err := verificationService.GetIdentityVerificationStatus(userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+func GetVerificationStatus(c *gin.Context) {
+
+	userID := c.GetString("user_id")
+
+	verificationService := services.NewVerificationService(postgres.RedisDB)
+
+	res, err := verificationService.GetVerificationStatus(userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -148,10 +196,36 @@ func SubmitBusinessVerification(c *gin.Context) {
 		return
 	}
 
+	// Validate PAN format
+	panRegex := regexp.MustCompile(`^[A-Z]{5}[0-9]{4}[A-Z]{1}$`)
+	if !panRegex.MatchString(strings.ToUpper(req.BusinessPAN)) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid business PAN format",
+		})
+		return
+	}
+
+	// Validate GST format
+	gstRegex := regexp.MustCompile(`^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`)
+	if !gstRegex.MatchString(strings.ToUpper(req.GSTNumber)) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid GST number format",
+		})
+		return
+	}
+
 	gstCertificate, err := c.FormFile("gst_certificate")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "gst_certificate is required",
+		})
+		return
+	}
+
+	incorporationCertificate, err := c.FormFile("incorporation_certificate")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "incorporation_certificate is required",
 		})
 		return
 	}
@@ -164,12 +238,35 @@ func SubmitBusinessVerification(c *gin.Context) {
 		return
 	}
 
-	authorizedRepresentativeID, err := c.FormFile("authorized_representative_id")
+	businessRegistration, err := c.FormFile("business_registration")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "authorized_representative_id is required",
+			"error": "business_registration is required",
 		})
 		return
+	}
+
+	cancelledCheque, err := c.FormFile("cancelled_cheque")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "cancelled_cheque is required",
+		})
+		return
+	}
+
+	// Validate file upload sizes and formats
+	filesToValidate := []*multipart.FileHeader{
+		gstCertificate,
+		incorporationCertificate,
+		panCard,
+		businessRegistration,
+		cancelledCheque,
+	}
+	for _, f := range filesToValidate {
+		if err := validateUploadedFile(f); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	// User ID from JWT middleware
@@ -181,12 +278,18 @@ func SubmitBusinessVerification(c *gin.Context) {
 		userID,
 		req,
 		gstCertificate,
+		incorporationCertificate,
 		panCard,
-		authorizedRepresentativeID,
+		businessRegistration,
+		cancelledCheque,
 	)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		statusCode := http.StatusBadRequest
+		if err.Error() == "business PAN already exists" {
+			statusCode = http.StatusConflict
+		}
+		c.JSON(statusCode, gin.H{
 			"error": err.Error(),
 		})
 		return
@@ -230,6 +333,10 @@ func ResubmitVerification(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "government ID document is required",
 		})
+		return
+	}
+	if err := validateUploadedFile(govtIDDocument); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

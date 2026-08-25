@@ -14,6 +14,7 @@ const (
 	AccountTypeIndividual  AccountType = "individual"
 	AccountTypeAgencyAdmin AccountType = "agency"
 	AccountTypeClientAdmin AccountType = "client"
+	AccountTypeAdmin       AccountType = "admin"
 )
 
 type UserStatus string
