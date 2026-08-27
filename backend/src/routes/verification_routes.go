@@ -75,7 +75,7 @@ func RegisterVerificationRoutes(api huma.API) {
 		Path:        "/v1/admin/verification/queue",
 		Tags:        []string{"Admin Verification"},
 		Summary:     "Get verification queue",
-		Middlewares: authMw,
+		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
 	}, controllers.GetVerificationQueueHandler)
 
 	huma.Register(api, huma.Operation{
@@ -85,7 +85,7 @@ func RegisterVerificationRoutes(api huma.API) {
 		Path:        "/v1/admin/verification/{id}/approve",
 		Tags:        []string{"Admin Verification"},
 		Summary:     "Approve verification",
-		Middlewares: authMw,
+		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
@@ -104,7 +104,7 @@ func RegisterVerificationRoutes(api huma.API) {
 		Path:        "/v1/admin/verification/{id}/reject",
 		Tags:        []string{"Admin Verification"},
 		Summary:     "Reject verification",
-		Middlewares: authMw,
+		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
