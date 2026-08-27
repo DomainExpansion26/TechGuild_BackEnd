@@ -6,7 +6,6 @@ import (
 	"techguild-backend/src/middleware"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/gin-gonic/gin"
 )
 
 func RegisterProfileRoutes(api huma.API) {
@@ -159,14 +158,38 @@ func RegisterProfileRoutes(api huma.API) {
 	}, controllers.CreateOrUpdateClientProfileHandler)
 }
 
-// ---------- Old Gin routes — Settings (not yet migrated) ----------
+// ---------- Settings routes (migrated to Huma) ----------
 
-func ProfileRoutes(router *gin.Engine) {
-	settingsGroup := router.Group("/v1/settings")
-	settingsGroup.Use(middleware.AuthMiddleware())
-	{
-		settingsGroup.PATCH("/account", controllers.UpdateAccountSettings)
-		settingsGroup.PATCH("/notifications", controllers.UpdateNotifications)
-		settingsGroup.PATCH("/privacy", controllers.UpdatePrivacySettings)
-	}
+func RegisterSettingsRoutes(api huma.API) {
+	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
+
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"bearerAuth": {}}},
+		OperationID: "update-account-settings",
+		Method:      "PATCH",
+		Path:        "/v1/settings/account",
+		Tags:        []string{"Settings"},
+		Summary:     "Update account settings",
+		Middlewares: authMw,
+	}, controllers.UpdateAccountSettingsHandler)
+
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"bearerAuth": {}}},
+		OperationID: "update-notifications",
+		Method:      "PATCH",
+		Path:        "/v1/settings/notifications",
+		Tags:        []string{"Settings"},
+		Summary:     "Update notification settings",
+		Middlewares: authMw,
+	}, controllers.UpdateNotificationsHandler)
+
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"bearerAuth": {}}},
+		OperationID: "update-privacy-settings",
+		Method:      "PATCH",
+		Path:        "/v1/settings/privacy",
+		Tags:        []string{"Settings"},
+		Summary:     "Update privacy settings",
+		Middlewares: authMw,
+	}, controllers.UpdatePrivacySettingsHandler)
 }

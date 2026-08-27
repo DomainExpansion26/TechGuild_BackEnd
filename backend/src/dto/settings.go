@@ -14,3 +14,31 @@ type UpdateNotificationsRequest struct {
 type UpdatePrivacyRequest struct {
 	ProfileVisibility string `json:"profile_visibility" huma:"required,enum=public;private" example:"public"`
 }
+
+type SettingsUpdateResponse struct {
+	Message string `json:"message" example:"settings updated successfully"`
+}
+
+type UpdateAccountSettingsInput struct {
+	Body UpdateAccountRequest
+}
+
+type UpdateAccountSettingsOutput struct {
+	Body SettingsUpdateResponse
+}
+
+type UpdateNotificationsInput struct {
+	Body UpdateNotificationsRequest
+}
+
+type UpdateNotificationsOutput struct {
+	Body SettingsUpdateResponse
+}
+
+type UpdatePrivacyInput struct {
+	Body UpdatePrivacyRequest
+}
+
+type UpdatePrivacyOutput struct {
+	Body SettingsUpdateResponse
+}

@@ -1,20 +1,3 @@
-// @title TechGuild Backend API
-// @version 1.0
-// @description Backend API for TechGuild Platform.
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name TechGuild Team
-// @contact.email support@techguild.com
-
-// @license.name MIT
-
-// @host https://techguild-backend.onrender.com
-// @BasePath /
-
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-
 package main
 
 import (
@@ -95,6 +78,7 @@ func main() {
 	routes.RegisterAuthRoutes(api)
 	routes.RegisterContractRoutes(api)
 	routes.RegisterProfileRoutes(api)
+	routes.RegisterSettingsRoutes(api)
 	routes.RegisterOAuthRoutes(api)
 	routes.RegisterMilestoneRoutes(api)
 	routes.RegisterProjectRoutes(api)
