@@ -1,18 +1,19 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"mime/multipart"
-	"net/http"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 func validateUploadedFile(file *multipart.FileHeader) error {
@@ -31,444 +32,250 @@ func validateUploadedFile(file *multipart.FileHeader) error {
 	return nil
 }
 
-// ==========================
-// Submit Individual Verification
-// POST /verification/identity/submit
-// ==========================
+func getFormFile(form multipart.Form, name string) *multipart.FileHeader {
+	files := form.File[name]
+	if len(files) == 0 {
+		return nil
+	}
+	return files[0]
+}
 
-// SubmitIdentityVerification godoc
-// @Summary Submit identity verification
-// @Description Submits an individual's identity verification request with government ID and selfie.
-// @Tags Verification
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param govt_id_type formData string true "Government ID Type"
-// @Param govt_id_number formData string true "Government ID Number"
-// @Param govt_id_document formData file true "Government ID Document"
-// @Param selfie formData file true "Selfie"
-// @Success 201 {object} dto.IdentityVerificationResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Router /verification/identity/submit [post]
-func SubmitIdentityVerification(c *gin.Context) {
+func getFormValue(form multipart.Form, name string) string {
+	vals := form.Value[name]
+	if len(vals) == 0 {
+		return ""
+	}
+	return vals[0]
+}
 
-	var req dto.IdentityVerificationRequest
+// =========================
+// Submit Individual Verification (file-upload, Huma)
+// =========================
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func SubmitIdentityVerificationHandler(ctx context.Context, input *dto.SubmitIdentityVerificationInput) (*dto.SubmitIdentityVerificationOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	govtIDDocument, err := c.FormFile("govt_id_document")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "government ID document is required",
-		})
-		return
+	govtIDDocument := getFormFile(input.RawBody, "govt_id_document")
+	if govtIDDocument == nil {
+		return nil, huma.Error400BadRequest("government ID document is required")
 	}
 	if err := validateUploadedFile(govtIDDocument); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	selfie, err := c.FormFile("selfie")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "selfie is required",
-		})
-		return
+	selfie := getFormFile(input.RawBody, "selfie")
+	if selfie == nil {
+		return nil, huma.Error400BadRequest("selfie is required")
 	}
 	if err := validateUploadedFile(selfie); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	// TODO:
-	// Replace with user ID extracted from JWT middleware
-	userID := c.GetString("user_id")
+	req := dto.IdentityVerificationRequest{
+		GovtIDType:   getFormValue(input.RawBody, "govt_id_type"),
+		GovtIDNumber: getFormValue(input.RawBody, "govt_id_number"),
+	}
 
 	verificationService := services.NewVerificationService(postgres.RedisDB)
-
-	res, err := verificationService.SubmitIdentityVerification(
-		userID,
-		req,
-		govtIDDocument,
-		selfie,
-	)
-
+	res, err := verificationService.SubmitIdentityVerification(userID, req, govtIDDocument, selfie)
 	if err != nil {
-		statusCode := http.StatusBadRequest
 		if err.Error() == "this government ID is already associated with another account" {
-			statusCode = http.StatusConflict
+			return nil, huma.Error409Conflict(err.Error())
 		}
-		c.JSON(statusCode, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusCreated, res)
+	return &dto.SubmitIdentityVerificationOutput{Body: *res}, nil
 }
 
-// ==========================
-// Get Verification Status
-// GET /verification/identity/status
-// ==========================
+// =========================
+// Get Identity Verification Status
+// =========================
 
-// GetIdentityVerificationStatus godoc
-// @Summary Get identity verification status
-// @Description Returns the verification status of the authenticated user.
-// @Tags Verification
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} dto.IdentityStatusResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Router /verification/identity/status [get]
-
-func GetIdentityVerificationStatus(c *gin.Context) {
-
-	userID := c.GetString("user_id")
+func GetIdentityVerificationStatusHandler(ctx context.Context, input *dto.GetIdentityVerificationStatusInput) (*dto.GetIdentityVerificationStatusOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
 
 	verificationService := services.NewVerificationService(postgres.RedisDB)
-
 	res, err := verificationService.GetIdentityVerificationStatus(userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.GetIdentityVerificationStatusOutput{Body: *res}, nil
 }
 
-func GetVerificationStatus(c *gin.Context) {
+// =========================
+// Get Verification Status (generic)
+// =========================
 
-	userID := c.GetString("user_id")
+func GetVerificationStatusHandler(ctx context.Context, input *dto.GetVerificationStatusInput) (*dto.GetVerificationStatusOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
 
 	verificationService := services.NewVerificationService(postgres.RedisDB)
-
 	res, err := verificationService.GetVerificationStatus(userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.GetVerificationStatusOutput{Body: *res}, nil
 }
 
-// ==========================
-// Submit Business Verification
-// POST /verification/business/submit
-// ==========================
+// =========================
+// Submit Business Verification (file-upload, Huma)
+// =========================
 
-// SubmitBusinessVerification godoc
-// @Summary Submit business verification
-// @Description Submits a business verification request with the required business documents.
-// @Tags Verification
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param business_name formData string true "Business Name"
-// @Param gst_number formData string true "GST Number"
-// @Param pan_number formData string true "PAN Number"
-// @Param gst_certificate formData file true "GST Certificate"
-// @Param pan_card formData file true "PAN Card"
-// @Param authorized_representative_id formData file true "Authorized Representative ID"
-// @Success 201 {object} dto.BusinessVerificationResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Router /verification/business/submit [post]
-func SubmitBusinessVerification(c *gin.Context) {
-
-	var req dto.BusinessVerificationRequest
-
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func SubmitBusinessVerificationHandler(ctx context.Context, input *dto.SubmitBusinessVerificationInput) (*dto.SubmitBusinessVerificationOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	// Validate PAN format
+	req := dto.BusinessVerificationRequest{
+		BusinessName:       getFormValue(input.RawBody, "business_name"),
+		BusinessPAN:        getFormValue(input.RawBody, "business_pan"),
+		GSTNumber:          getFormValue(input.RawBody, "gst_number"),
+		RegistrationNumber: getFormValue(input.RawBody, "registration_number"),
+		Website:            getFormValue(input.RawBody, "website"),
+		Country:            getFormValue(input.RawBody, "country"),
+		BankName:           getFormValue(input.RawBody, "bank_name"),
+		AccountHolderName:  getFormValue(input.RawBody, "account_holder_name"),
+		BankAccountNumber:  getFormValue(input.RawBody, "bank_account_number"),
+		BankIFSC:           getFormValue(input.RawBody, "bank_ifsc"),
+	}
+
 	panRegex := regexp.MustCompile(`^[A-Z]{5}[0-9]{4}[A-Z]{1}$`)
 	if !panRegex.MatchString(strings.ToUpper(req.BusinessPAN)) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid business PAN format",
-		})
-		return
+		return nil, huma.Error400BadRequest("invalid business PAN format")
 	}
 
-	// Validate GST format
 	gstRegex := regexp.MustCompile(`^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`)
 	if !gstRegex.MatchString(strings.ToUpper(req.GSTNumber)) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid GST number format",
-		})
-		return
+		return nil, huma.Error400BadRequest("invalid GST number format")
 	}
 
-	gstCertificate, err := c.FormFile("gst_certificate")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "gst_certificate is required",
-		})
-		return
+	gstCertificate := getFormFile(input.RawBody, "gst_certificate")
+	if gstCertificate == nil {
+		return nil, huma.Error400BadRequest("gst_certificate is required")
+	}
+	if err := validateUploadedFile(gstCertificate); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	incorporationCertificate, err := c.FormFile("incorporation_certificate")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "incorporation_certificate is required",
-		})
-		return
+	incorporationCertificate := getFormFile(input.RawBody, "incorporation_certificate")
+	if incorporationCertificate == nil {
+		return nil, huma.Error400BadRequest("incorporation_certificate is required")
+	}
+	if err := validateUploadedFile(incorporationCertificate); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	panCard, err := c.FormFile("pan_card")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "pan_card is required",
-		})
-		return
+	panCard := getFormFile(input.RawBody, "pan_card")
+	if panCard == nil {
+		return nil, huma.Error400BadRequest("pan_card is required")
+	}
+	if err := validateUploadedFile(panCard); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	businessRegistration, err := c.FormFile("business_registration")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "business_registration is required",
-		})
-		return
+	businessRegistration := getFormFile(input.RawBody, "business_registration")
+	if businessRegistration == nil {
+		return nil, huma.Error400BadRequest("business_registration is required")
+	}
+	if err := validateUploadedFile(businessRegistration); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	cancelledCheque, err := c.FormFile("cancelled_cheque")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "cancelled_cheque is required",
-		})
-		return
+	cancelledCheque := getFormFile(input.RawBody, "cancelled_cheque")
+	if cancelledCheque == nil {
+		return nil, huma.Error400BadRequest("cancelled_cheque is required")
 	}
-
-	// Validate file upload sizes and formats
-	filesToValidate := []*multipart.FileHeader{
-		gstCertificate,
-		incorporationCertificate,
-		panCard,
-		businessRegistration,
-		cancelledCheque,
+	if err := validateUploadedFile(cancelledCheque); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
-	for _, f := range filesToValidate {
-		if err := validateUploadedFile(f); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	// User ID from JWT middleware
-	userID := c.GetString("user_id")
 
 	verificationService := services.NewVerificationService(postgres.RedisDB)
-
-	res, err := verificationService.SubmitBusinessVerification(
-		userID,
-		req,
-		gstCertificate,
-		incorporationCertificate,
-		panCard,
-		businessRegistration,
-		cancelledCheque,
-	)
-
+	res, err := verificationService.SubmitBusinessVerification(userID, req, gstCertificate, incorporationCertificate, panCard, businessRegistration, cancelledCheque)
 	if err != nil {
-		statusCode := http.StatusBadRequest
 		if err.Error() == "business PAN already exists" {
-			statusCode = http.StatusConflict
+			return nil, huma.Error409Conflict(err.Error())
 		}
-		c.JSON(statusCode, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusCreated, res)
+	return &dto.SubmitBusinessVerificationOutput{Body: *res}, nil
 }
 
-// ==========================
-// Resubmit Verification
-// POST /verification/resubmit/:record_id
-// ==========================
+// =========================
+// Resubmit Verification (file-upload, Huma)
+// =========================
 
-// ResubmitVerification godoc
-// @Summary Resubmit verification
-// @Description Resubmits a rejected verification request.
-// @Tags Verification
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param record_id path string true "Verification Record ID"
-// @Param reason formData string false "Additional comments"
-// @Param govt_id_document formData file true "Updated Government ID Document"
-// @Success 200 {object} dto.ResubmitVerificationResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Router /verification/resubmit/{record_id} [post]
-func ResubmitVerification(c *gin.Context) {
-
-	recordID := c.Param("record_id")
-	var req dto.ResubmitVerificationRequest
-
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-	govtIDDocument, err := c.FormFile("govt_id_document")
+func ResubmitVerificationHandler(ctx context.Context, input *dto.ResubmitVerificationInput) (*dto.ResubmitVerificationOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "government ID document is required",
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	govtIDDocument := getFormFile(input.RawBody, "govt_id_document")
+	if govtIDDocument == nil {
+		return nil, huma.Error400BadRequest("government ID document is required")
 	}
 	if err := validateUploadedFile(govtIDDocument); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	userID := c.GetString("user_id")
+	req := dto.ResubmitVerificationRequest{
+		DocumentType: getFormValue(input.RawBody, "document_type"),
+	}
 
 	verificationService := services.NewVerificationService(postgres.RedisDB)
-
-	res, err := verificationService.ResubmitVerification(
-		userID,
-		recordID,
-		req,
-		govtIDDocument,
-	)
-
+	res, err := verificationService.ResubmitVerification(userID, input.RecordID, req, govtIDDocument)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, res)
+	return &dto.ResubmitVerificationOutput{Body: *res}, nil
 }
 
-// ==========================
-// Admin Verification Queue
-// GET /admin/verification/queue
-// ==========================
+// =========================
+// Admin Queue / Approve / Reject (Huma)
+// =========================
 
-// GetVerificationQueue godoc
-// @Summary Get verification queue
-// @Description Returns the list of pending verification requests for administrators.
-// @Tags Admin Verification
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {array} dto.VerificationQueueItem
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /admin/verification/queue [get]
-func GetVerificationQueue(c *gin.Context) {
-
+func GetVerificationQueueHandler(ctx context.Context, input *dto.GetVerificationQueueInput) (*dto.GetVerificationQueueOutput, error) {
 	verificationService := services.NewVerificationService(postgres.RedisDB)
 
 	queue, err := verificationService.GetVerificationQueue()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, queue)
+	return &dto.GetVerificationQueueOutput{Body: dto.VerificationQueueResponse{Queue: queue}}, nil
 }
 
-// ==========================
-// Approve Verification
-// POST /admin/verification/:id/approve
-// ==========================
-
-// ApproveVerification godoc
-// @Summary Approve verification
-// @Description Approves a verification request.
-// @Tags Admin Verification
-// @Security BearerAuth
-// @Produce json
-// @Param id path string true "Verification Record ID"
-// @Success 200 {object} dto.AdminApproveResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Router /admin/verification/{id}/approve [post]
-func ApproveVerification(c *gin.Context) {
-
-	recordID := c.Param("id")
-
+func ApproveVerificationHandler(ctx context.Context, input *dto.ApproveVerificationInput) (*dto.ApproveVerificationOutput, error) {
 	verificationService := services.NewVerificationService(postgres.RedisDB)
 
-	err := verificationService.ApproveVerification(recordID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := verificationService.ApproveVerification(input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.AdminApproveResponse{
-		Message: "Verification approved successfully",
-	})
+	return &dto.ApproveVerificationOutput{Body: dto.AdminApproveResponse{Message: "Verification approved successfully"}}, nil
 }
 
-// ==========================
-// Reject Verification
-// POST /admin/verification/:id/reject
-// ==========================
-
-// RejectVerification godoc
-// @Summary Reject verification
-// @Description Rejects a verification request with a reason.
-// @Tags Admin Verification
-// @Security BearerAuth
-// @Accept json
-// @Produce json
-// @Param id path string true "Verification Record ID"
-// @Param request body dto.AdminRejectRequest true "Rejection reason"
-// @Success 200 {object} dto.AdminRejectResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Router /admin/verification/{id}/reject [post]
-func RejectVerification(c *gin.Context) {
-
-	recordID := c.Param("id")
-
-	var req dto.AdminRejectRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
+func RejectVerificationHandler(ctx context.Context, input *dto.RejectVerificationInput) (*dto.RejectVerificationOutput, error) {
 	verificationService := services.NewVerificationService(postgres.RedisDB)
 
-	err := verificationService.RejectVerification(
-		recordID,
-		req.Reason,
-	)
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := verificationService.RejectVerification(input.ID, input.Body.Reason); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.AdminRejectResponse{
-		Message: "Verification rejected successfully",
-	})
+	return &dto.RejectVerificationOutput{Body: dto.AdminRejectResponse{Message: "Verification rejected successfully"}}, nil
 }

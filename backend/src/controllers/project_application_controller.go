@@ -1,160 +1,114 @@
 package controllers
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/gin-gonic/gin"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
+
+	"github.com/danielgtaylor/huma/v2"
 )
-//apply for a project
-func ApplyProject(c *gin.Context) {
 
-	applicantID := c.GetString("user_id")
-	projectID := c.Param("project_id")
+// ---------- ApplyProject ----------
 
-	var req dto.ApplyProjectRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+func ApplyProjectHandler(ctx context.Context, input *dto.ApplyProjectInput) (*dto.ApplyProjectOutput, error) {
+	applicantID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	projectApplicationService := services.NewProjectApplicationService()
-
-	res, err := projectApplicationService.ApplyProject(
-		applicantID,
-		projectID,
-		req,
-	)
+	res, err := projectApplicationService.ApplyProject(applicantID, input.ProjectID, input.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusCreated, res)
+	return &dto.ApplyProjectOutput{Body: *res}, nil
 }
 
-//withdraw application
-func WithdrawApplication(c *gin.Context) {
+// ---------- WithdrawApplication ----------
 
-	applicantID := c.GetString("user_id")
-	applicationID := c.Param("application_id")
-
-	projectApplicationService := services.NewProjectApplicationService()
-
-	err := projectApplicationService.WithdrawApplication(
-		applicantID,
-		applicationID,
-	)
+func WithdrawApplicationHandler(ctx context.Context, input *dto.WithdrawApplicationInput) (*dto.WithdrawApplicationOutput, error) {
+	applicantID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.WithdrawApplicationResponse{
-		Message: "Application withdrawn successfully",
-	})
+	projectApplicationService := services.NewProjectApplicationService()
+	if err := projectApplicationService.WithdrawApplication(applicantID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.WithdrawApplicationOutput{
+		Body: dto.WithdrawApplicationResponse{Message: "Application withdrawn successfully"},
+	}, nil
 }
 
-//accept and reject application
-func AcceptApplication(c *gin.Context) {
+// ---------- AcceptApplication ----------
 
-	applicationID := c.Param("application_id")
-
+func AcceptApplicationHandler(ctx context.Context, input *dto.AcceptApplicationInput) (*dto.AcceptApplicationOutput, error) {
 	projectApplicationService := services.NewProjectApplicationService()
-
-	err := projectApplicationService.AcceptApplication(applicationID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := projectApplicationService.AcceptApplication(input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.AcceptApplicationResponse{
-		Message: "Application accepted successfully",
-	})
-}
-func RejectApplication(c *gin.Context) {
-
-	applicationID := c.Param("application_id")
-
-	projectApplicationService := services.NewProjectApplicationService()
-
-	err := projectApplicationService.RejectApplication(applicationID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.RejectApplicationResponse{
-		Message: "Application rejected successfully",
-	})
+	return &dto.AcceptApplicationOutput{
+		Body: dto.AcceptApplicationResponse{Message: "Application accepted successfully"},
+	}, nil
 }
 
-//shortlist application
+// ---------- RejectApplication ----------
 
-func ShortlistApplication(c *gin.Context) {
-
-	applicationID := c.Param("application_id")
-
+func RejectApplicationHandler(ctx context.Context, input *dto.RejectApplicationInput) (*dto.RejectApplicationOutput, error) {
 	projectApplicationService := services.NewProjectApplicationService()
-
-	err := projectApplicationService.ShortlistApplication(applicationID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := projectApplicationService.RejectApplication(input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.ShortlistApplicationResponse{
-		Message: "Application shortlisted successfully",
-	})
+	return &dto.RejectApplicationOutput{
+		Body: dto.RejectApplicationResponse{Message: "Application rejected successfully"},
+	}, nil
 }
 
-//get my applications
-func GetMyApplications(c *gin.Context) {
+// ---------- ShortlistApplication ----------
 
-	applicantID := c.GetString("user_id")
-
+func ShortlistApplicationHandler(ctx context.Context, input *dto.ShortlistApplicationInput) (*dto.ShortlistApplicationOutput, error) {
 	projectApplicationService := services.NewProjectApplicationService()
-
-	response, err := projectApplicationService.GetMyApplications(applicantID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := projectApplicationService.ShortlistApplication(input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, response)
+	return &dto.ShortlistApplicationOutput{
+		Body: dto.ShortlistApplicationResponse{Message: "Application shortlisted successfully"},
+	}, nil
 }
 
-//get applications for a project
+// ---------- GetMyApplications ----------
 
-func GetProjectApplications(c *gin.Context) {
-
-	projectID := c.Param("project_id")
-
-	projectApplicationService := services.NewProjectApplicationService()
-
-	response, err := projectApplicationService.GetProjectApplications(projectID)
+func GetMyApplicationsHandler(ctx context.Context, input *dto.GetMyApplicationsInput) (*dto.GetMyApplicationsOutput, error) {
+	applicantID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	c.JSON(http.StatusOK, response)
+	projectApplicationService := services.NewProjectApplicationService()
+	res, err := projectApplicationService.GetMyApplications(applicantID)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.GetMyApplicationsOutput{Body: *res}, nil
+}
+
+// ---------- GetProjectApplications ----------
+
+func GetProjectApplicationsHandler(ctx context.Context, input *dto.GetProjectApplicationsInput) (*dto.GetProjectApplicationsOutput, error) {
+	projectApplicationService := services.NewProjectApplicationService()
+	res, err := projectApplicationService.GetProjectApplications(input.ProjectID)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.GetProjectApplicationsOutput{Body: *res}, nil
 }

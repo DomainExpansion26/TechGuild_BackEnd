@@ -1,760 +1,404 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"path/filepath"
-	"strings"
+	"time"
+
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
-	"time"
 
-	_ "techguild-backend/src/swagger"
-
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func getUserIDFromContext(c *gin.Context) (string, error) {
-	userIDVal, exists := c.Get("user_id")
-	if !exists {
-		return "", errors.New("user is not authenticated")
-	}
-	userID, ok := userIDVal.(string)
-	if !ok {
-		return "", errors.New("invalid user id format")
-	}
-	return userID, nil
-}
+// ---------- CreateOrUpdateIndividualProfile (JSON body version) ----------
 
-// CreateOrUpdateIndividualProfile godoc
-// @Summary Create or update individual profile
-// @Description Creates or updates the authenticated user's individual profile.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept json,multipart/form-data
-// @Produce json
-// @Param request body dto.CreateIndividualProfileRequest false "Individual profile data (JSON)"
-// @Param profile_data formData string false "Individual profile JSON"
-// @Param avatar formData file false "Avatar image"
-// @Param resume formData file false "Resume PDF"
-// @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 404 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/individual [post]
-func CreateOrUpdateIndividualProfile(c *gin.Context) {
-	var req dto.CreateIndividualProfileRequest
-
-	contentType := c.GetHeader("Content-Type")
-	if strings.HasPrefix(contentType, "multipart/form-data") {
-		profileData := c.PostForm("profile_data")
-		if profileData != "" {
-			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
-				return
-			}
-		} else {
-			if err := c.ShouldBind(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-		}
-
-		avatarFileHeader, err := c.FormFile("avatar")
-		if err == nil && avatarFileHeader != nil {
-			avatarFile, _ := avatarFileHeader.Open()
-			defer avatarFile.Close()
-			avatarURL, uploadErr := utils.UploadImageToCloudinary(avatarFile, avatarFileHeader.Filename)
-			if uploadErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload avatar: " + uploadErr.Error()})
-				return
-			}
-			req.AvatarURL = avatarURL
-		}
-		resumeFileHeader, err := c.FormFile("resume")
-		if err == nil && resumeFileHeader != nil {
-			resumeFile, _ := resumeFileHeader.Open()
-			defer resumeFile.Close()
-			resumeURL, uploadErr := utils.UploadPDFToCloudinary(resumeFile, resumeFileHeader.Filename)
-			if uploadErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload resume: " + uploadErr.Error()})
-				return
-			}
-			req.ResumeURL = resumeURL
-		}
-	} else {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	userID, err := getUserIDFromContext(c)
+func CreateOrUpdateIndividualProfileHandler(ctx context.Context, input *dto.CreateIndividualProfileInput) (*dto.CreateIndividualProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateIndividualProfile(userID, req)
+	slug, err := profileService.CreateOrUpdateIndividualProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
+			return nil, huma.Error404NotFound(err.Error())
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.CreateProfileResponse{
-		Message:       "Individual profile updated successfully",
-		PublicUrlSlug: slug,
-	})
+	return &dto.CreateIndividualProfileOutput{
+		Body: dto.CreateProfileResponse{Message: "Individual profile updated successfully", PublicUrlSlug: slug},
+	}, nil
 }
 
-// CreateOrUpdateAgencyProfile godoc
-// @Summary Create or update agency profile
-// @Description Creates or updates the authenticated user's agency profile.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept json,multipart/form-data
-// @Produce json
-// @Param request body dto.CreateAgencyProfileRequest false "Agency profile data (JSON)"
-// @Param profile_data formData string false "Agency profile JSON"
-// @Param logo formData file false "Agency logo"
-// @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 404 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/agency [post]
-func CreateOrUpdateAgencyProfile(c *gin.Context) {
-	var req dto.CreateAgencyProfileRequest
+// ---------- CreateOrUpdateAgencyProfile ----------
 
-	contentType := c.GetHeader("Content-Type")
-	if strings.HasPrefix(contentType, "multipart/form-data") {
-		profileData := c.PostForm("profile_data")
-		if profileData != "" {
-			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
-				return
-			}
-		} else {
-			if err := c.ShouldBind(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-		}
-
-		// Handle Logo upload
-		logoFileHeader, err := c.FormFile("logo")
-		if err == nil && logoFileHeader != nil {
-			logoFile, _ := logoFileHeader.Open()
-			defer logoFile.Close()
-			logoURL, uploadErr := utils.UploadImageToCloudinary(logoFile, logoFileHeader.Filename)
-			if uploadErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload logo: " + uploadErr.Error()})
-				return
-			}
-			req.LogoURL = logoURL
-		}
-	} else {
-		if err := c.ShouldBind(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	userID, err := getUserIDFromContext(c)
+func CreateOrUpdateAgencyProfileHandler(ctx context.Context, input *dto.CreateAgencyProfileInput) (*dto.CreateAgencyProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateAgencyProfile(userID, req)
+	slug, err := profileService.CreateOrUpdateAgencyProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
+			return nil, huma.Error404NotFound(err.Error())
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.CreateProfileResponse{
-		Message:       "Agency profile updated successfully",
-		PublicUrlSlug: slug,
-	})
+	return &dto.CreateAgencyProfileOutput{
+		Body: dto.CreateProfileResponse{Message: "Agency profile updated successfully", PublicUrlSlug: slug},
+	}, nil
 }
 
-// CreateOrUpdateClientProfile godoc
-// @Summary Create or update client profile
-// @Description Creates or updates the authenticated user's client profile.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept json,multipart/form-data
-// @Produce json
-// @Param request body dto.CreateClientProfileRequest false "Client profile data (JSON)"
-// @Param profile_data formData string false "Client profile JSON"
-// @Param logo formData file false "Company logo"
-// @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 404 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/client [post]
-func CreateOrUpdateClientProfile(c *gin.Context) {
-	var req dto.CreateClientProfileRequest
+// ---------- CreateOrUpdateClientProfile ----------
 
-	contentType := c.GetHeader("Content-Type")
-	if strings.HasPrefix(contentType, "multipart/form-data") {
-		profileData := c.PostForm("profile_data")
-		if profileData != "" {
-			if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile_data JSON: " + err.Error()})
-				return
-			}
-		} else {
-			if err := c.ShouldBind(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-		}
-
-		// Handle Logo upload
-		logoFileHeader, err := c.FormFile("logo")
-		if err == nil && logoFileHeader != nil {
-			logoFile, _ := logoFileHeader.Open()
-			defer logoFile.Close()
-			logoURL, uploadErr := utils.UploadImageToCloudinary(logoFile, logoFileHeader.Filename)
-			if uploadErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload logo: " + uploadErr.Error()})
-				return
-			}
-			req.LogoURL = logoURL
-		}
-	} else {
-		if err := c.ShouldBind(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-	}
-
-	userID, err := getUserIDFromContext(c)
+func CreateOrUpdateClientProfileHandler(ctx context.Context, input *dto.CreateClientProfileInput) (*dto.CreateClientProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateClientProfile(userID, req)
+	slug, err := profileService.CreateOrUpdateClientProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
+			return nil, huma.Error404NotFound(err.Error())
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, dto.CreateProfileResponse{
-		Message:       "Client profile updated successfully",
-		PublicUrlSlug: slug,
-	})
+	return &dto.CreateClientProfileOutput{
+		Body: dto.CreateProfileResponse{Message: "Client profile updated successfully", PublicUrlSlug: slug},
+	}, nil
 }
 
-// GetMyProfile godoc
-// @Summary Get my profile
-// @Description Returns the authenticated user's profile based on their account type (Individual, Agency, or Client).
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} interface{}
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 404 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/me [get]
-func GetMyProfile(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- GetMyProfile ----------
+
+func GetMyProfileHandler(ctx context.Context, input *dto.GetMyProfileInput) (*dto.GetMyProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
 	profile, err := profileService.GetMyProfile(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
+			return nil, huma.Error404NotFound(err.Error())
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, profile)
+	return &dto.GetMyProfileOutput{Body: profile}, nil
 }
 
-// SetAccountType godoc
-// @Summary Set account type
-// @Description Sets the user's account type.
-// @Tags Profile
-// @Accept json
-// @Produce json
-// @Param request body dto.SetAccountTypeRequest true "Account type"
-// @Success 200 {object} swagger.ErrorResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Router /profile/account-type [post]
-func SetAccountType(c *gin.Context) {
-	var req dto.SetAccountTypeRequest
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
+// ---------- SetAccountType ----------
 
+func SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) (*dto.SetAccountTypeOutput, error) {
 	profileService := services.NewProfileService()
-	err := profileService.SetAccountType(req)
-	if err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
+
+	if err := profileService.SetAccountType(input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(200, gin.H{"message": "account type set successfully"})
+	return &dto.SetAccountTypeOutput{
+		Body: dto.CreateProfileResponse{Message: "account type set successfully"},
+	}, nil
 }
 
-// UploadResume godoc
-// @Summary Upload resume
-// @Description Uploads a PDF resume to Cloudinary.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param resume formData file true "Resume PDF"
-// @Success 200 {object} swagger.UploadResumeResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/upload/resume [post]
-func UploadResume(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- UploadResume ----------
+
+func UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dto.UploadResumeOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	fileHeader, err := c.FormFile("resume")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "resume file is required"})
-		return
-	}
+	form := input.RawBody.Data()
+	file := form.Resume
 
-	if filepath.Ext(fileHeader.Filename) != ".pdf" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "only PDF files are allowed"})
-		return
+	if filepath.Ext(file.Filename) != ".pdf" {
+		return nil, huma.Error400BadRequest("only PDF files are allowed")
 	}
-
-	file, err := fileHeader.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
-		return
-	}
-	defer file.Close()
 
 	filename := fmt.Sprintf("%s-%d", userID, time.Now().Unix())
 
 	fileURL, err := utils.UploadPDFToCloudinary(file, filename)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to cloudinary: " + err.Error()})
-		return
+		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "resume uploaded successfully",
-		"resume_url": fileURL,
-	})
+	return &dto.UploadResumeOutput{
+		Body: struct {
+			Message   string `json:"message"`
+			ResumeURL string `json:"resume_url"`
+		}{Message: "resume uploaded successfully", ResumeURL: fileURL},
+	}, nil
 }
 
-// UploadAvatar godoc
-// @Summary Upload avatar
-// @Description Uploads the user's avatar image.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param avatar formData file true "Avatar image"
-// @Success 200 {object} swagger.UploadAvatarResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/upload/avatar [post]
-func UploadAvatar(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- UploadAvatar ----------
+
+func UploadAvatarHandler(ctx context.Context, input *dto.UploadAvatarInput) (*dto.UploadAvatarOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	fileHeader, err := c.FormFile("avatar")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar image is required"})
-		return
-	}
+	form := input.RawBody.Data()
+	file := form.Avatar
 
-	ext := filepath.Ext(fileHeader.Filename)
+	ext := filepath.Ext(file.Filename)
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "only JPG, PNG, and WebP images are allowed"})
-		return
+		return nil, huma.Error400BadRequest("only JPG, PNG, and WebP images are allowed")
 	}
 
-	const maxFileSize = 5 * 1024 * 1024 // 5MB
-	if fileHeader.Size > maxFileSize {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file size exceeds 5MB limit"})
-		return
+	const maxFileSize = 5 * 1024 * 1024
+	if file.Size > maxFileSize {
+		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
 	}
-
-	file, err := fileHeader.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
-		return
-	}
-	defer file.Close()
 
 	filename := fmt.Sprintf("%s-%d", userID, time.Now().Unix())
 
 	fileURL, err := utils.UploadImageToCloudinary(file, filename)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to cloudinary: " + err.Error()})
-		return
+		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "avatar uploaded successfully",
-		"avatar_url": fileURL,
-	})
+	return &dto.UploadAvatarOutput{
+		Body: struct {
+			Message   string `json:"message"`
+			AvatarURL string `json:"avatar_url"`
+		}{Message: "avatar uploaded successfully", AvatarURL: fileURL},
+	}, nil
 }
 
-// UploadLogo godoc
-// @Summary Upload logo
-// @Description Uploads the company or agency logo.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept multipart/form-data
-// @Produce json
-// @Param logo formData file true "Logo image"
-// @Success 200 {object} swagger.UploadLogoResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/upload/logo [post]
-func UploadLogo(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- UploadLogo ----------
+
+func UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.UploadLogoOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	fileHeader, err := c.FormFile("logo")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logo image is required"})
-		return
-	}
+	form := input.RawBody.Data()
+	file := form.Logo
 
-	ext := filepath.Ext(fileHeader.Filename)
+	ext := filepath.Ext(file.Filename)
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "only JPG, PNG, and WebP images are allowed"})
-		return
+		return nil, huma.Error400BadRequest("only JPG, PNG, and WebP images are allowed")
 	}
 
-	const maxFileSize = 5 * 1024 * 1024 // 5MB
-	if fileHeader.Size > maxFileSize {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file size exceeds 5MB limit"})
-		return
+	const maxFileSize = 5 * 1024 * 1024
+	if file.Size > maxFileSize {
+		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
 	}
-
-	file, err := fileHeader.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open file"})
-		return
-	}
-	defer file.Close()
 
 	filename := fmt.Sprintf("%s-logo-%d", userID, time.Now().Unix())
 
 	fileURL, err := utils.UploadImageToCloudinary(file, filename)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to cloudinary: " + err.Error()})
-		return
+		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "logo uploaded successfully",
-		"logo_url": fileURL,
-	})
+	return &dto.UploadLogoOutput{
+		Body: struct {
+			Message string `json:"message"`
+			LogoURL string `json:"logo_url"`
+		}{Message: "logo uploaded successfully", LogoURL: fileURL},
+	}, nil
 }
 
-// DeleteAvatar godoc
-// @Summary Delete avatar
-// @Description Deletes the authenticated user's avatar.
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} swagger.DeleteAvatarResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/avatar [delete]
-func DeleteAvatar(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- DeleteAvatar / DeleteLogo / DeleteResume ----------
+
+func DeleteAvatarHandler(ctx context.Context, input *dto.DeleteAvatarInput) (*dto.DeleteAvatarOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	err = profileService.DeleteAvatar(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if err := profileService.DeleteAvatar(userID); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "avatar deleted successfully"})
+	return &dto.DeleteAvatarOutput{
+		Body: struct {
+			Message string `json:"message"`
+		}{Message: "avatar deleted successfully"},
+	}, nil
 }
 
-// DeleteLogo godoc
-// @Summary Delete logo
-// @Description Deletes the authenticated user's logo.
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} swagger.DeleteLogoResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/logo [delete]
-func DeleteLogo(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+func DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.DeleteLogoOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	err = profileService.DeleteLogo(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if err := profileService.DeleteLogo(userID); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "logo deleted successfully"})
+	return &dto.DeleteLogoOutput{
+		Body: struct {
+			Message string `json:"message"`
+		}{Message: "logo deleted successfully"},
+	}, nil
 }
 
-// DeleteResume godoc
-// @Summary Delete resume
-// @Description Deletes the authenticated user's resume.
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} swagger.DeleteResumeResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/resume [delete]
-func DeleteResume(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+func DeleteResumeHandler(ctx context.Context, input *dto.DeleteResumeInput) (*dto.DeleteResumeOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	err = profileService.DeleteResume(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if err := profileService.DeleteResume(userID); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "resume deleted successfully"})
+	return &dto.DeleteResumeOutput{
+		Body: struct {
+			Message string `json:"message"`
+		}{Message: "resume deleted successfully"},
+	}, nil
 }
 
-// GetPublicProfile godoc
-// @Summary Get public profile
-// @Description Retrieves a public profile using its unique slug.
-// @Tags Profile
-// @Produce json
-// @Param slug path string true "Profile slug"
-// @Success 200 {object} dto.PublicProfileResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 404 {object} swagger.ErrorResponse
-// @Router /profile/public/{slug} [get]
-func GetPublicProfile(c *gin.Context) {
-	slug := c.Param("slug")
-	if slug == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "slug is required"})
-		return
-	}
+// ---------- GetPublicProfile ----------
 
+func GetPublicProfileHandler(ctx context.Context, input *dto.GetPublicProfileInput) (*dto.GetPublicProfileOutput, error) {
 	profileService := services.NewProfileService()
-	profile, err := profileService.GetPublicProfile(slug)
+	profile, err := profileService.GetPublicProfile(input.Slug)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error404NotFound(err.Error())
 	}
 
-	c.JSON(http.StatusOK, profile)
+	return &dto.GetPublicProfileOutput{Body: *profile}, nil
 }
 
-// GetUserPoints godoc
-// @Summary Get user points
-// @Description Returns the authenticated user's points and ranking.
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} dto.UserPointsResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/points [get]
-func GetUserPoints(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- GetUserPoints ----------
+
+func GetUserPointsHandler(ctx context.Context, input *dto.GetUserPointsInput) (*dto.GetUserPointsOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
 	points, err := profileService.GetUserPoints(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, points)
+	return &dto.GetUserPointsOutput{Body: *points}, nil
 }
 
-// ExportProfile godoc
-// @Summary Export profile
-// @Description Exports all data associated with the authenticated user's profile.
-// @Tags Profile
-// @Security BearerAuth
-// @Produce json
-// @Success 200 {object} dto.ExportResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/export [get]
-func ExportProfile(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- ExportProfile ----------
+
+func ExportProfileHandler(ctx context.Context, input *dto.ExportProfileInput) (*dto.ExportProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
 	result, err := profileService.ExportUserData(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, result)
+	return &dto.ExportProfileOutput{Body: *result}, nil
 }
 
-// CreateOrUpdateProfile godoc
-// @Summary Create or update profile
-// @Description Creates or updates the user's profile based on the selected account type.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept json,multipart/form-data
-// @Produce json
-// @Success 200 {object} dto.CreateProfileResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile [post]
-func CreateOrUpdateProfile(c *gin.Context) {
-	userID, err := getUserIDFromContext(c)
+// ---------- CreateOrUpdateProfile (dispatcher, multipart) ----------
+
+func CreateOrUpdateProfileHandler(ctx context.Context, input *dto.CreateOrUpdateProfileInput) (*dto.CreateOrUpdateProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
 	accountType, err := profileService.GetUserAccountType(userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
+
+	profileData := input.RawBody.Data().ProfileData
 
 	switch accountType {
 	case "individual":
-		CreateOrUpdateIndividualProfile(c)
+		var req dto.CreateIndividualProfileRequest
+		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
+			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
+		}
+		slug, err := profileService.CreateOrUpdateIndividualProfile(userID, req)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
 	case "agency":
-		CreateOrUpdateAgencyProfile(c)
+		var req dto.CreateAgencyProfileRequest
+		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
+			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
+		}
+		slug, err := profileService.CreateOrUpdateAgencyProfile(userID, req)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
 	case "client":
-		CreateOrUpdateClientProfile(c)
+		var req dto.CreateClientProfileRequest
+		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
+			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
+		}
+		slug, err := profileService.CreateOrUpdateClientProfile(userID, req)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account type"})
+		return nil, huma.Error400BadRequest("invalid account type")
 	}
 }
 
-// CheckSlug godoc
-// @Summary Check slug availability
-// @Description Checks whether a profile slug is available.
-// @Tags Profile
-// @Produce json
-// @Param slug query string true "Profile slug"
-// @Success 200 {object} dto.CheckSlugResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 500 {object} swagger.ErrorResponse
-// @Router /profile/check-slug [get]
-func CheckSlug(c *gin.Context) {
-	slug := c.Query("slug")
-	if slug == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "slug query parameter is required"})
-		return
-	}
+// ---------- CheckSlug ----------
 
+func CheckSlugHandler(ctx context.Context, input *dto.CheckSlugInput) (*dto.CheckSlugOutput, error) {
 	profileService := services.NewProfileService()
-	resp, err := profileService.CheckSlugAvailability(slug)
+	resp, err := profileService.CheckSlugAvailability(input.Slug)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	c.JSON(http.StatusOK, resp)
+	return &dto.CheckSlugOutput{Body: *resp}, nil
 }
 
-// DeleteProfileAccount godoc
-// @Summary Delete account
-// @Description Schedules the authenticated user's account for deletion after verifying the password.
-// @Tags Profile
-// @Security BearerAuth
-// @Accept json
-// @Produce json
-// @Param request body dto.DeleteAccountRequest true "Delete account request"
-// @Success 200 {object} swagger.DeleteProfileAccountResponse
-// @Failure 400 {object} swagger.ErrorResponse
-// @Failure 401 {object} swagger.ErrorResponse
-// @Router /profile/delete-account [delete]
-func DeleteProfileAccount(c *gin.Context) {
-	var req dto.DeleteAccountRequest
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// ---------- DeleteProfileAccount ----------
 
-	userID, err := getUserIDFromContext(c)
+func DeleteProfileAccountHandler(ctx context.Context, input *dto.DeleteProfileAccountInput) (*dto.DeleteProfileAccountOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	err = profileService.DeleteAccount(userID, req.Password)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if err := profileService.DeleteAccount(userID, input.Body.Password); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "account successfully scheduled for deletion"})
+	return &dto.DeleteProfileAccountOutput{
+		Body: struct {
+			Message string `json:"message"`
+		}{Message: "account successfully scheduled for deletion"},
+	}, nil
 }

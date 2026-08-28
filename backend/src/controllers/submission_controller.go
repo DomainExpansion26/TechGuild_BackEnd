@@ -1,156 +1,124 @@
 package controllers
 
 import (
-	"net/http"
+	"context"
+
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
-	_ "techguild-backend/src/swagger"
+	"techguild-backend/src/utils"
 
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-type SubmissionController struct {
-	service *services.SubmissionService
-}
+// ---------- CreateSubmission ----------
 
-func NewSubmissionController() *SubmissionController {
-	return &SubmissionController{
-		service: services.NewSubmissionService(),
-	}
-}
-
-//create the sumission 
-func (c *SubmissionController) CreateSubmission(ctx *gin.Context) {
-
-	freelancerID := ctx.GetString("userID")
-
-	var req dto.CreateSubmissionRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	response, err := c.service.CreateSubmission(freelancerID, req)
+func CreateSubmissionHandler(ctx context.Context, input *dto.CreateSubmissionInput) (*dto.CreateSubmissionOutput, error) {
+	freelancerID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, response)
-}
-
-//update the submission
-func (c *SubmissionController) UpdateSubmission(ctx *gin.Context) {
-
-	freelancerID := ctx.GetString("userID")
-	submissionID := ctx.Param("id")
-
-	var req dto.UpdateSubmissionRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	if err := c.service.UpdateSubmission(freelancerID, submissionID, req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Submission updated successfully",
-	})
-}
-
-//delete submission
-func (c *SubmissionController) DeleteSubmission(ctx *gin.Context) {
-
-	freelancerID := ctx.GetString("userID")
-	submissionID := ctx.Param("id")
-
-	if err := c.service.DeleteSubmission(freelancerID, submissionID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Submission deleted successfully",
-	})
-}
-
-//approve submission
-func (c *SubmissionController) ApproveSubmission(ctx *gin.Context) {
-
-	clientID := ctx.GetString("userID")
-	submissionID := ctx.Param("id")
-
-	if err := c.service.ApproveSubmission(clientID, submissionID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Submission approved successfully",
-	})
-}
-func (c *SubmissionController) RejectSubmission(ctx *gin.Context) {
-
-	clientID := ctx.GetString("userID")
-	submissionID := ctx.Param("id")
-
-	if err := c.service.RejectSubmission(clientID, submissionID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Submission rejected successfully",
-	})
-}
-
-//get submission by ID
-func (c *SubmissionController) GetSubmissionByID(ctx *gin.Context) {
-
-	submissionID := ctx.Param("id")
-
-	response, err := c.service.GetSubmissionByID(submissionID)
+	submissionService := services.NewSubmissionService()
+	res, err := submissionService.CreateSubmission(freelancerID, input.Body)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.CreateSubmissionOutput{Body: *res}, nil
 }
 
-//get milestone Submission
-func (c *SubmissionController) GetMilestoneSubmissions(ctx *gin.Context) {
+// ---------- UpdateSubmission ----------
 
-	milestoneID := ctx.Param("milestone_id")
-
-	response, err := c.service.GetMilestoneSubmissions(milestoneID)
+func UpdateSubmissionHandler(ctx context.Context, input *dto.UpdateSubmissionInput) (*dto.UpdateSubmissionOutput, error) {
+	freelancerID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	submissionService := services.NewSubmissionService()
+	if err := submissionService.UpdateSubmission(freelancerID, input.ID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.UpdateSubmissionOutput{
+		Body: dto.UpdateSubmissionResponse{Message: "Submission updated successfully"},
+	}, nil
+}
+
+// ---------- DeleteSubmission ----------
+
+func DeleteSubmissionHandler(ctx context.Context, input *dto.DeleteSubmissionInput) (*dto.DeleteSubmissionOutput, error) {
+	freelancerID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	submissionService := services.NewSubmissionService()
+	if err := submissionService.DeleteSubmission(freelancerID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.DeleteSubmissionOutput{
+		Body: dto.DeleteSubmissionResponse{Message: "Submission deleted successfully"},
+	}, nil
+}
+
+// ---------- ApproveSubmission ----------
+
+func ApproveSubmissionHandler(ctx context.Context, input *dto.ApproveSubmissionInput) (*dto.ApproveSubmissionOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	submissionService := services.NewSubmissionService()
+	if err := submissionService.ApproveSubmission(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.ApproveSubmissionOutput{
+		Body: dto.ReviewSubmissionResponse{Message: "Submission approved successfully"},
+	}, nil
+}
+
+// ---------- RejectSubmission ----------
+
+func RejectSubmissionHandler(ctx context.Context, input *dto.RejectSubmissionInput) (*dto.RejectSubmissionOutput, error) {
+	clientID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	submissionService := services.NewSubmissionService()
+	if err := submissionService.RejectSubmission(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.RejectSubmissionOutput{
+		Body: dto.ReviewSubmissionResponse{Message: "Submission rejected successfully"},
+	}, nil
+}
+
+// ---------- GetSubmissionByID ----------
+
+func GetSubmissionByIDHandler(ctx context.Context, input *dto.GetSubmissionByIDInput) (*dto.GetSubmissionByIDOutput, error) {
+	submissionService := services.NewSubmissionService()
+	res, err := submissionService.GetSubmissionByID(input.ID)
+	if err != nil {
+		return nil, huma.Error404NotFound(err.Error())
+	}
+
+	return &dto.GetSubmissionByIDOutput{Body: *res}, nil
+}
+
+// ---------- GetMilestoneSubmissions ----------
+
+func GetMilestoneSubmissionsHandler(ctx context.Context, input *dto.GetMilestoneSubmissionsInput) (*dto.GetMilestoneSubmissionsOutput, error) {
+	submissionService := services.NewSubmissionService()
+	res, err := submissionService.GetMilestoneSubmissions(input.MilestoneID)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.GetMilestoneSubmissionsOutput{Body: *res}, nil
 }
