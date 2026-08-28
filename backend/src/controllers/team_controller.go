@@ -1,379 +1,241 @@
 package controllers
 
 import (
-	"net/http"
+	"context"
 
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 )
 
-type TeamController struct {
-	service *services.TeamService
-}
+// ---------- Team CRUD ----------
 
-func NewTeamController() *TeamController {
-	return &TeamController{
-		service: services.NewTeamService(),
-	}
-}
-
-//to create the team 
-//calles the service create team
-func (c *TeamController) CreateTeam(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-
-	var req dto.CreateTeamRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	response, err := c.service.CreateTeam(userID, req)
+func CreateTeamHandler(ctx context.Context, input *dto.CreateTeamInput) (*dto.CreateTeamOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, response)
+	teamService := services.NewTeamService()
+	res, err := teamService.CreateTeam(userID, input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.CreateTeamOutput{Body: *res}, nil
 }
 
-//update the team 
-
-func (c *TeamController) UpdateTeam(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	var req dto.UpdateTeamRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.UpdateTeam(userID, teamID, req)
+func UpdateTeamHandler(ctx context.Context, input *dto.UpdateTeamInput) (*dto.UpdateTeamOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Team updated successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.UpdateTeam(userID, input.ID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.UpdateTeamOutput{Body: dto.MessageResponse{Message: "Team updated successfully"}}, nil
 }
 
-//delete the team
-func (c *TeamController) DeleteTeam(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	err := c.service.DeleteTeam(userID, teamID)
+func DeleteTeamHandler(ctx context.Context, input *dto.DeleteTeamInput) (*dto.DeleteTeamOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Team deleted successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.DeleteTeam(userID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.DeleteTeamOutput{Body: dto.MessageResponse{Message: "Team deleted successfully"}}, nil
 }
 
-//get team 
-func (c *TeamController) GetTeam(ctx *gin.Context) {
-
-	teamID := ctx.Param("team_id")
-
-	response, err := c.service.GetTeam(teamID)
+func GetTeamHandler(ctx context.Context, input *dto.GetTeamInput) (*dto.GetTeamOutput, error) {
+	teamService := services.NewTeamService()
+	res, err := teamService.GetTeam(input.ID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error404NotFound(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetTeamOutput{Body: *res}, nil
 }
 
-//get my team
-
-func (c *TeamController) GetMyTeams(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-
-	response, err := c.service.GetMyTeams(userID)
+func GetMyTeamsHandler(ctx context.Context, input *dto.GetMyTeamsInput) (*dto.GetMyTeamsOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	teamService := services.NewTeamService()
+	res, err := teamService.GetMyTeams(userID)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.GetMyTeamsOutput{Body: *res}, nil
 }
 
-//invite the member
-func (c *TeamController) InviteMember(ctx *gin.Context) {
+// ---------- Members ----------
 
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	var req dto.InviteMemberRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.InviteMember(userID, teamID, req)
+func InviteMemberHandler(ctx context.Context, input *dto.InviteMemberInput) (*dto.InviteMemberOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Invitation sent successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.InviteMember(userID, input.TeamID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.InviteMemberOutput{Body: dto.MessageResponse{Message: "Invitation sent successfully"}}, nil
 }
 
-//accept and reject the invite
-func (c *TeamController) AcceptInvitation(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	invitationID := ctx.Param("invitation_id")
-
-	err := c.service.AcceptInvitation(userID, invitationID)
+func AcceptInvitationHandler(ctx context.Context, input *dto.AcceptInvitationInput) (*dto.AcceptInvitationOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Invitation accepted successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.AcceptInvitation(userID, input.InvitationID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.AcceptInvitationOutput{Body: dto.MessageResponse{Message: "Invitation accepted successfully"}}, nil
 }
 
-func (c *TeamController) RejectInvitation(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	invitationID := ctx.Param("invitation_id")
-
-	err := c.service.RejectInvitation(userID, invitationID)
+func RejectInvitationHandler(ctx context.Context, input *dto.RejectInvitationInput) (*dto.RejectInvitationOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Invitation rejected successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.RejectInvitation(userID, input.InvitationID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.RejectInvitationOutput{Body: dto.MessageResponse{Message: "Invitation rejected successfully"}}, nil
 }
 
-//remove the member
-func (c *TeamController) RemoveMember(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-	memberID := ctx.Param("member_id")
-
-	err := c.service.RemoveMember(userID, teamID, memberID)
+func RemoveMemberHandler(ctx context.Context, input *dto.RemoveMemberInput) (*dto.RemoveMemberOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Member removed successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.RemoveMember(userID, input.TeamID, input.MemberID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.RemoveMemberOutput{Body: dto.MessageResponse{Message: "Member removed successfully"}}, nil
 }
 
-//leave the team 
-func (c *TeamController) LeaveTeam(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	err := c.service.LeaveTeam(userID, teamID)
+func LeaveTeamHandler(ctx context.Context, input *dto.LeaveTeamInput) (*dto.LeaveTeamOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Left team successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.LeaveTeam(userID, input.TeamID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.LeaveTeamOutput{Body: dto.MessageResponse{Message: "Left team successfully"}}, nil
 }
 
-//create portfolio
-func (c *TeamController) CreatePortfolio(ctx *gin.Context) {
+// ---------- Portfolio ----------
 
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	var req dto.CreatePortfolioRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.CreatePortfolio(userID, teamID, req)
+func CreatePortfolioHandler(ctx context.Context, input *dto.CreatePortfolioInput) (*dto.CreatePortfolioOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "Portfolio created successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.CreatePortfolio(userID, input.TeamID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.CreatePortfolioOutput{Body: dto.MessageResponse{Message: "Portfolio created successfully"}}, nil
 }
 
-//update  portfolio
-func (c *TeamController) UpdatePortfolio(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	portfolioID := ctx.Param("portfolio_id")
-
-	var req dto.UpdatePortfolioRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.UpdatePortfolio(userID, portfolioID, req)
+func UpdatePortfolioHandler(ctx context.Context, input *dto.UpdatePortfolioInput) (*dto.UpdatePortfolioOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Portfolio updated successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.UpdatePortfolio(userID, input.PortfolioID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.UpdatePortfolioOutput{Body: dto.MessageResponse{Message: "Portfolio updated successfully"}}, nil
 }
 
-//delete the potfolio
-func (c *TeamController) DeletePortfolio(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	portfolioID := ctx.Param("portfolio_id")
-
-	err := c.service.DeletePortfolio(userID, portfolioID)
+func DeletePortfolioHandler(ctx context.Context, input *dto.DeletePortfolioInput) (*dto.DeletePortfolioOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Portfolio deleted successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.DeletePortfolio(userID, input.PortfolioID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.DeletePortfolioOutput{Body: dto.MessageResponse{Message: "Portfolio deleted successfully"}}, nil
 }
 
-//add update and delete the skill 
-func (c *TeamController) AddSkill(ctx *gin.Context) {
+// ---------- Skills ----------
 
-	userID := ctx.GetString("user_id")
-	teamID := ctx.Param("team_id")
-
-	var req dto.AddSkillRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.AddSkill(userID, teamID, req)
+func AddSkillHandler(ctx context.Context, input *dto.AddSkillInput) (*dto.AddSkillOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "Skill added successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.AddSkill(userID, input.TeamID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.AddSkillOutput{Body: dto.MessageResponse{Message: "Skill added successfully"}}, nil
 }
 
-func (c *TeamController) UpdateSkill(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	skillID := ctx.Param("skill_id")
-
-	var req dto.AddSkillRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	err := c.service.UpdateSkill(userID, skillID, req)
+func UpdateSkillHandler(ctx context.Context, input *dto.UpdateSkillInput) (*dto.UpdateSkillOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Skill updated successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.UpdateSkill(userID, input.SkillID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.UpdateSkillOutput{Body: dto.MessageResponse{Message: "Skill updated successfully"}}, nil
 }
 
-func (c *TeamController) DeleteSkill(ctx *gin.Context) {
-
-	userID := ctx.GetString("user_id")
-	skillID := ctx.Param("skill_id")
-
-	err := c.service.DeleteSkill(userID, skillID)
+func DeleteSkillHandler(ctx context.Context, input *dto.DeleteSkillInput) (*dto.DeleteSkillOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Skill deleted successfully",
-	})
+	teamService := services.NewTeamService()
+	if err := teamService.DeleteSkill(userID, input.SkillID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.DeleteSkillOutput{Body: dto.MessageResponse{Message: "Skill deleted successfully"}}, nil
 }

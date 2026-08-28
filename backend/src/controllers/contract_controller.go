@@ -1,13 +1,15 @@
 package controllers
 
 import (
-	"net/http"
-	"techguild-backend/src/dto"
-	"techguild-backend/src/services"
-	_ "techguild-backend/src/swagger"
+	"context"
 
-	"github.com/gin-gonic/gin"
+	"techguild-backend/src/dto"
+	"techguild-backend/src/middleware"
+	"techguild-backend/src/services"
+
+	"github.com/danielgtaylor/huma/v2"
 )
+
 type ContractController struct {
 	service *services.ContractService
 }
@@ -18,129 +20,96 @@ func NewContractController() *ContractController {
 	}
 }
 
-// to create the contract 
-func (c *ContractController) CreateContract(ctx *gin.Context) {
+var contractController = NewContractController()
 
-	clientID := ctx.GetString("userID")
+// ---------- CreateContract ----------
 
-	var req dto.CreateContractRequest
+func CreateContractHandler(ctx context.Context, input *dto.CreateContractInput) (*dto.CreateContractOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	res, err := c.service.CreateContract(clientID, req)
+	res, err := contractController.service.CreateContract(clientID, input.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, res)
+	return &dto.CreateContractOutput{Body: *res}, nil
 }
 
-//to sign the contract 
-func (c *ContractController) SignContract(ctx *gin.Context) {
+// ---------- SignContract ----------
 
-	userID := ctx.GetString("userID")
-	contractID := ctx.Param("id")
+func SignContractHandler(ctx context.Context, input *dto.SignContractInput) (*dto.SignContractOutput, error) {
+	userID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.SignContract(userID, contractID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := contractController.service.SignContract(userID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Contract signed successfully",
-	})
+	return &dto.SignContractOutput{
+		Body: dto.SignContractResponse{Message: "Contract signed successfully"},
+	}, nil
 }
 
-//to complete the contract
-func (c *ContractController) CompleteContract(ctx *gin.Context) {
+// ---------- CompleteContract ----------
 
-	clientID := ctx.GetString("userID")
-	contractID := ctx.Param("id")
+func CompleteContractHandler(ctx context.Context, input *dto.CompleteContractInput) (*dto.CompleteContractOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.CompleteContract(clientID, contractID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := contractController.service.CompleteContract(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Contract completed successfully",
-	})
+	return &dto.CompleteContractOutput{
+		Body: dto.CompleteContractResponse{Message: "Contract completed successfully"},
+	}, nil
 }
 
-//to cancel the contract 
-func (c *ContractController) CancelContract(ctx *gin.Context) {
+// ---------- CancelContract ----------
 
-	clientID := ctx.GetString("userID")
-	contractID := ctx.Param("id")
+func CancelContractHandler(ctx context.Context, input *dto.CancelContractInput) (*dto.CancelContractOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.CancelContract(clientID, contractID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := contractController.service.CancelContract(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Contract cancelled successfully",
-	})
+	return &dto.CancelContractOutput{
+		Body: dto.CancelContractResponse{Message: "Contract cancelled successfully"},
+	}, nil
 }
 
-//get contract by ID
-func (c *ContractController) GetContractByID(ctx *gin.Context) {
+// ---------- GetContractByID ----------
 
-	contractID := ctx.Param("id")
-
-	response, err := c.service.GetContractByID(contractID)
+func GetContractByIDHandler(ctx context.Context, input *dto.GetContractByIDInput) (*dto.GetContractByIDOutput, error) {
+	res, err := contractController.service.GetContractByID(input.ID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error404NotFound(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetContractByIDOutput{Body: *res}, nil
 }
 
-//get my client contracts 
-func (c *ContractController) GetClientContracts(ctx *gin.Context) {
+// ---------- GetClientContracts ----------
 
-	clientID := ctx.GetString("userID")
+func GetClientContractsHandler(ctx context.Context, input *dto.GetClientContractsInput) (*dto.GetClientContractsOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	response, err := c.service.GetClientContracts(clientID)
+	res, err := contractController.service.GetClientContracts(clientID)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetClientContractsOutput{Body: *res}, nil
 }
 
-//get my freelancer contract 
-func (c *ContractController) GetFreelancerContracts(ctx *gin.Context) {
+// ---------- GetFreelancerContracts ----------
 
-	freelancerID := ctx.GetString("userID")
+func GetFreelancerContractsHandler(ctx context.Context, input *dto.GetFreelancerContractsInput) (*dto.GetFreelancerContractsOutput, error) {
+	freelancerID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	response, err := c.service.GetFreelancerContracts(freelancerID)
+	res, err := contractController.service.GetFreelancerContracts(freelancerID)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetFreelancerContractsOutput{Body: *res}, nil
 }

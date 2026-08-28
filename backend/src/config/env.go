@@ -30,6 +30,9 @@ func LoadConfig() (*Config, error) {
 
 		JWTSecret:        viper.GetString("JWT_SECRET"),
 		JWTRefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
+
+		FrontendURL: viper.GetString("FRONTEND_URL"),
+		ZudokuURL:   viper.GetString("ZUDOKU_URL"),
 	}
 
 	return cfg, nil

@@ -1,12 +1,13 @@
 package controllers
 
 import (
-	"net/http"
-	"techguild-backend/src/dto"
-	"techguild-backend/src/services"
-	_ "techguild-backend/src/swagger"
+	"context"
 
-	"github.com/gin-gonic/gin"
+	"techguild-backend/src/dto"
+	"techguild-backend/src/middleware"
+	"techguild-backend/src/services"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type MilestoneController struct {
@@ -19,174 +20,123 @@ func NewMilestoneController() *MilestoneController {
 	}
 }
 
-//create milestone 
-func (c *MilestoneController) CreateMilestone(ctx *gin.Context) {
+var milestoneController = NewMilestoneController()
 
-	clientID := ctx.GetString("userID")
+// ---------- CreateMilestone ----------
 
-	var req dto.CreateMilestoneRequest
+func CreateMilestoneHandler(ctx context.Context, input *dto.CreateMilestoneInput) (*dto.CreateMilestoneOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	res, err := c.service.CreateMilestone(clientID, req)
+	res, err := milestoneController.service.CreateMilestone(clientID, input.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusCreated, res)
+	return &dto.CreateMilestoneOutput{Body: *res}, nil
 }
 
-//update milestone 
-func (c *MilestoneController) UpdateMilestone(ctx *gin.Context) {
+// ---------- UpdateMilestone ----------
 
-	clientID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func UpdateMilestoneHandler(ctx context.Context, input *dto.UpdateMilestoneInput) (*dto.UpdateMilestoneOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	var req dto.UpdateMilestoneRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.UpdateMilestone(clientID, input.ID, input.Body); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	if err := c.service.UpdateMilestone(clientID, milestoneID, req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone updated successfully",
-	})
+	return &dto.UpdateMilestoneOutput{
+		Body: dto.UpdateMilestoneResponse{Message: "Milestone updated successfully"},
+	}, nil
 }
 
-//delete milestone
-func (c *MilestoneController) DeleteMilestone(ctx *gin.Context) {
+// ---------- DeleteMilestone ----------
 
-	clientID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func DeleteMilestoneHandler(ctx context.Context, input *dto.DeleteMilestoneInput) (*dto.DeleteMilestoneOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.DeleteMilestone(clientID, milestoneID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.DeleteMilestone(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone deleted successfully",
-	})
+	return &dto.DeleteMilestoneOutput{
+		Body: dto.DeleteMilestoneResponse{Message: "Milestone deleted successfully"},
+	}, nil
 }
 
-//submit milestone
-func (c *MilestoneController) SubmitMilestone(ctx *gin.Context) {
+// ---------- SubmitMilestone ----------
 
-	freelancerID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func SubmitMilestoneHandler(ctx context.Context, input *dto.SubmitMilestoneInput) (*dto.SubmitMilestoneOutput, error) {
+	freelancerID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.SubmitMilestone(freelancerID, milestoneID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.SubmitMilestone(freelancerID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone submitted successfully",
-	})
+	return &dto.SubmitMilestoneOutput{
+		Body: dto.SubmitMilestoneResponse{Message: "Milestone submitted successfully"},
+	}, nil
 }
 
-func (c *MilestoneController) ApproveMilestone(ctx *gin.Context) {
+// ---------- ApproveMilestone ----------
 
-	clientID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func ApproveMilestoneHandler(ctx context.Context, input *dto.ApproveMilestoneInput) (*dto.ApproveMilestoneOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.ApproveMilestone(clientID, milestoneID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.ApproveMilestone(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone approved successfully",
-	})
+	return &dto.ApproveMilestoneOutput{
+		Body: dto.ApproveMilestoneResponse{Message: "Milestone approved successfully"},
+	}, nil
 }
 
-func (c *MilestoneController) RejectMilestone(ctx *gin.Context) {
+// ---------- RejectMilestone ----------
 
-	clientID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func RejectMilestoneHandler(ctx context.Context, input *dto.RejectMilestoneInput) (*dto.RejectMilestoneOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.RejectMilestone(clientID, milestoneID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.RejectMilestone(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone rejected successfully",
-	})
+	return &dto.RejectMilestoneOutput{
+		Body: dto.RejectMilestoneResponse{Message: "Milestone rejected successfully"},
+	}, nil
 }
 
-//mark milestone paid
-func (c *MilestoneController) MarkMilestonePaid(ctx *gin.Context) {
+// ---------- MarkMilestonePaid ----------
 
-	clientID := ctx.GetString("userID")
-	milestoneID := ctx.Param("id")
+func MarkMilestonePaidHandler(ctx context.Context, input *dto.MarkMilestonePaidInput) (*dto.MarkMilestonePaidOutput, error) {
+	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	if err := c.service.MarkMilestonePaid(clientID, milestoneID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+	if err := milestoneController.service.MarkMilestonePaid(clientID, input.ID); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Milestone marked as paid successfully",
-	})
+	return &dto.MarkMilestonePaidOutput{
+		Body: dto.MarkMilestonePaidResponse{Message: "Milestone marked as paid successfully"},
+	}, nil
 }
 
-//get milestone by ID
-func (c *MilestoneController) GetMilestoneByID(ctx *gin.Context) {
+// ---------- GetMilestoneByID ----------
 
-	milestoneID := ctx.Param("id")
-
-	response, err := c.service.GetMilestoneByID(milestoneID)
+func GetMilestoneByIDHandler(ctx context.Context, input *dto.GetMilestoneByIDInput) (*dto.GetMilestoneByIDOutput, error) {
+	res, err := milestoneController.service.GetMilestoneByID(input.ID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error404NotFound(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetMilestoneByIDOutput{Body: *res}, nil
 }
 
-//Get contract milestone 
-func (c *MilestoneController) GetContractMilestones(ctx *gin.Context) {
+// ---------- GetContractMilestones ----------
 
-	contractID := ctx.Param("contract_id")
-
-	response, err := c.service.GetContractMilestones(contractID)
+func GetContractMilestonesHandler(ctx context.Context, input *dto.GetContractMilestonesInput) (*dto.GetContractMilestonesOutput, error) {
+	res, err := milestoneController.service.GetContractMilestones(input.ContractID)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	return &dto.GetContractMilestonesOutput{Body: *res}, nil
 }

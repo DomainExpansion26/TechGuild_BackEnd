@@ -1,110 +1,84 @@
 package middleware
 
 import (
-	"errors"
-	"log"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
-	"techguild-backend/src/database/postgres"
-	"techguild-backend/src/repository"
-	"techguild-backend/src/utils"
 
+	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
 
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret []byte
-
 func getJwtSecret() []byte {
-	return []byte("your-access-secret")
+	secret := os.Getenv("JWT_ACCESS_SECRET")
+	if secret == "" {
+		fmt.Println("JWT ERROR: JWT_ACCESS_SECRET is not set")
+		return nil
+	}
+	return []byte(secret)
 }
 
 type Claims struct {
 	UserID string `json:"user_id"`
-	Type   string `json:"type"`
 	jwt.RegisteredClaims
 }
 
-func AuthMiddleware() gin.HandlerFunc {
-	blacklistRepo := repository.NewTokenBlacklistRepository(postgres.RedisDB)
+// ---------- Huma middleware (Auth ke migrated routes ke liye) ----------
 
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
+type ctxKey string
+
+const UserIDKey ctxKey = "user_id"
+
+func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		authHeader := ctx.Header("Authorization")
 
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
-			c.Abort()
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Authorization header missing")
 			return
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
-			}
-			return utils.GetAccessSecret(), nil
+		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+			return getJwtSecret(), nil
 		})
 
 		if err != nil || !token.Valid {
-			log.Println("JWT ERROR:", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			c.Abort()
+			fmt.Println("JWT ERROR:", err)
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Invalid or expired token")
 			return
 		}
 
 		claims := token.Claims.(*Claims)
-		if claims.Type != "access" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error:": "Invalid token type"})
-			c.Abort()
-			return
-		}
-
-		// reject blacklist access-token
-		tokenHash := utils.HashToken(tokenString)
-		blacklisted, err := blacklistRepo.IsBlacklisted(tokenHash)
-		if err != nil {
-			log.Println("Blacklist check error:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-			c.Abort()
-			return
-		}
-		if blacklisted {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
-			c.Abort()
-			return
-		}
-
-		c.Set("user_id", claims.UserID)
-		c.Set("access_token", tokenString)
-		c.Next()
+		newCtx := huma.WithValue(ctx, UserIDKey, claims.UserID)
+		next(newCtx)
 	}
 }
 
-func AdminMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID := c.GetString("user_id")
+func AdminMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		userID, _ := ctx.Context().Value(UserIDKey).(string)
 		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: user ID missing"})
-			c.Abort()
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user ID missing")
 			return
 		}
 
 		var user models.User
 		if err := postgres.DB.Where("id = ?", userID).First(&user).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: user not found"})
-			c.Abort()
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user not found")
 			return
 		}
 
 		if user.AccountType == nil || *user.AccountType != models.AccountTypeAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Admin access required"})
-			c.Abort()
+			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Admin access required")
 			return
 		}
 
-		c.Next()
+		next(ctx)
 	}
 }
