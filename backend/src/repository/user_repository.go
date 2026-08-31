@@ -114,7 +114,10 @@ func (r *userRepository) UpdateAccountType(userID string, accountType models.Acc
 	return postgres.DB.
 		Model(&models.User{}).
 		Where("id = ?", userID).
-		Update("account_type", accountType).Error
+		Updates(map[string]interface{}{
+			"account_type": accountType,
+			"rank":         "F",
+		}).Error
 }
 
 func (r *userRepository) AddUserPoints(userID string, points int) error {
