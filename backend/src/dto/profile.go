@@ -5,67 +5,67 @@ import "github.com/danielgtaylor/huma/v2"
 type CreateIndividualProfileRequest struct {
 	Phone             *string `json:"phone" huma:"" example:"+1234567890"`
 	DateOfBirth       *string `json:"date_of_birth" huma:"" example:"1990-01-15"`
-	Gender            string  `json:"gender" huma:"" example:"male"`
-	AvatarURL         string  `json:"avatar_url" huma:"" example:"https://storage.example.com/avatars/user.png"`
-	Bio               string  `json:"bio" huma:"maxLength=500" example:"Full-stack developer with 5 years of experience"`
-	Country           string  `json:"country" huma:"" example:"India"`
-	State             string  `json:"state" huma:"" example:"Maharashtra"`
-	City              string  `json:"city" huma:"" example:"Mumbai"`
-	Headline          string  `json:"headline" huma:"maxLength=150" example:"Senior Full-Stack Developer"`
-	PreferredLanguage string  `json:"preferred_language" huma:"" example:"en"`
-	TimeZone          string  `json:"timezone" huma:"" example:"Asia/Kolkata"`
-	CountryCode       string  `json:"country_code" huma:"" example:"+91"`
+	Gender            *string `json:"gender" huma:"" example:"male"`
+	AvatarURL         *string `json:"avatar_url" huma:"" example:"https://storage.example.com/avatars/user.png"`
+	Bio               *string `json:"bio" huma:"maxLength=500" example:"Full-stack developer with 5 years of experience"`
+	Country           *string `json:"country" huma:"" example:"India"`
+	State             *string `json:"state" huma:"" example:"Maharashtra"`
+	City              *string `json:"city" huma:"" example:"Mumbai"`
+	Headline          *string `json:"headline" huma:"maxLength=150" example:"Senior Full-Stack Developer"`
+	PreferredLanguage *string `json:"preferred_language" huma:"" example:"en"`
+	TimeZone          *string `json:"timezone" huma:"" example:"Asia/Kolkata"`
+	CountryCode       *string `json:"country_code" huma:"" example:"+91"`
 
-	ExperienceLevel   string   `json:"experience_level" huma:"" example:"senior"`
-	Availability      string   `json:"availability" huma:"" example:"full-time"`
-	Skills            []string `json:"skills" huma:""`
-	ToolsTechnologies []string `json:"tools_technologies" huma:""`
-	ServiceCategories []string `json:"service_categories" huma:""`
+	ExperienceLevel   *string   `json:"experience_level" huma:"" example:"senior"`
+	Availability      *string   `json:"availability" huma:"" example:"full-time"`
+	Skills            *[]string `json:"skills" huma:""`
+	ToolsTechnologies *[]string `json:"tools_technologies" huma:""`
+	ServiceCategories *[]string `json:"service_categories" huma:""`
 
-	PortfolioURL string `json:"portfolio_url" huma:"" example:"https://portfolio.example.com/johndoe"`
-	GithubURL    string `json:"github_url" huma:"" example:"https://github.com/johndoe"`
-	LinkedinURL  string `json:"linkedin_url" huma:"" example:"https://linkedin.com/in/johndoe"`
-	ResumeURL    string `json:"resume_url" huma:"" example:"https://storage.example.com/resumes/johndoe.pdf"`
+	PortfolioURL *string `json:"portfolio_url" huma:"" example:"https://portfolio.example.com/johndoe"`
+	GithubURL    *string `json:"github_url" huma:"" example:"https://github.com/johndoe"`
+	LinkedinURL  *string `json:"linkedin_url" huma:"" example:"https://linkedin.com/in/johndoe"`
+	ResumeURL    *string `json:"resume_url" huma:"" example:"https://storage.example.com/resumes/johndoe.pdf"`
 
-	TermsConfirmed    bool   `json:"terms_confirmed" huma:"" example:"true"`
-	ProfileVisibility string `json:"profile_visibility" huma:"" example:"public"`
+	TermsConfirmed    *bool   `json:"terms_confirmed" huma:"" example:"true"`
+	ProfileVisibility *string `json:"profile_visibility" huma:"" example:"public"`
 }
 
 type CreateAgencyProfileRequest struct {
-	AgencyName      string   `json:"agency_name" huma:"required" example:"Acme Digital Agency"`
-	LogoURL         string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/acme.png"`
-	Description     string   `json:"description" huma:"maxLength=1000" example:"Digital agency specializing in web and mobile development"`
-	WebsiteURL      string   `json:"website_url" huma:"" example:"https://acme.example.com"`
-	ServicesOffered []string `json:"services_offered" huma:""`
-	Industries      []string `json:"industries" huma:""`
-	TeamSize        string   `json:"team_size" huma:"" example:"10-50"`
+	AgencyName      *string   `json:"agency_name" example:"Acme Digital Agency"`
+	LogoURL         *string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/acme.png"`
+	Description     *string   `json:"description" huma:"maxLength=1000" example:"Digital agency specializing in web and mobile development"`
+	WebsiteURL      *string   `json:"website_url" huma:"" example:"https://acme.example.com"`
+	ServicesOffered *[]string `json:"services_offered" huma:""`
+	Industries      *[]string `json:"industries" huma:""`
+	TeamSize        *string   `json:"team_size" huma:"" example:"10-50"`
 
-	ContactName    string  `json:"contact_name" huma:"" example:"Jane Smith"`
+	ContactName    *string `json:"contact_name" huma:"" example:"Jane Smith"`
 	Phone          *string `json:"phone" huma:"" example:"+1234567890"`
-	RegistrationNo string  `json:"registration_no" huma:"" example:"U74110MH2020PTC123456"`
-	Country        string  `json:"country" huma:"" example:"India"`
-	State          string  `json:"state" huma:"" example:"Maharashtra"`
-	City           string  `json:"city" huma:"" example:"Mumbai"`
-	TimeZone       string  `json:"timezone" huma:"" example:"Asia/Kolkata"`
-	CountryCode    string  `json:"country_code" huma:"" example:"+91"`
+	RegistrationNo *string `json:"registration_no" huma:"" example:"U74110MH2020PTC123456"`
+	Country        *string `json:"country" huma:"" example:"India"`
+	State          *string `json:"state" huma:"" example:"Maharashtra"`
+	City           *string `json:"city" huma:"" example:"Mumbai"`
+	TimeZone       *string `json:"timezone" huma:"" example:"Asia/Kolkata"`
+	CountryCode    *string `json:"country_code" huma:"" example:"+91"`
 }
 
 type CreateClientProfileRequest struct {
-	CompanyName  string   `json:"company_name" huma:"required" example:"TechStart Inc"`
-	LogoURL      string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/techstart.png"`
-	Industry     string   `json:"industry" huma:"" example:"technology"`
-	WebsiteURL   string   `json:"website_url" huma:"" example:"https://techstart.example.com"`
-	ProjectTypes []string `json:"project_types" huma:""`
-	BudgetRange  string   `json:"budget_range" huma:"" example:"$5,000 - $20,000"`
-	TeamSize     string   `json:"team_size" huma:"" example:"5-10"`
+	CompanyName  *string   `json:"company_name" example:"TechStart Inc"`
+	LogoURL      *string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/techstart.png"`
+	Industry     *string   `json:"industry" huma:"" example:"technology"`
+	WebsiteURL   *string   `json:"website_url" huma:"" example:"https://techstart.example.com"`
+	ProjectTypes *[]string `json:"project_types" huma:""`
+	BudgetRange  *string   `json:"budget_range" huma:"" example:"$5,000 - $20,000"`
+	TeamSize     *string   `json:"team_size" huma:"" example:"5-10"`
 
-	ContactName string  `json:"contact_name" huma:"" example:"Alice Johnson"`
+	ContactName *string `json:"contact_name" huma:"" example:"Alice Johnson"`
 	Phone       *string `json:"phone" huma:"" example:"+1234567890"`
-	Country     string  `json:"country" huma:"" example:"United States"`
-	State       string  `json:"state" huma:"" example:"California"`
-	City        string  `json:"city" huma:"" example:"San Francisco"`
-	TimeZone    string  `json:"timezone" huma:"" example:"America/Los_Angeles"`
-	CountryCode string  `json:"country_code" huma:"" example:"+1"`
+	Country     *string `json:"country" huma:"" example:"United States"`
+	State       *string `json:"state" huma:"" example:"California"`
+	City        *string `json:"city" huma:"" example:"San Francisco"`
+	TimeZone    *string `json:"timezone" huma:"" example:"America/Los_Angeles"`
+	CountryCode *string `json:"country_code" huma:"" example:"+1"`
 }
 
 type CreateProfileResponse struct {
@@ -134,37 +134,114 @@ type DeleteAccountRequest struct {
 
 // ---------- Huma Input/Output wrapper structs ----------
 
-type CreateIndividualProfileInput struct {
+type IndividualProfileInput struct {
 	Body CreateIndividualProfileRequest
 }
-type CreateIndividualProfileOutput struct {
+type IndividualProfileOutput struct {
 	Body CreateProfileResponse
 }
 
-type CreateAgencyProfileInput struct {
+type AgencyProfileInput struct {
 	Body CreateAgencyProfileRequest
 }
-type CreateAgencyProfileOutput struct {
+type AgencyProfileOutput struct {
 	Body CreateProfileResponse
 }
 
-type CreateClientProfileInput struct {
+type ClientProfileInput struct {
 	Body CreateClientProfileRequest
 }
-type CreateClientProfileOutput struct {
+type ClientProfileOutput struct {
 	Body CreateProfileResponse
 }
 
 type GetMyProfileInput struct{}
 type GetMyProfileOutput struct {
-	Body any
+	Body GetMyProfileResponse
+}
+
+// GetMyProfileResponse is a typed union of the three profile shapes.
+// Only the field corresponding to the authenticated user's account type is populated.
+type GetMyProfileResponse struct {
+	AccountType string `json:"account_type" example:"individual"`
+	Individual  *MyIndividualProfile `json:"individual,omitempty"`
+	Agency      *MyAgencyProfile     `json:"agency,omitempty"`
+	Client      *MyClientProfile     `json:"client,omitempty"`
+}
+
+type MyIndividualProfile struct {
+	PublicUrlSlug     string   `json:"public_url_slug" example:"john-doe"`
+	Phone             *string  `json:"phone,omitempty" example:"+1234567890"`
+	DateOfBirth       string   `json:"date_of_birth,omitempty" example:"1990-01-15"`
+	Gender            string   `json:"gender,omitempty" example:"male"`
+	AvatarURL         string   `json:"avatar_url,omitempty"`
+	Bio               string   `json:"bio,omitempty"`
+	Country           string   `json:"country,omitempty"`
+	State             string   `json:"state,omitempty"`
+	City              string   `json:"city,omitempty"`
+	Headline          string   `json:"headline,omitempty"`
+	PreferredLanguage string   `json:"preferred_language,omitempty"`
+	TimeZone          string   `json:"timezone,omitempty"`
+	CountryCode       string   `json:"country_code,omitempty"`
+	ExperienceLevel   string   `json:"experience_level,omitempty"`
+	Availability      string   `json:"availability,omitempty"`
+	Skills            []string `json:"skills,omitempty"`
+	ToolsTechnologies []string `json:"tools_technologies,omitempty"`
+	ServiceCategories []string `json:"service_categories,omitempty"`
+	PortfolioURL      string   `json:"portfolio_url,omitempty"`
+	GithubURL         string   `json:"github_url,omitempty"`
+	LinkedinURL       string   `json:"linkedin_url,omitempty"`
+	ResumeURL         string   `json:"resume_url,omitempty"`
+	ProfileVisibility string   `json:"profile_visibility,omitempty" example:"public"`
+}
+
+type MyAgencyProfile struct {
+	PublicUrlSlug   string   `json:"public_url_slug" example:"acme-digital-agency"`
+	AgencyName      string   `json:"agency_name" example:"Acme Digital Agency"`
+	LogoURL         string   `json:"logo_url,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	WebsiteURL      string   `json:"website_url,omitempty"`
+	ServicesOffered []string `json:"services_offered,omitempty"`
+	Industries      []string `json:"industries,omitempty"`
+	TeamSize        string   `json:"team_size,omitempty"`
+	ContactName     string   `json:"contact_name,omitempty"`
+	Phone           *string  `json:"phone,omitempty"`
+	RegistrationNo  string   `json:"registration_no,omitempty"`
+	Country         string   `json:"country,omitempty"`
+	State           string   `json:"state,omitempty"`
+	City            string   `json:"city,omitempty"`
+	TimeZone        string   `json:"timezone,omitempty"`
+	CountryCode     string   `json:"country_code,omitempty"`
+}
+
+type MyClientProfile struct {
+	PublicUrlSlug string   `json:"public_url_slug" example:"techstart-inc"`
+	CompanyName   string   `json:"company_name" example:"TechStart Inc"`
+	LogoURL       string   `json:"logo_url,omitempty"`
+	Industry      string   `json:"industry,omitempty"`
+	WebsiteURL    string   `json:"website_url,omitempty"`
+	ProjectTypes  []string `json:"project_types,omitempty"`
+	BudgetRange   string   `json:"budget_range,omitempty"`
+	TeamSize      string   `json:"team_size,omitempty"`
+	ContactName   string   `json:"contact_name,omitempty"`
+	Phone         *string  `json:"phone,omitempty"`
+	Country       string   `json:"country,omitempty"`
+	State         string   `json:"state,omitempty"`
+	City          string   `json:"city,omitempty"`
+	TimeZone      string   `json:"timezone,omitempty"`
+	CountryCode   string   `json:"country_code,omitempty"`
 }
 
 type SetAccountTypeInput struct {
 	Body SetAccountTypeRequest
 }
+// SetAccountTypeResponse mirrors the create-profile message but without an
+// implied public slug.
+type SetAccountTypeResponse struct {
+	Message string `json:"message" example:"account type set successfully"`
+}
 type SetAccountTypeOutput struct {
-	Body CreateProfileResponse
+	Body SetAccountTypeResponse
 }
 
 type UploadResumeForm struct {
@@ -173,11 +250,12 @@ type UploadResumeForm struct {
 type UploadResumeInput struct {
 	RawBody huma.MultipartFormFiles[UploadResumeForm]
 }
+type UploadResumeResponse struct {
+	Message   string `json:"message"`
+	ResumeURL string `json:"resume_url"`
+}
 type UploadResumeOutput struct {
-	Body struct {
-		Message   string `json:"message"`
-		ResumeURL string `json:"resume_url"`
-	}
+	Body UploadResumeResponse
 }
 
 type UploadAvatarForm struct {
@@ -186,11 +264,12 @@ type UploadAvatarForm struct {
 type UploadAvatarInput struct {
 	RawBody huma.MultipartFormFiles[UploadAvatarForm]
 }
+type UploadAvatarResponse struct {
+	Message   string `json:"message"`
+	AvatarURL string `json:"avatar_url"`
+}
 type UploadAvatarOutput struct {
-	Body struct {
-		Message   string `json:"message"`
-		AvatarURL string `json:"avatar_url"`
-	}
+	Body UploadAvatarResponse
 }
 
 type UploadLogoForm struct {
@@ -199,32 +278,27 @@ type UploadLogoForm struct {
 type UploadLogoInput struct {
 	RawBody huma.MultipartFormFiles[UploadLogoForm]
 }
+type UploadLogoResponse struct {
+	Message string `json:"message"`
+	LogoURL string `json:"logo_url"`
+}
 type UploadLogoOutput struct {
-	Body struct {
-		Message string `json:"message"`
-		LogoURL string `json:"logo_url"`
-	}
+	Body UploadLogoResponse
 }
 
 type DeleteAvatarInput struct{}
 type DeleteAvatarOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
+	Body MessageResponse
 }
 
 type DeleteLogoInput struct{}
 type DeleteLogoOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
+	Body MessageResponse
 }
 
 type DeleteResumeInput struct{}
 type DeleteResumeOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
+	Body MessageResponse
 }
 
 type GetPublicProfileInput struct {
@@ -244,16 +318,6 @@ type ExportProfileOutput struct {
 	Body ExportResponse
 }
 
-type CreateOrUpdateProfileForm struct {
-	ProfileData string `form:"profile_data"`
-}
-type CreateOrUpdateProfileInput struct {
-	RawBody huma.MultipartFormFiles[CreateOrUpdateProfileForm]
-}
-type CreateOrUpdateProfileOutput struct {
-	Body CreateProfileResponse
-}
-
 type CheckSlugInput struct {
 	Slug string `query:"slug" required:"true" doc:"Profile slug"`
 }
@@ -265,7 +329,5 @@ type DeleteProfileAccountInput struct {
 	Body DeleteAccountRequest
 }
 type DeleteProfileAccountOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
+	Body MessageResponse
 }

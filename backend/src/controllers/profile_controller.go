@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -13,71 +12,182 @@ import (
 	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
+	"gorm.io/gorm"
 )
 
-// ---------- CreateOrUpdateIndividualProfile (JSON body version) ----------
+// ---------- CreateIndividualProfile (JSON body version) ----------
 
-func CreateOrUpdateIndividualProfileHandler(ctx context.Context, input *dto.CreateIndividualProfileInput) (*dto.CreateIndividualProfileOutput, error) {
+func CreateIndividualProfileHandler(ctx context.Context, input *dto.IndividualProfileInput) (*dto.IndividualProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateIndividualProfile(userID, input.Body)
+	slug, err := profileService.CreateIndividualProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		if errors.Is(err, services.ErrProfileAlreadyExists) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &dto.CreateIndividualProfileOutput{
-		Body: dto.CreateProfileResponse{Message: "Individual profile updated successfully", PublicUrlSlug: slug},
+	return &dto.IndividualProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Individual profile created successfully",
+			PublicUrlSlug: slug},
+	}, nil
+}
+
+// ---------- UpdateIndividualProfile ----------
+
+func UpdateIndividualProfileHandler(ctx context.Context, input *dto.IndividualProfileInput) (*dto.IndividualProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	slug, err := profileService.UpdateIndividualProfile(userID, input.Body)
+
+	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound("profile not found, create it first")
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.IndividualProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Individual profile updated successfully",
+			PublicUrlSlug: slug},
 	}, nil
 }
 
 // ---------- CreateOrUpdateAgencyProfile ----------
 
-func CreateOrUpdateAgencyProfileHandler(ctx context.Context, input *dto.CreateAgencyProfileInput) (*dto.CreateAgencyProfileOutput, error) {
+func CreateAgencyProfileHandler(ctx context.Context, input *dto.AgencyProfileInput) (*dto.AgencyProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateAgencyProfile(userID, input.Body)
+	slug, err := profileService.CreateAgencyProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		if errors.Is(err, services.ErrProfileAlreadyExists) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &dto.CreateAgencyProfileOutput{
-		Body: dto.CreateProfileResponse{Message: "Agency profile updated successfully", PublicUrlSlug: slug},
+	return &dto.AgencyProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Agency profile created successfully",
+			PublicUrlSlug: slug},
+	}, nil
+}
+
+func UpdateAgencyProfileHandler(ctx context.Context, input *dto.AgencyProfileInput) (*dto.AgencyProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	slug, err := profileService.UpdateAgencyProfile(userID, input.Body)
+	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound("profile not found, create it first")
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.AgencyProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Agency profile updated successfully",
+			PublicUrlSlug: slug},
 	}, nil
 }
 
 // ---------- CreateOrUpdateClientProfile ----------
-
-func CreateOrUpdateClientProfileHandler(ctx context.Context, input *dto.CreateClientProfileInput) (*dto.CreateClientProfileOutput, error) {
+func CreateClientProfileHandler(ctx context.Context, input *dto.ClientProfileInput) (*dto.ClientProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
 	profileService := services.NewProfileService()
-	slug, err := profileService.CreateOrUpdateClientProfile(userID, input.Body)
+	slug, err := profileService.CreateClientProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		if errors.Is(err, services.ErrProfileAlreadyExists) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &dto.CreateClientProfileOutput{
-		Body: dto.CreateProfileResponse{Message: "Client profile updated successfully", PublicUrlSlug: slug},
+	return &dto.ClientProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Client profile created successfully",
+			PublicUrlSlug: slug},
+	}, nil
+}
+
+func UpdateClientProfileHandler(ctx context.Context, input *dto.ClientProfileInput) (*dto.ClientProfileOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	slug, err := profileService.UpdateClientProfile(userID, input.Body)
+	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound("profile not found, create it first")
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &dto.ClientProfileOutput{
+		Body: dto.CreateProfileResponse{
+			Message:       "Client profile updated successfully",
+			PublicUrlSlug: slug},
 	}, nil
 }
 
@@ -95,10 +205,16 @@ func GetMyProfileHandler(ctx context.Context, input *dto.GetMyProfileInput) (*dt
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, huma.Error404NotFound("profile not found, create it first")
+		}
+		if errors.Is(err, services.ErrAccountTypeNotSet) || errors.Is(err, services.ErrInvalidAccountType) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	return &dto.GetMyProfileOutput{Body: profile}, nil
+	return &dto.GetMyProfileOutput{Body: *profile}, nil
 }
 
 // ---------- SetAccountType ----------
@@ -111,7 +227,7 @@ func SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) 
 	}
 
 	return &dto.SetAccountTypeOutput{
-		Body: dto.CreateProfileResponse{Message: "account type set successfully"},
+		Body: dto.SetAccountTypeResponse{Message: "account type set successfully"},
 	}, nil
 }
 
@@ -130,6 +246,11 @@ func UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dt
 		return nil, huma.Error400BadRequest("only PDF files are allowed")
 	}
 
+	const maxResumeSize = 5 * 1024 * 1024
+	if file.Size > maxResumeSize {
+		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
+	}
+
 	filename := fmt.Sprintf("%s-%d", userID, time.Now().Unix())
 
 	fileURL, err := utils.UploadPDFToCloudinary(file, filename)
@@ -138,10 +259,7 @@ func UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dt
 	}
 
 	return &dto.UploadResumeOutput{
-		Body: struct {
-			Message   string `json:"message"`
-			ResumeURL string `json:"resume_url"`
-		}{Message: "resume uploaded successfully", ResumeURL: fileURL},
+		Body: dto.UploadResumeResponse{Message: "resume uploaded successfully", ResumeURL: fileURL},
 	}, nil
 }
 
@@ -174,10 +292,7 @@ func UploadAvatarHandler(ctx context.Context, input *dto.UploadAvatarInput) (*dt
 	}
 
 	return &dto.UploadAvatarOutput{
-		Body: struct {
-			Message   string `json:"message"`
-			AvatarURL string `json:"avatar_url"`
-		}{Message: "avatar uploaded successfully", AvatarURL: fileURL},
+		Body: dto.UploadAvatarResponse{Message: "avatar uploaded successfully", AvatarURL: fileURL},
 	}, nil
 }
 
@@ -210,10 +325,7 @@ func UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.Up
 	}
 
 	return &dto.UploadLogoOutput{
-		Body: struct {
-			Message string `json:"message"`
-			LogoURL string `json:"logo_url"`
-		}{Message: "logo uploaded successfully", LogoURL: fileURL},
+		Body: dto.UploadLogoResponse{Message: "logo uploaded successfully", LogoURL: fileURL},
 	}, nil
 }
 
@@ -227,13 +339,17 @@ func DeleteAvatarHandler(ctx context.Context, input *dto.DeleteAvatarInput) (*dt
 
 	profileService := services.NewProfileService()
 	if err := profileService.DeleteAvatar(userID); err != nil {
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrNothingToDelete) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return &dto.DeleteAvatarOutput{
-		Body: struct {
-			Message string `json:"message"`
-		}{Message: "avatar deleted successfully"},
+		Body: dto.MessageResponse{Message: "avatar deleted successfully"},
 	}, nil
 }
 
@@ -245,13 +361,20 @@ func DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.De
 
 	profileService := services.NewProfileService()
 	if err := profileService.DeleteLogo(userID); err != nil {
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrNothingToDelete) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return &dto.DeleteLogoOutput{
-		Body: struct {
-			Message string `json:"message"`
-		}{Message: "logo deleted successfully"},
+		Body: dto.MessageResponse{Message: "logo deleted successfully"},
 	}, nil
 }
 
@@ -263,13 +386,20 @@ func DeleteResumeHandler(ctx context.Context, input *dto.DeleteResumeInput) (*dt
 
 	profileService := services.NewProfileService()
 	if err := profileService.DeleteResume(userID); err != nil {
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrNothingToDelete) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return &dto.DeleteResumeOutput{
-		Body: struct {
-			Message string `json:"message"`
-		}{Message: "resume deleted successfully"},
+		Body: dto.MessageResponse{Message: "resume deleted successfully"},
 	}, nil
 }
 
@@ -296,6 +426,9 @@ func GetUserPointsHandler(ctx context.Context, input *dto.GetUserPointsInput) (*
 	profileService := services.NewProfileService()
 	points, err := profileService.GetUserPoints(userID)
 	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
@@ -313,62 +446,13 @@ func ExportProfileHandler(ctx context.Context, input *dto.ExportProfileInput) (*
 	profileService := services.NewProfileService()
 	result, err := profileService.ExportUserData(userID)
 	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return &dto.ExportProfileOutput{Body: *result}, nil
-}
-
-// ---------- CreateOrUpdateProfile (dispatcher, multipart) ----------
-
-func CreateOrUpdateProfileHandler(ctx context.Context, input *dto.CreateOrUpdateProfileInput) (*dto.CreateOrUpdateProfileOutput, error) {
-	userID, err := utils.GetUserIDFromHumaContext(ctx)
-	if err != nil {
-		return nil, huma.Error401Unauthorized(err.Error())
-	}
-
-	profileService := services.NewProfileService()
-	accountType, err := profileService.GetUserAccountType(userID)
-	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
-	}
-
-	profileData := input.RawBody.Data().ProfileData
-
-	switch accountType {
-	case "individual":
-		var req dto.CreateIndividualProfileRequest
-		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
-		}
-		slug, err := profileService.CreateOrUpdateIndividualProfile(userID, req)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
-	case "agency":
-		var req dto.CreateAgencyProfileRequest
-		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
-		}
-		slug, err := profileService.CreateOrUpdateAgencyProfile(userID, req)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
-	case "client":
-		var req dto.CreateClientProfileRequest
-		if err := json.Unmarshal([]byte(profileData), &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid profile data: " + err.Error())
-		}
-		slug, err := profileService.CreateOrUpdateClientProfile(userID, req)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return &dto.CreateOrUpdateProfileOutput{Body: dto.CreateProfileResponse{Message: "Profile updated successfully", PublicUrlSlug: slug}}, nil
-	default:
-		return nil, huma.Error400BadRequest("invalid account type")
-	}
 }
 
 // ---------- CheckSlug ----------
@@ -397,8 +481,6 @@ func DeleteProfileAccountHandler(ctx context.Context, input *dto.DeleteProfileAc
 	}
 
 	return &dto.DeleteProfileAccountOutput{
-		Body: struct {
-			Message string `json:"message"`
-		}{Message: "account successfully scheduled for deletion"},
+		Body: dto.MessageResponse{Message: "account successfully scheduled for deletion"},
 	}, nil
 }
