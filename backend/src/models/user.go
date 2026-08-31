@@ -54,6 +54,8 @@ type User struct {
 
 	Points int `gorm:"default:0"`
 
+	Rank string `gorm:"type:varchar(10);default:'F';not null"`
+
 	NotificationPreferences datatypes.JSON `gorm:"type:jsonb"`
 	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
 	// Relationships of user with its projects, applications, and other entities
