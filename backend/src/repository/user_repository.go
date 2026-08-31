@@ -41,6 +41,8 @@ type UserRepository interface {
 	UpdateClientProfile(profile *models.ClientProfile) error
 
 	GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error)
+	GetAgencyProfileBySlug(slug string) (*models.AgencyProfile, error)
+	GetClientProfileBySlug(slug string) (*models.ClientProfile, error)
 	GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error)
 	UpdateUser(user *models.User) error
 
@@ -202,6 +204,24 @@ func (r *userRepository) RevokeAllSessions(userID string) error {
 // attach this function with userRepo struct
 func (r *userRepository) GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error) {
 	var profile models.IndividualProfile
+	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) GetAgencyProfileBySlug(slug string) (*models.AgencyProfile, error) {
+	var profile models.AgencyProfile
+	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (r *userRepository) GetClientProfileBySlug(slug string) (*models.ClientProfile, error) {
+	var profile models.ClientProfile
 	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
 	if err != nil {
 		return nil, err
