@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -19,6 +20,12 @@ import (
 )
 
 var ErrUserNotFound = errors.New("User is not found")
+var ErrProfileNotFound = errors.New("profile not found, create it first")
+var ErrProfileAlreadyExists = errors.New("profile already exists, use update instead")
+var ErrNothingToDelete = errors.New("nothing to delete")
+var ErrInternal = errors.New("internal server error")
+var ErrAccountTypeNotSet = errors.New("account type not set")
+var ErrInvalidAccountType = errors.New("invalid account type")
 
 type ProfileService struct {
 	userRepo repository.UserRepository
@@ -30,7 +37,48 @@ func NewProfileService() *ProfileService {
 	}
 }
 
-func (s *ProfileService) CreateOrUpdateIndividualProfile(userID string, req dto.CreateIndividualProfileRequest) (string, error) {
+// ================= INDIVIDUAL =================
+
+func (s *ProfileService) CreateIndividualProfile(userID string, req dto.CreateIndividualProfileRequest) (string, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+
+	if user.AccountType == nil || *user.AccountType != models.AccountTypeIndividual {
+		return "", errors.New("unauthorized: account type mismatch")
+	}
+
+	_, err = s.userRepo.GetIndividualProfileByUserID(userID)
+	if err == nil {
+		return "", ErrProfileAlreadyExists
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", err
+	}
+
+	profile := &models.IndividualProfile{UserID: user.ID}
+
+	slug, err := s.generateUniqueSlug(user.FirstName + " " + user.LastName)
+	if err != nil {
+		return "", err
+	}
+	profile.PublicUrlSlug = slug
+
+	if err := applyIndividualFields(profile, req); err != nil {
+		return "", err
+	}
+
+	if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
+		log.Printf("profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
+	}
+
+	s.checkAndActivateUser(userID)
+	return profile.PublicUrlSlug, nil
+}
+
+func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.CreateIndividualProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
@@ -41,67 +89,148 @@ func (s *ProfileService) CreateOrUpdateIndividualProfile(userID string, req dto.
 	}
 
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
-	var isNew bool
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			profile = &models.IndividualProfile{
-				UserID: user.ID,
-			}
-			isNew = true
-		} else {
-			return "", err
+			return "", ErrProfileNotFound
 		}
-	}
-
-	if isNew || profile.PublicUrlSlug == "" {
-		slug, err := s.generateUniqueSlug(user.FirstName + " " + user.LastName)
-		if err != nil {
-			return "", err
-		}
-		profile.PublicUrlSlug = slug
-	}
-
-	// Update fields
-	profile.Phone = req.Phone
-	if req.DateOfBirth != nil {
-		t, _ := time.Parse(time.RFC3339, *req.DateOfBirth) // simple parsing assumption
-		profile.DateOfBirth = &t
-	}
-	profile.Gender = models.Gender(req.Gender)
-	profile.AvatarURL = req.AvatarURL
-	profile.Bio = req.Bio
-	profile.Country = req.Country
-	profile.State = req.State
-	profile.City = req.City
-	profile.Headline = req.Headline
-	profile.PreferredLanguage = req.PreferredLanguage
-	profile.TimeZone = req.TimeZone
-	profile.CountryCode = req.CountryCode
-
-	profile.ExperienceLevel = req.ExperienceLevel
-	profile.Availability = req.Availability
-	profile.Skills = req.Skills
-	profile.ToolsTechnologies = req.ToolsTechnologies
-	profile.ServiceCategories = req.ServiceCategories
-
-	profile.PortfolioURL = req.PortfolioURL
-	profile.GithubURL = req.GithubURL
-	profile.LinkedinURL = req.LinkedinURL
-	profile.ResumeURL = req.ResumeURL
-
-	profile.TermsConfirmed = req.TermsConfirmed
-	profile.ProfileVisibility = req.ProfileVisibility
-
-	err = s.userRepo.UpdateIndividualProfile(profile)
-	if err != nil {
 		return "", err
+	}
+
+	if err := applyIndividualFields(profile, req); err != nil {
+		return "", err
+	}
+
+	if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
+		log.Printf("profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
 	}
 
 	s.checkAndActivateUser(userID)
 	return profile.PublicUrlSlug, nil
 }
 
-func (s *ProfileService) CreateOrUpdateAgencyProfile(userID string, req dto.CreateAgencyProfileRequest) (string, error) {
+// applyIndividualFields selectively updates only the fields present (non-nil) in req.
+func applyIndividualFields(profile *models.IndividualProfile, req dto.CreateIndividualProfileRequest) error {
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
+	if req.DateOfBirth != nil {
+		t, err := time.Parse("2006-01-02", *req.DateOfBirth)
+		if err != nil {
+			return errors.New("invalid date_of_birth format, expected YYYY-MM-DD")
+		}
+		profile.DateOfBirth = &t
+	}
+	if req.Gender != nil {
+		profile.Gender = models.Gender(*req.Gender)
+	}
+	if req.AvatarURL != nil {
+		profile.AvatarURL = *req.AvatarURL
+	}
+	if req.Bio != nil {
+		profile.Bio = *req.Bio
+	}
+	if req.Country != nil {
+		profile.Country = *req.Country
+	}
+	if req.State != nil {
+		profile.State = *req.State
+	}
+	if req.City != nil {
+		profile.City = *req.City
+	}
+	if req.Headline != nil {
+		profile.Headline = *req.Headline
+	}
+	if req.PreferredLanguage != nil {
+		profile.PreferredLanguage = *req.PreferredLanguage
+	}
+	if req.TimeZone != nil {
+		profile.TimeZone = *req.TimeZone
+	}
+	if req.CountryCode != nil {
+		profile.CountryCode = *req.CountryCode
+	}
+	if req.ExperienceLevel != nil {
+		profile.ExperienceLevel = *req.ExperienceLevel
+	}
+	if req.Availability != nil {
+		profile.Availability = *req.Availability
+	}
+	if req.Skills != nil {
+		profile.Skills = *req.Skills
+	}
+	if req.ToolsTechnologies != nil {
+		profile.ToolsTechnologies = *req.ToolsTechnologies
+	}
+	if req.ServiceCategories != nil {
+		profile.ServiceCategories = *req.ServiceCategories
+	}
+	if req.PortfolioURL != nil {
+		profile.PortfolioURL = *req.PortfolioURL
+	}
+	if req.GithubURL != nil {
+		profile.GithubURL = *req.GithubURL
+	}
+	if req.LinkedinURL != nil {
+		profile.LinkedinURL = *req.LinkedinURL
+	}
+	if req.ResumeURL != nil {
+		profile.ResumeURL = *req.ResumeURL
+	}
+	if req.TermsConfirmed != nil {
+		profile.TermsConfirmed = *req.TermsConfirmed
+	}
+	if req.ProfileVisibility != nil {
+		profile.ProfileVisibility = *req.ProfileVisibility
+	}
+	return nil
+}
+
+// ================= AGENCY =================
+
+func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgencyProfileRequest) (string, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+
+	if user.AccountType == nil || *user.AccountType != models.AccountTypeAgencyAdmin {
+		return "", errors.New("unauthorized: account type mismatch")
+	}
+
+	_, err = s.userRepo.GetAgencyProfileByUserID(userID)
+	if err == nil {
+		return "", ErrProfileAlreadyExists
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", err
+	}
+
+	if req.AgencyName == nil || *req.AgencyName == "" {
+		return "", errors.New("agency_name is required to create a profile")
+	}
+
+	profile := &models.AgencyProfile{UserID: user.ID}
+
+	slug, err := s.generateUniqueSlug(*req.AgencyName)
+	if err != nil {
+		return "", err
+	}
+	profile.PublicUrlSlug = slug
+
+	applyAgencyFields(profile, req)
+
+	if err := s.userRepo.UpdateAgencyProfile(profile); err != nil {
+		log.Printf("agency profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
+	}
+
+	s.checkAndActivateUser(userID)
+	return profile.PublicUrlSlug, nil
+}
+
+func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.CreateAgencyProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
@@ -112,54 +241,116 @@ func (s *ProfileService) CreateOrUpdateAgencyProfile(userID string, req dto.Crea
 	}
 
 	profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
-	var isNew bool
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			profile = &models.AgencyProfile{
-				UserID: user.ID,
-			}
-			isNew = true
-		} else {
-			return "", err
+			return "", ErrProfileNotFound
 		}
-	}
-
-	if isNew || profile.PublicUrlSlug == "" {
-		slug, err := s.generateUniqueSlug(req.AgencyName)
-		if err != nil {
-			return "", err
-		}
-		profile.PublicUrlSlug = slug
-	}
-
-	profile.AgencyName = req.AgencyName
-	profile.LogoURL = req.LogoURL
-	profile.Description = req.Description
-	profile.WebsiteURL = req.WebsiteURL
-
-	profile.ServicesOffered = req.ServicesOffered
-	profile.Industries = req.Industries
-	profile.TeamSize = req.TeamSize
-
-	profile.ContactName = req.ContactName
-	profile.Phone = req.Phone
-	profile.RegistrationNo = req.RegistrationNo
-	profile.Country = req.Country
-	profile.State = req.State
-	profile.City = req.City
-	profile.TimeZone = req.TimeZone
-	profile.CountryCode = req.CountryCode
-
-	err = s.userRepo.UpdateAgencyProfile(profile)
-	if err != nil {
 		return "", err
+	}
+
+	applyAgencyFields(profile, req)
+
+	if err := s.userRepo.UpdateAgencyProfile(profile); err != nil {
+		log.Printf("agency profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
 	}
 
 	s.checkAndActivateUser(userID)
 	return profile.PublicUrlSlug, nil
 }
 
-func (s *ProfileService) CreateOrUpdateClientProfile(userID string, req dto.CreateClientProfileRequest) (string, error) {
+func applyAgencyFields(profile *models.AgencyProfile, req dto.CreateAgencyProfileRequest) {
+	if req.AgencyName != nil {
+		profile.AgencyName = *req.AgencyName
+	}
+	if req.LogoURL != nil {
+		profile.LogoURL = *req.LogoURL
+	}
+	if req.Description != nil {
+		profile.Description = *req.Description
+	}
+	if req.WebsiteURL != nil {
+		profile.WebsiteURL = *req.WebsiteURL
+	}
+	if req.ServicesOffered != nil {
+		profile.ServicesOffered = *req.ServicesOffered
+	}
+	if req.Industries != nil {
+		profile.Industries = *req.Industries
+	}
+	if req.TeamSize != nil {
+		profile.TeamSize = *req.TeamSize
+	}
+	if req.ContactName != nil {
+		profile.ContactName = *req.ContactName
+	}
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
+	if req.RegistrationNo != nil {
+		profile.RegistrationNo = *req.RegistrationNo
+	}
+	if req.Country != nil {
+		profile.Country = *req.Country
+	}
+	if req.State != nil {
+		profile.State = *req.State
+	}
+	if req.City != nil {
+		profile.City = *req.City
+	}
+	if req.TimeZone != nil {
+		profile.TimeZone = *req.TimeZone
+	}
+	if req.CountryCode != nil {
+		profile.CountryCode = *req.CountryCode
+	}
+}
+
+// ================= CLIENT =================
+
+func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClientProfileRequest) (string, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+
+	if user.AccountType == nil || *user.AccountType != models.AccountTypeClientAdmin {
+		return "", errors.New("unauthorized: account type mismatch")
+	}
+
+	_, err = s.userRepo.GetClientProfileByUserID(userID)
+	if err == nil {
+		return "", ErrProfileAlreadyExists
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", err
+	}
+
+	if req.CompanyName == nil || *req.CompanyName == "" {
+		return "", errors.New("company_name is required to create a profile")
+	}
+
+	profile := &models.ClientProfile{UserID: user.ID}
+
+	slug, err := s.generateUniqueSlug(*req.CompanyName)
+	if err != nil {
+		return "", err
+	}
+	profile.PublicUrlSlug = slug
+
+	applyClientFields(profile, req)
+
+	if err := s.userRepo.UpdateClientProfile(profile); err != nil {
+		log.Printf("client profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
+	}
+
+	s.checkAndActivateUser(userID)
+	return profile.PublicUrlSlug, nil
+}
+
+func (s *ProfileService) UpdateClientProfile(userID string, req dto.CreateClientProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
@@ -170,56 +361,82 @@ func (s *ProfileService) CreateOrUpdateClientProfile(userID string, req dto.Crea
 	}
 
 	profile, err := s.userRepo.GetClientProfileByUserID(userID)
-	var isNew bool
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			profile = &models.ClientProfile{
-				UserID: user.ID,
-			}
-			isNew = true
-		} else {
-			return "", err
+			return "", ErrProfileNotFound
 		}
-	}
-
-	if isNew || profile.PublicUrlSlug == "" {
-		slug, err := s.generateUniqueSlug(req.CompanyName)
-		if err != nil {
-			return "", err
-		}
-		profile.PublicUrlSlug = slug
-	}
-
-	profile.CompanyName = req.CompanyName
-	profile.LogoURL = req.LogoURL
-	profile.Industry = req.Industry
-	profile.WebsiteURL = req.WebsiteURL
-
-	profile.ProjectTypes = req.ProjectTypes
-	profile.BudgetRange = req.BudgetRange
-	profile.TeamSize = req.TeamSize
-
-	profile.ContactName = req.ContactName
-	profile.Phone = req.Phone
-	profile.Country = req.Country
-	profile.State = req.State
-	profile.City = req.City
-	profile.TimeZone = req.TimeZone
-	profile.CountryCode = req.CountryCode
-
-	err = s.userRepo.UpdateClientProfile(profile)
-	if err != nil {
 		return "", err
+	}
+
+	applyClientFields(profile, req)
+
+	if err := s.userRepo.UpdateClientProfile(profile); err != nil {
+		log.Printf("client profile save failed for user_id=%s: %v", userID, err)
+		return "", ErrInternal
 	}
 
 	s.checkAndActivateUser(userID)
 	return profile.PublicUrlSlug, nil
 }
 
+func applyClientFields(profile *models.ClientProfile, req dto.CreateClientProfileRequest) {
+	if req.CompanyName != nil {
+		profile.CompanyName = *req.CompanyName
+	}
+	if req.LogoURL != nil {
+		profile.LogoURL = *req.LogoURL
+	}
+	if req.Industry != nil {
+		profile.Industry = *req.Industry
+	}
+	if req.WebsiteURL != nil {
+		profile.WebsiteURL = *req.WebsiteURL
+	}
+	if req.ProjectTypes != nil {
+		profile.ProjectTypes = *req.ProjectTypes
+	}
+	if req.BudgetRange != nil {
+		profile.BudgetRange = *req.BudgetRange
+	}
+	if req.TeamSize != nil {
+		profile.TeamSize = *req.TeamSize
+	}
+	if req.ContactName != nil {
+		profile.ContactName = *req.ContactName
+	}
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
+	if req.Country != nil {
+		profile.Country = *req.Country
+	}
+	if req.State != nil {
+		profile.State = *req.State
+	}
+	if req.City != nil {
+		profile.City = *req.City
+	}
+	if req.TimeZone != nil {
+		profile.TimeZone = *req.TimeZone
+	}
+	if req.CountryCode != nil {
+		profile.CountryCode = *req.CountryCode
+	}
+}
+
+// ================= SHARED HELPERS =================
+
 func (s *ProfileService) checkAndActivateUser(userID string) {
 	verification, err := s.userRepo.GetVerificationRecordByUserID(userID)
-	if err == nil && verification != nil && verification.Status == models.VerificationApproved {
-		_ = s.userRepo.UpdateUserStatus(userID, string(models.StatusActive))
+	if err != nil {
+		log.Printf("checkAndActivateUser: failed to load verification for user_id=%s: %v", userID, err)
+		return
+	}
+	if verification == nil || verification.Status != models.VerificationApproved {
+		return
+	}
+	if err := s.userRepo.UpdateUserStatus(userID, string(models.StatusActive)); err != nil {
+		log.Printf("checkAndActivateUser: failed to activate user_id=%s: %v", userID, err)
 	}
 }
 
@@ -229,37 +446,150 @@ func (s *ProfileService) generateUniqueSlug(fullName string) (string, error) {
 	baseSlug = reg.ReplaceAllString(baseSlug, "-")
 	baseSlug = strings.Trim(baseSlug, "-")
 
-	id, err := gonanoid.New(8)
-	if err != nil {
-		return "", err
+	for i := 0; i < 5; i++ { // max 5 retries
+		id, err := gonanoid.New(8)
+		if err != nil {
+			return "", err
+		}
+
+		var slug string
+		if baseSlug == "" {
+			slug = id
+		} else {
+			slug = baseSlug + "-" + id
+		}
+
+		taken, err := s.isSlugTaken(slug)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return slug, nil
+		}
 	}
 
-	if baseSlug == "" {
-		return id, nil
-	}
-	return baseSlug + "-" + id, nil
+	return "", errors.New("failed to generate unique slug after multiple attempts")
 }
 
-func (s *ProfileService) GetMyProfile(userID string) (interface{}, error) {
+func (s *ProfileService) GetMyProfile(userID string) (*dto.GetMyProfileResponse, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
 
 	if user.AccountType == nil {
-		return nil, errors.New("account type not set")
+		return nil, ErrAccountTypeNotSet
 	}
 
 	switch *user.AccountType {
 	case models.AccountTypeIndividual:
-		return s.userRepo.GetIndividualProfileByUserID(userID)
+		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.GetMyProfileResponse{
+			AccountType: string(*user.AccountType),
+			Individual:  s.buildMyIndividualProfile(profile),
+		}, nil
 	case models.AccountTypeAgencyAdmin:
-		return s.userRepo.GetAgencyProfileByUserID(userID)
+		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.GetMyProfileResponse{
+			AccountType: string(*user.AccountType),
+			Agency:      s.buildMyAgencyProfile(profile),
+		}, nil
 	case models.AccountTypeClientAdmin:
-		return s.userRepo.GetClientProfileByUserID(userID)
+		profile, err := s.userRepo.GetClientProfileByUserID(userID)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.GetMyProfileResponse{
+			AccountType: string(*user.AccountType),
+			Client:      s.buildMyClientProfile(profile),
+		}, nil
 	default:
-		return nil, errors.New("invalid account type")
+		return nil, ErrInvalidAccountType
 	}
+}
+
+func (s *ProfileService) buildMyIndividualProfile(profile *models.IndividualProfile) *dto.MyIndividualProfile {
+	return &dto.MyIndividualProfile{
+		PublicUrlSlug:     profile.PublicUrlSlug,
+		Phone:             profile.Phone,
+		DateOfBirth:       formatDate(profile.DateOfBirth),
+		Gender:            string(profile.Gender),
+		AvatarURL:         profile.AvatarURL,
+		Bio:               profile.Bio,
+		Country:           profile.Country,
+		State:             profile.State,
+		City:              profile.City,
+		Headline:          profile.Headline,
+		PreferredLanguage: profile.PreferredLanguage,
+		TimeZone:          profile.TimeZone,
+		CountryCode:       profile.CountryCode,
+		ExperienceLevel:   profile.ExperienceLevel,
+		Availability:      profile.Availability,
+		Skills:            profile.Skills,
+		ToolsTechnologies: profile.ToolsTechnologies,
+		ServiceCategories: profile.ServiceCategories,
+		PortfolioURL:      profile.PortfolioURL,
+		GithubURL:         profile.GithubURL,
+		LinkedinURL:       profile.LinkedinURL,
+		ResumeURL:         profile.ResumeURL,
+		ProfileVisibility: profile.ProfileVisibility,
+	}
+}
+
+func (s *ProfileService) buildMyAgencyProfile(profile *models.AgencyProfile) *dto.MyAgencyProfile {
+	return &dto.MyAgencyProfile{
+		PublicUrlSlug:   profile.PublicUrlSlug,
+		AgencyName:      profile.AgencyName,
+		LogoURL:         profile.LogoURL,
+		Description:     profile.Description,
+		WebsiteURL:      profile.WebsiteURL,
+		ServicesOffered: profile.ServicesOffered,
+		Industries:      profile.Industries,
+		TeamSize:        profile.TeamSize,
+		ContactName:     profile.ContactName,
+		Phone:           profile.Phone,
+		RegistrationNo:  profile.RegistrationNo,
+		Country:         profile.Country,
+		State:           profile.State,
+		City:            profile.City,
+		TimeZone:        profile.TimeZone,
+		CountryCode:     profile.CountryCode,
+	}
+}
+
+func (s *ProfileService) buildMyClientProfile(profile *models.ClientProfile) *dto.MyClientProfile {
+	return &dto.MyClientProfile{
+		PublicUrlSlug: profile.PublicUrlSlug,
+		CompanyName:   profile.CompanyName,
+		LogoURL:       profile.LogoURL,
+		Industry:      profile.Industry,
+		WebsiteURL:    profile.WebsiteURL,
+		ProjectTypes:  profile.ProjectTypes,
+		BudgetRange:   profile.BudgetRange,
+		TeamSize:      profile.TeamSize,
+		ContactName:   profile.ContactName,
+		Phone:         profile.Phone,
+		Country:       profile.Country,
+		State:         profile.State,
+		City:          profile.City,
+		TimeZone:      profile.TimeZone,
+		CountryCode:   profile.CountryCode,
+	}
+}
+
+// formatDate renders a time as YYYY-MM-DD to keep the public/API contract
+// consistent with the accepted input format.
+func formatDate(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("2006-01-02")
 }
 
 func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
@@ -294,20 +624,21 @@ func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
 func (s *ProfileService) DeleteAvatar(userID string) error {
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 	if err != nil {
-		return errors.New("profile not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrProfileNotFound
+		}
+		return err
 	}
 
 	if profile.AvatarURL == "" {
-		return errors.New("no avatar to delete")
+		return ErrNothingToDelete
 	}
 
-	// Extract public ID and delete from Cloudinary
 	publicID := extractCloudinaryPublicID(profile.AvatarURL)
 	if publicID != "" {
 		_ = utils.DeleteFromCloudinary(publicID, "image")
 	}
 
-	// Clear the URL in the database
 	profile.AvatarURL = ""
 	return s.userRepo.UpdateIndividualProfile(profile)
 }
@@ -321,10 +652,13 @@ func (s *ProfileService) DeleteLogo(userID string) error {
 	if user.AccountType != nil && *user.AccountType == models.AccountTypeAgencyAdmin {
 		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
 		if err != nil {
-			return errors.New("profile not found")
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrProfileNotFound
+			}
+			return err
 		}
 		if profile.LogoURL == "" {
-			return errors.New("no logo to delete")
+			return ErrNothingToDelete
 		}
 		publicID := extractCloudinaryPublicID(profile.LogoURL)
 		if publicID != "" {
@@ -335,10 +669,13 @@ func (s *ProfileService) DeleteLogo(userID string) error {
 	} else if user.AccountType != nil && *user.AccountType == models.AccountTypeClientAdmin {
 		profile, err := s.userRepo.GetClientProfileByUserID(userID)
 		if err != nil {
-			return errors.New("profile not found")
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrProfileNotFound
+			}
+			return err
 		}
 		if profile.LogoURL == "" {
-			return errors.New("no logo to delete")
+			return ErrNothingToDelete
 		}
 		publicID := extractCloudinaryPublicID(profile.LogoURL)
 		if publicID != "" {
@@ -354,38 +691,35 @@ func (s *ProfileService) DeleteLogo(userID string) error {
 func (s *ProfileService) DeleteResume(userID string) error {
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 	if err != nil {
-		return errors.New("profile not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrProfileNotFound
+		}
+		return err
 	}
 
 	if profile.ResumeURL == "" {
-		return errors.New("no resume to delete")
+		return ErrNothingToDelete
 	}
 
-	// Extract public ID and delete from Cloudinary
 	publicID := extractCloudinaryPublicID(profile.ResumeURL)
 	if publicID != "" {
 		_ = utils.DeleteFromCloudinary(publicID, "raw")
 	}
 
-	// Clear the URL in the database
 	profile.ResumeURL = ""
 	return s.userRepo.UpdateIndividualProfile(profile)
 }
 
 func extractCloudinaryPublicID(url string) string {
-	// Find the "/upload/" part and take everything after the version segment
 	parts := strings.Split(url, "/upload/")
 	if len(parts) != 2 {
 		return ""
 	}
-	// parts[1] is like "v1234567890/avatars/filename.png"
 	afterUpload := parts[1]
-	// Skip the version segment (starts with "v" followed by digits)
 	segments := strings.SplitN(afterUpload, "/", 2)
 	if len(segments) != 2 {
 		return ""
 	}
-	// segments[1] is "avatars/filename.png" - remove the extension
 	pathWithExt := segments[1]
 	lastDot := strings.LastIndex(pathWithExt, ".")
 	if lastDot == -1 {
@@ -395,12 +729,24 @@ func extractCloudinaryPublicID(url string) string {
 }
 
 func (s *ProfileService) GetPublicProfile(slug string) (*dto.PublicProfileResponse, error) {
-	profile, err := s.userRepo.GetIndividualProfileBySlug(slug)
-	if err != nil {
-		return nil, errors.New("profile not found")
+	// Individual
+	if profile, err := s.userRepo.GetIndividualProfileBySlug(slug); err == nil {
+		return s.buildIndividualPublicProfileResponse(profile)
 	}
 
-	// Only show public profiles
+	if profile, err := s.userRepo.GetAgencyProfileBySlug(slug); err == nil {
+		return s.buildAgencyPublicProfileResponse(profile)
+	}
+
+	if profile, err := s.userRepo.GetClientProfileBySlug(slug); err == nil {
+		return s.buildClientPublicProfileResponse(profile)
+	}
+
+	return nil, errors.New("profile not found")
+}
+
+func (s *ProfileService) buildIndividualPublicProfileResponse(profile *models.IndividualProfile) (*dto.PublicProfileResponse, error) {
+
 	if profile.ProfileVisibility != "public" {
 		return nil, errors.New("this profile is private")
 	}
@@ -417,7 +763,7 @@ func (s *ProfileService) GetPublicProfile(slug string) (*dto.PublicProfileRespon
 
 	dob := ""
 	if profile.DateOfBirth != nil {
-		dob = profile.DateOfBirth.Format(time.RFC3339)
+		dob = profile.DateOfBirth.Format("2006-01-02")
 	}
 
 	phone := ""
@@ -459,6 +805,63 @@ func (s *ProfileService) GetPublicProfile(slug string) (*dto.PublicProfileRespon
 	return resp, nil
 }
 
+func (s *ProfileService) buildAgencyPublicProfileResponse(profile *models.AgencyProfile) (*dto.PublicProfileResponse, error) {
+	user, err := s.userRepo.GetUserByID(profile.UserID.String())
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	accountType := ""
+	if user.AccountType != nil {
+		accountType = string(*user.AccountType)
+	}
+
+	return &dto.PublicProfileResponse{
+		FirstName:     user.FirstName,
+		LastName:      user.LastName,
+		AccountType:   accountType,
+		Points:        user.Points,
+		AvatarURL:     profile.LogoURL,
+		Bio:           profile.Description,
+		Country:       profile.Country,
+		State:         profile.State,
+		City:          profile.City,
+		TimeZone:      profile.TimeZone,
+		CountryCode:   profile.CountryCode,
+		PublicUrlSlug: profile.PublicUrlSlug,
+		PortfolioURL:  profile.WebsiteURL,
+		MemberSince:   user.CreatedAt.Format("January 2006"),
+	}, nil
+}
+
+func (s *ProfileService) buildClientPublicProfileResponse(profile *models.ClientProfile) (*dto.PublicProfileResponse, error) {
+	user, err := s.userRepo.GetUserByID(profile.UserID.String())
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	accountType := ""
+	if user.AccountType != nil {
+		accountType = string(*user.AccountType)
+	}
+
+	return &dto.PublicProfileResponse{
+		FirstName:     user.FirstName,
+		LastName:      user.LastName,
+		AccountType:   accountType,
+		Points:        user.Points,
+		AvatarURL:     profile.LogoURL,
+		Country:       profile.Country,
+		State:         profile.State,
+		City:          profile.City,
+		TimeZone:      profile.TimeZone,
+		CountryCode:   profile.CountryCode,
+		PublicUrlSlug: profile.PublicUrlSlug,
+		PortfolioURL:  profile.WebsiteURL,
+		MemberSince:   user.CreatedAt.Format("January 2006"),
+	}, nil
+}
+
 func (s *ProfileService) GetUserPoints(userID string) (*dto.UserPointsResponse, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
@@ -470,7 +873,6 @@ func (s *ProfileService) GetUserPoints(userID string) (*dto.UserPointsResponse, 
 		accountType = string(*user.AccountType)
 	}
 
-	// Check if profile is complete
 	profileComplete := false
 	if user.AccountType != nil {
 		switch *user.AccountType {
@@ -505,7 +907,6 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 		return nil, ErrUserNotFound
 	}
 
-	// Collect all available profile data
 	exportData := map[string]interface{}{
 		"user": map[string]interface{}{
 			"id":             user.ID,
@@ -540,20 +941,17 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 
 	exportData["exported_at"] = time.Now().UTC().Format(time.RFC3339)
 
-	// Marshal to JSON
 	jsonData, err := json.MarshalIndent(exportData, "", "  ")
 	if err != nil {
 		return nil, errors.New("failed to generate export file")
 	}
 
-	// Upload to Cloudinary
 	filename := fmt.Sprintf("export-%s-%d", userID, time.Now().Unix())
 	downloadURL, err := utils.UploadJSONToCloudinary(jsonData, filename)
 	if err != nil {
 		return nil, errors.New("failed to upload export file")
 	}
 
-	// Email the download link to the user
 	go utils.SendDataExportEmail(user.Email, user.FirstName, downloadURL)
 
 	return &dto.ExportResponse{
@@ -563,20 +961,13 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 	}, nil
 }
 
-func (s *ProfileService) GetUserAccountType(userID string) (string, error) {
-	user, err := s.userRepo.GetUserByID(userID)
-	if err != nil {
-		return "", ErrUserNotFound
-	}
-	if user.AccountType == nil {
-		return "", errors.New("account type not set")
-	}
-	return string(*user.AccountType), nil
-}
-
 func (s *ProfileService) CheckSlugAvailability(slug string) (*dto.CheckSlugResponse, error) {
-	_, err := s.userRepo.GetIndividualProfileBySlug(slug)
-	if err == nil {
+	taken, err := s.isSlugTaken(slug)
+	if err != nil {
+		return nil, err
+	}
+
+	if taken {
 		alternatives := []string{
 			slug + "-pro",
 			slug + "-1",
@@ -588,13 +979,33 @@ func (s *ProfileService) CheckSlugAvailability(slug string) (*dto.CheckSlugRespo
 		}, nil
 	}
 
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-
 	return &dto.CheckSlugResponse{
 		Available: true,
 	}, nil
+}
+
+// isSlugTaken checks all three profile tables (individual, agency, client)
+// since all public slugs share the same namespace.
+func (s *ProfileService) isSlugTaken(slug string) (bool, error) {
+	if _, err := s.userRepo.GetIndividualProfileBySlug(slug); err == nil {
+		return true, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+
+	if _, err := s.userRepo.GetAgencyProfileBySlug(slug); err == nil {
+		return true, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+
+	if _, err := s.userRepo.GetClientProfileBySlug(slug); err == nil {
+		return true, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+
+	return false, nil
 }
 
 func (s *ProfileService) DeleteAccount(userID string, password string) error {
