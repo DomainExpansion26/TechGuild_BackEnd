@@ -1120,8 +1120,8 @@ func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePriv
 			}
 		}
 	}
-	pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
-	b, _ := json.Marshal(pref)
-	user.PrivacySettings = datatypes.JSON(b)
+  pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
+  b, _ := json.Marshal(pref)
+  user.PrivacySettings = datatypes.JSON(b)
 	return s.userRepo.UpdateUser(user)
 }
