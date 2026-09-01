@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
@@ -18,6 +19,15 @@ func UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountS
 
 	profileService := services.NewProfileService()
 	if err := profileService.UpdateAccountSettings(userID, input.Body); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidPassword) {
+			return nil, huma.Error401Unauthorized(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
@@ -32,6 +42,12 @@ func UpdateNotificationsHandler(ctx context.Context, input *dto.UpdateNotificati
 
 	profileService := services.NewProfileService()
 	if err := profileService.UpdateNotifications(userID, input.Body); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
@@ -46,6 +62,12 @@ func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyI
 
 	profileService := services.NewProfileService()
 	if err := profileService.UpdatePrivacySettings(userID, input.Body); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 

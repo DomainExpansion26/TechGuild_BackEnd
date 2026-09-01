@@ -24,8 +24,11 @@ var ErrProfileNotFound = errors.New("profile not found, create it first")
 var ErrProfileAlreadyExists = errors.New("profile already exists, use update instead")
 var ErrNothingToDelete = errors.New("nothing to delete")
 var ErrInternal = errors.New("internal server error")
+var ErrForbidden = errors.New("unauthorized: account type mismatch")
+var ErrValidation = errors.New("validation error")
 var ErrAccountTypeNotSet = errors.New("account type not set")
 var ErrInvalidAccountType = errors.New("invalid account type")
+var ErrInvalidPassword = errors.New("invalid password")
 
 type ProfileService struct {
 	userRepo repository.UserRepository
@@ -46,7 +49,7 @@ func (s *ProfileService) CreateIndividualProfile(userID string, req dto.CreateIn
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeIndividual {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	_, err = s.userRepo.GetIndividualProfileByUserID(userID)
@@ -65,7 +68,28 @@ func (s *ProfileService) CreateIndividualProfile(userID string, req dto.CreateIn
 	}
 	profile.PublicUrlSlug = slug
 
-	if err := applyIndividualFields(profile, req); err != nil {
+	if err := applyIndividualFields(profile, dto.UpdateIndividualProfileRequest{
+		DateOfBirth:       req.DateOfBirth,
+		Gender:            req.Gender,
+		AvatarURL:         req.AvatarURL,
+		Bio:               req.Bio,
+		Country:           req.Country,
+		City:              req.City,
+		Headline:          req.Headline,
+		PreferredLanguage: req.PreferredLanguage,
+		TimeZone:          req.TimeZone,
+		ExperienceLevel:   req.ExperienceLevel,
+		Availability:      req.Availability,
+		Skills:            req.Skills,
+		ToolsTechnologies: req.ToolsTechnologies,
+		ServiceCategories: req.ServiceCategories,
+		PortfolioURL:      req.PortfolioURL,
+		GithubURL:         req.GithubURL,
+		LinkedinURL:       req.LinkedinURL,
+		ResumeURL:         req.ResumeURL,
+		TermsConfirmed:    req.TermsConfirmed,
+		ProfileVisibility: req.ProfileVisibility,
+	}); err != nil {
 		return "", err
 	}
 
@@ -78,14 +102,14 @@ func (s *ProfileService) CreateIndividualProfile(userID string, req dto.CreateIn
 	return profile.PublicUrlSlug, nil
 }
 
-func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.CreateIndividualProfileRequest) (string, error) {
+func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.UpdateIndividualProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeIndividual {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
@@ -110,10 +134,7 @@ func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.CreateIn
 }
 
 // applyIndividualFields selectively updates only the fields present (non-nil) in req.
-func applyIndividualFields(profile *models.IndividualProfile, req dto.CreateIndividualProfileRequest) error {
-	if req.Phone != nil {
-		profile.Phone = req.Phone
-	}
+func applyIndividualFields(profile *models.IndividualProfile, req dto.UpdateIndividualProfileRequest) error {
 	if req.DateOfBirth != nil {
 		t, err := time.Parse("2006-01-02", *req.DateOfBirth)
 		if err != nil {
@@ -133,9 +154,6 @@ func applyIndividualFields(profile *models.IndividualProfile, req dto.CreateIndi
 	if req.Country != nil {
 		profile.Country = *req.Country
 	}
-	if req.State != nil {
-		profile.State = *req.State
-	}
 	if req.City != nil {
 		profile.City = *req.City
 	}
@@ -147,9 +165,6 @@ func applyIndividualFields(profile *models.IndividualProfile, req dto.CreateIndi
 	}
 	if req.TimeZone != nil {
 		profile.TimeZone = *req.TimeZone
-	}
-	if req.CountryCode != nil {
-		profile.CountryCode = *req.CountryCode
 	}
 	if req.ExperienceLevel != nil {
 		profile.ExperienceLevel = *req.ExperienceLevel
@@ -196,7 +211,7 @@ func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgency
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeAgencyAdmin {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	_, err = s.userRepo.GetAgencyProfileByUserID(userID)
@@ -207,19 +222,30 @@ func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgency
 		return "", err
 	}
 
-	if req.AgencyName == nil || *req.AgencyName == "" {
-		return "", errors.New("agency_name is required to create a profile")
+	if req.AgencyName == "" {
+		return "", fmt.Errorf("%w: agency_name is required to create a profile", ErrValidation)
 	}
 
 	profile := &models.AgencyProfile{UserID: user.ID}
 
-	slug, err := s.generateUniqueSlug(*req.AgencyName)
+	slug, err := s.generateUniqueSlug(req.AgencyName)
 	if err != nil {
 		return "", err
 	}
 	profile.PublicUrlSlug = slug
 
-	applyAgencyFields(profile, req)
+	applyAgencyFields(profile, dto.UpdateAgencyProfileRequest{
+		LogoURL:         req.LogoURL,
+		Description:     req.Description,
+		WebsiteURL:      req.WebsiteURL,
+		ServicesOffered: req.ServicesOffered,
+		Industries:      req.Industries,
+		TeamSize:        req.TeamSize,
+		ContactName:     req.ContactName,
+		Country:         req.Country,
+		City:            req.City,
+		TimeZone:        req.TimeZone,
+	})
 
 	if err := s.userRepo.UpdateAgencyProfile(profile); err != nil {
 		log.Printf("agency profile save failed for user_id=%s: %v", userID, err)
@@ -230,14 +256,14 @@ func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgency
 	return profile.PublicUrlSlug, nil
 }
 
-func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.CreateAgencyProfileRequest) (string, error) {
+func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.UpdateAgencyProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeAgencyAdmin {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
@@ -259,7 +285,7 @@ func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.CreateAgency
 	return profile.PublicUrlSlug, nil
 }
 
-func applyAgencyFields(profile *models.AgencyProfile, req dto.CreateAgencyProfileRequest) {
+func applyAgencyFields(profile *models.AgencyProfile, req dto.UpdateAgencyProfileRequest) {
 	if req.AgencyName != nil {
 		profile.AgencyName = *req.AgencyName
 	}
@@ -284,26 +310,14 @@ func applyAgencyFields(profile *models.AgencyProfile, req dto.CreateAgencyProfil
 	if req.ContactName != nil {
 		profile.ContactName = *req.ContactName
 	}
-	if req.Phone != nil {
-		profile.Phone = req.Phone
-	}
-	if req.RegistrationNo != nil {
-		profile.RegistrationNo = *req.RegistrationNo
-	}
 	if req.Country != nil {
 		profile.Country = *req.Country
-	}
-	if req.State != nil {
-		profile.State = *req.State
 	}
 	if req.City != nil {
 		profile.City = *req.City
 	}
 	if req.TimeZone != nil {
 		profile.TimeZone = *req.TimeZone
-	}
-	if req.CountryCode != nil {
-		profile.CountryCode = *req.CountryCode
 	}
 }
 
@@ -316,7 +330,7 @@ func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClient
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeClientAdmin {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	_, err = s.userRepo.GetClientProfileByUserID(userID)
@@ -327,19 +341,29 @@ func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClient
 		return "", err
 	}
 
-	if req.CompanyName == nil || *req.CompanyName == "" {
-		return "", errors.New("company_name is required to create a profile")
+	if req.CompanyName == "" {
+		return "", fmt.Errorf("%w: company_name is required to create a profile", ErrValidation)
 	}
 
 	profile := &models.ClientProfile{UserID: user.ID}
 
-	slug, err := s.generateUniqueSlug(*req.CompanyName)
+	slug, err := s.generateUniqueSlug(req.CompanyName)
 	if err != nil {
 		return "", err
 	}
 	profile.PublicUrlSlug = slug
 
-	applyClientFields(profile, req)
+	applyClientFields(profile, dto.UpdateClientProfileRequest{
+		LogoURL:      req.LogoURL,
+		Industry:     req.Industry,
+		WebsiteURL:   req.WebsiteURL,
+		ProjectTypes: req.ProjectTypes,
+		BudgetRange:  req.BudgetRange,
+		TeamSize:     req.TeamSize,
+		Country:      req.Country,
+		City:         req.City,
+		TimeZone:     req.TimeZone,
+	})
 
 	if err := s.userRepo.UpdateClientProfile(profile); err != nil {
 		log.Printf("client profile save failed for user_id=%s: %v", userID, err)
@@ -350,14 +374,14 @@ func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClient
 	return profile.PublicUrlSlug, nil
 }
 
-func (s *ProfileService) UpdateClientProfile(userID string, req dto.CreateClientProfileRequest) (string, error) {
+func (s *ProfileService) UpdateClientProfile(userID string, req dto.UpdateClientProfileRequest) (string, error) {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return "", ErrUserNotFound
 	}
 
 	if user.AccountType == nil || *user.AccountType != models.AccountTypeClientAdmin {
-		return "", errors.New("unauthorized: account type mismatch")
+		return "", ErrForbidden
 	}
 
 	profile, err := s.userRepo.GetClientProfileByUserID(userID)
@@ -379,7 +403,7 @@ func (s *ProfileService) UpdateClientProfile(userID string, req dto.CreateClient
 	return profile.PublicUrlSlug, nil
 }
 
-func applyClientFields(profile *models.ClientProfile, req dto.CreateClientProfileRequest) {
+func applyClientFields(profile *models.ClientProfile, req dto.UpdateClientProfileRequest) {
 	if req.CompanyName != nil {
 		profile.CompanyName = *req.CompanyName
 	}
@@ -401,26 +425,14 @@ func applyClientFields(profile *models.ClientProfile, req dto.CreateClientProfil
 	if req.TeamSize != nil {
 		profile.TeamSize = *req.TeamSize
 	}
-	if req.ContactName != nil {
-		profile.ContactName = *req.ContactName
-	}
-	if req.Phone != nil {
-		profile.Phone = req.Phone
-	}
 	if req.Country != nil {
 		profile.Country = *req.Country
-	}
-	if req.State != nil {
-		profile.State = *req.State
 	}
 	if req.City != nil {
 		profile.City = *req.City
 	}
 	if req.TimeZone != nil {
 		profile.TimeZone = *req.TimeZone
-	}
-	if req.CountryCode != nil {
-		profile.CountryCode = *req.CountryCode
 	}
 }
 
@@ -685,7 +697,7 @@ func (s *ProfileService) DeleteLogo(userID string) error {
 		return s.userRepo.UpdateClientProfile(profile)
 	}
 
-	return errors.New("unauthorized: account type cannot have logo")
+	return ErrForbidden
 }
 
 func (s *ProfileService) DeleteResume(userID string) error {
@@ -732,17 +744,28 @@ func (s *ProfileService) GetPublicProfile(slug string) (*dto.PublicProfileRespon
 	// Individual
 	if profile, err := s.userRepo.GetIndividualProfileBySlug(slug); err == nil {
 		return s.buildIndividualPublicProfileResponse(profile)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("GetPublicProfile: individual lookup failed for slug=%s: %v", slug, err)
+		return nil, ErrInternal
 	}
 
+	// Agency
 	if profile, err := s.userRepo.GetAgencyProfileBySlug(slug); err == nil {
 		return s.buildAgencyPublicProfileResponse(profile)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("GetPublicProfile: agency lookup failed for slug=%s: %v", slug, err)
+		return nil, ErrInternal
 	}
 
+	// Client
 	if profile, err := s.userRepo.GetClientProfileBySlug(slug); err == nil {
 		return s.buildClientPublicProfileResponse(profile)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("GetPublicProfile: client lookup failed for slug=%s: %v", slug, err)
+		return nil, ErrInternal
 	}
 
-	return nil, errors.New("profile not found")
+	return nil, ErrProfileNotFound
 }
 
 func (s *ProfileService) buildIndividualPublicProfileResponse(profile *models.IndividualProfile) (*dto.PublicProfileResponse, error) {
@@ -1015,7 +1038,7 @@ func (s *ProfileService) DeleteAccount(userID string, password string) error {
 	}
 
 	if !utils.CheckPassword(password, user.PasswordHash) {
-		return errors.New("invalid password")
+		return ErrInvalidPassword
 	}
 
 	user.Status = models.StatusPendingDeletion
@@ -1041,7 +1064,7 @@ func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAcco
 
 	if req.Email != "" && req.Email != user.Email {
 		if !utils.CheckPassword(req.Password, user.PasswordHash) {
-			return errors.New("invalid password for email update")
+			return ErrInvalidPassword
 		}
 		user.Email = req.Email
 		user.EmailVerified = false
@@ -1051,7 +1074,7 @@ func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAcco
 	}
 	if req.NewPassword != "" {
 		if !utils.CheckPassword(req.Password, user.PasswordHash) {
-			return errors.New("invalid password for password update")
+			return ErrInvalidPassword
 		}
 		hashed, err := utils.HashPassword(req.NewPassword)
 		if err != nil {
@@ -1083,15 +1106,20 @@ func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePriv
 
 	if user.AccountType != nil && *user.AccountType == models.AccountTypeIndividual {
 		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("UpdatePrivacySettings: failed to fetch individual profile for user=%s: %v", userID, err)
+			return fmt.Errorf("%w: %v", ErrInternal, err)
+		}
 		if err == nil {
 			profile.ProfileVisibility = req.ProfileVisibility
-			_ = s.userRepo.UpdateIndividualProfile(profile)
+			if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
+				log.Printf("UpdatePrivacySettings: failed to update profile visibility for user=%s: %v", userID, err)
+				return fmt.Errorf("%w: %v", ErrInternal, err)
+			}
 		}
 	}
-
-	pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
-	b, _ := json.Marshal(pref)
-	user.PrivacySettings = datatypes.JSON(b)
-
+        pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
+        b, _ := json.Marshal(pref)
+        user.PrivacySettings = datatypes.JSON(b)
 	return s.userRepo.UpdateUser(user)
 }
