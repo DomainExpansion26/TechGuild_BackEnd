@@ -24,7 +24,7 @@ var ErrProfileNotFound = errors.New("profile not found, create it first")
 var ErrProfileAlreadyExists = errors.New("profile already exists, use update instead")
 var ErrNothingToDelete = errors.New("nothing to delete")
 var ErrInternal = errors.New("internal server error")
-var ErrForbidden = errors.New("unauthorized: account type mismatch")
+var ErrForbidden = errors.New("forbidden: account type mismatch")
 var ErrValidation = errors.New("validation error")
 var ErrAccountTypeNotSet = errors.New("account type not set")
 var ErrInvalidAccountType = errors.New("invalid account type")
@@ -138,7 +138,7 @@ func applyIndividualFields(profile *models.IndividualProfile, req dto.UpdateIndi
 	if req.DateOfBirth != nil {
 		t, err := time.Parse("2006-01-02", *req.DateOfBirth)
 		if err != nil {
-			return errors.New("invalid date_of_birth format, expected YYYY-MM-DD")
+			return fmt.Errorf("%w: invalid date_of_birth format, expected YYYY-MM-DD", ErrValidation)
 		}
 		profile.DateOfBirth = &t
 	}
@@ -233,6 +233,7 @@ func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgency
 		return "", err
 	}
 	profile.PublicUrlSlug = slug
+	profile.AgencyName = req.AgencyName
 
 	applyAgencyFields(profile, dto.UpdateAgencyProfileRequest{
 		LogoURL:         req.LogoURL,
@@ -352,6 +353,7 @@ func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClient
 		return "", err
 	}
 	profile.PublicUrlSlug = slug
+	profile.CompanyName = req.CompanyName
 
 	applyClientFields(profile, dto.UpdateClientProfileRequest{
 		LogoURL:      req.LogoURL,
@@ -607,19 +609,19 @@ func formatDate(t *time.Time) string {
 func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return errors.New("invalid email or password")
+		return ErrInvalidPassword
 	}
 
 	if !utils.CheckPassword(req.Password, user.PasswordHash) {
-		return errors.New("invalid email or password")
+		return ErrInvalidPassword
 	}
 
 	if !user.EmailVerified {
-		return errors.New("please verify your email first")
+		return fmt.Errorf("%w: please verify your email first", ErrValidation)
 	}
 
 	if user.AccountType != nil && *user.AccountType != "" {
-		return errors.New("account type already set")
+		return ErrProfileAlreadyExists
 	}
 
 	err = s.userRepo.UpdateAccountType(user.ID.String(), models.AccountType(req.AccountType))
@@ -1108,18 +1110,18 @@ func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePriv
 		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Printf("UpdatePrivacySettings: failed to fetch individual profile for user=%s: %v", userID, err)
-			return fmt.Errorf("%w: %v", ErrInternal, err)
+			return ErrInternal
 		}
 		if err == nil {
 			profile.ProfileVisibility = req.ProfileVisibility
 			if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
 				log.Printf("UpdatePrivacySettings: failed to update profile visibility for user=%s: %v", userID, err)
-				return fmt.Errorf("%w: %v", ErrInternal, err)
+				return ErrInternal
 			}
 		}
 	}
-        pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
-        b, _ := json.Marshal(pref)
-        user.PrivacySettings = datatypes.JSON(b)
+	pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
+	b, _ := json.Marshal(pref)
+	user.PrivacySettings = datatypes.JSON(b)
 	return s.userRepo.UpdateUser(user)
 }
