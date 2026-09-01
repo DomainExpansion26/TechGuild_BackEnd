@@ -59,11 +59,11 @@ type User struct {
 	// Relationships of user with its projects, applications, and other entities
 	Applications []ProjectApplication `gorm:"foreignKey:ApplicantID"`
 
-	//contracts 
+	//contracts
 	ClientContracts []ProjectContract `gorm:"foreignKey:ClientID"`
 
 	FreelancerContracts []ProjectContract `gorm:"foreignKey:FreelancerID"`
-	CreatedAt time.Time
+	CreatedAt           time.Time
 
 	UpdatedAt time.Time
 
