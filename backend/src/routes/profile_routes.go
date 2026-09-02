@@ -116,6 +116,17 @@ func RegisterProfileRoutes(api huma.API) {
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
+		OperationID: "create-profile-deprecated",
+		Method:      "POST",
+		Path:        "/v1/profile",
+		Tags:        []string{"Profile"},
+		Summary:     "Deprecated: use POST /v1/profile/{type} instead",
+		Deprecated:  true,
+		Middlewares: authMw,
+	}, controllers.DeprecatedProfileCreateHandler)
+
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "create-individual-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/individual",
@@ -126,8 +137,7 @@ func RegisterProfileRoutes(api huma.API) {
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.CreateIndividualProfileRequest{
-						Country: ptr("India"),
-						// State:             ptr("Maharashtra"),
+						Country:           ptr("India"),
 						City:              ptr("Mumbai"),
 						TimeZone:          ptr("Asia/Kolkata"),
 						Headline:          ptr("Senior Full-Stack Developer"),
@@ -141,13 +151,10 @@ func RegisterProfileRoutes(api huma.API) {
 						GithubURL:         ptr("https://github.com/johndoe"),
 						LinkedinURL:       ptr("https://linkedin.com/in/johndoe"),
 						ResumeURL:         ptr("https://storage.example.com/resumes/johndoe.pdf"),
-						// Email:             ptr("johndoe@example.com"),
-						// Phone:             ptr("+1234567890"),
 						DateOfBirth:       ptr("1990-01-15"),
 						Gender:            ptr("male"),
 						AvatarURL:         ptr("https://storage.example.com/avatars/user.png"),
 						PreferredLanguage: ptr("en"),
-						// CountryCode:       ptr("+91"),
 						TermsConfirmed:    ptr(true),
 						ProfileVisibility: ptr("public"),
 					},
@@ -168,7 +175,7 @@ func RegisterProfileRoutes(api huma.API) {
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.CreateAgencyProfileRequest{
-						AgencyName:      ptr("Acme Digital Agency"),
+						AgencyName:      "Acme Digital Agency",
 						LogoURL:         ptr("https://storage.example.com/logos/acme.png"),
 						Description:     ptr("Digital agency specializing in web and mobile development"),
 						WebsiteURL:      ptr("https://acme.example.com"),
@@ -176,14 +183,9 @@ func RegisterProfileRoutes(api huma.API) {
 						Industries:      ptr([]string{"Technology", "E-commerce"}),
 						TeamSize:        ptr("10-50"),
 						ContactName:     ptr("Jane Smith"),
-						// Email:           ptr("janesmith@example.com"),
-						// Phone:          ptr("+1234567890"),
-						// RegistrationNo: ptr("U74110MH2020PTC123456"),
-						Country: ptr("India"),
-						// State:          ptr("Maharashtra"),
-						City:     ptr("Mumbai"),
-						TimeZone: ptr("Asia/Kolkata"),
-						// CountryCode:    ptr("+91"),
+						Country:         ptr("India"),
+						City:            ptr("Mumbai"),
+						TimeZone:        ptr("Asia/Kolkata"),
 					},
 				},
 			},
@@ -203,21 +205,16 @@ func RegisterProfileRoutes(api huma.API) {
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.CreateClientProfileRequest{
-						CompanyName:  ptr("TechStart Inc"),
+						CompanyName:  "TechStart Inc",
 						LogoURL:      ptr("https://storage.example.com/logos/techstart.png"),
 						Industry:     ptr("technology"),
 						WebsiteURL:   ptr("https://techstart.example.com"),
 						ProjectTypes: ptr([]string{"Web Development", "Mobile App"}),
 						BudgetRange:  ptr("$5,000 - $20,000"),
 						TeamSize:     ptr("5-10"),
-						// ContactName:  ptr("Alice Johnson"),
-						// Email:        ptr("alicejohnson@example.com"),
-						// Phone:       ptr("+1234567890"),
-						Country: ptr("United States"),
-						// State:       ptr("California"),
-						City:     ptr("San Francisco"),
-						TimeZone: ptr("America/Los_Angeles"),
-						// CountryCode: ptr("+1"),
+						Country:      ptr("United States"),
+						City:         ptr("San Francisco"),
+						TimeZone:     ptr("America/Los_Angeles"),
 					},
 				},
 			},
