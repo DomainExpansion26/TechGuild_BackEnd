@@ -73,6 +73,9 @@ func UpdateIndividualProfileHandler(ctx context.Context, input *dto.UpdateIndivi
 		if errors.Is(err, services.ErrForbidden) {
 			return nil, huma.Error403Forbidden(err.Error())
 		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		if errors.Is(err, services.ErrInternal) {
 			return nil, huma.Error500InternalServerError(err.Error())
 		}
@@ -140,6 +143,9 @@ func UpdateAgencyProfileHandler(ctx context.Context, input *dto.UpdateAgencyProf
 		if errors.Is(err, services.ErrForbidden) {
 			return nil, huma.Error403Forbidden(err.Error())
 		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		if errors.Is(err, services.ErrInternal) {
 			return nil, huma.Error500InternalServerError(err.Error())
 		}
@@ -206,6 +212,9 @@ func UpdateClientProfileHandler(ctx context.Context, input *dto.UpdateClientProf
 		if errors.Is(err, services.ErrForbidden) {
 			return nil, huma.Error403Forbidden(err.Error())
 		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		if errors.Is(err, services.ErrInternal) {
 			return nil, huma.Error500InternalServerError(err.Error())
 		}
@@ -265,6 +274,9 @@ func SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) 
 		}
 		if errors.Is(err, services.ErrInvalidAccountType) {
 			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidPassword) {
+			return nil, huma.Error401Unauthorized(err.Error())
 		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
