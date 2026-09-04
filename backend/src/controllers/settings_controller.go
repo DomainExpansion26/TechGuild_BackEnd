@@ -65,6 +65,15 @@ func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyI
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrAccountTypeNotSet) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidAccountType) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
 		if errors.Is(err, services.ErrValidation) {
 			return nil, huma.Error400BadRequest(err.Error())
 		}

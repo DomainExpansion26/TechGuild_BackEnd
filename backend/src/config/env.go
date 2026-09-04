@@ -5,11 +5,9 @@ import "github.com/spf13/viper"
 func LoadConfig() (*Config, error) {
 
 	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
 
-	err := viper.ReadInConfig()
-	if err != nil {
-		return nil, err
-	}
+	_ = viper.ReadInConfig()
 
 	cfg := &Config{
 		AppName: viper.GetString("APP_NAME"),
