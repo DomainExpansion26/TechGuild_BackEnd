@@ -48,31 +48,47 @@ type UserRepository interface {
 
 	GetSessionByToken(refreshToken string) (*models.UserSession, error)
 	RevokeSessionByID(sessionID uuid.UUID) error
+
+	WithTransaction(fn func(txRepo UserRepository) error) error
 }
 
-type userRepository struct{}
+type userRepository struct {
+	db *gorm.DB
+}
 
 func NewUserRepository() UserRepository {
-	return &userRepository{}
+	return &userRepository{db: postgres.DB}
+}
+
+// NEW: returns a repo bound to a transaction
+func NewUserRepositoryTx(tx *gorm.DB) UserRepository {
+	return &userRepository{db: tx}
 }
 
 func (r *userRepository) CreateUser(user *models.User) error {
-	return postgres.DB.Create(user).Error
+	return r.db.Create(user).Error
+}
+
+func (r *userRepository) WithTransaction(fn func(txRepo UserRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := NewUserRepositoryTx(tx)
+		return fn(txRepo)
+	})
 }
 
 func (r *userRepository) CreateProfile(profile interface{}) error {
-	return postgres.DB.Create(profile).Error
+	return r.db.Create(profile).Error
 }
 
 func (r *userRepository) CreateVerification(record *models.VerificationRecord) error {
-	return postgres.DB.Create(record).Error
+	return r.db.Create(record).Error
 }
 
 func (r *userRepository) GetUserByID(userID string) (*models.User, error) {
 
 	var user models.User
 
-	err := postgres.DB.Where("id = ?", userID).First(&user).Error
+	err := r.db.Where("id = ?", userID).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +99,7 @@ func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
 
 	var user models.User
 
-	err := postgres.DB.Where("email = ?", email).First(&user).Error
+	err := r.db.Where("email = ?", email).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +109,7 @@ func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
 
 func (r *userRepository) UpdateUserStatus(userID string, status string) error {
 
-	return postgres.DB.
+	return r.db.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("status", status).Error
@@ -101,19 +117,22 @@ func (r *userRepository) UpdateUserStatus(userID string, status string) error {
 
 func (r *userRepository) UpdateEmailVerified(userID string, verified bool) error {
 
-	return postgres.DB.
+	return r.db.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("email_verified", verified).Error
 }
 
 func (r *userRepository) DeleteUser(userID string) error {
-	return postgres.DB.Where("id = ?", userID).Delete(&models.User{}).Error
+	return r.db.Where("id = ?", userID).Delete(&models.User{}).Error
 }
 
+// UpdateAccountType sets account_type AND resets rank to "F" —
+// intentional side effect for fresh account-type assignment; do not
+// call this for account_type changes where rank should be preserved.
 func (r *userRepository) UpdateAccountType(userID string, accountType models.AccountType) error {
 
-	return postgres.DB.
+	return r.db.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]interface{}{
@@ -123,7 +142,7 @@ func (r *userRepository) UpdateAccountType(userID string, accountType models.Acc
 }
 
 func (r *userRepository) AddUserPoints(userID string, points int) error {
-	return postgres.DB.
+	return r.db.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		UpdateColumn("points", gorm.Expr("points + ?", points)).Error
@@ -131,23 +150,23 @@ func (r *userRepository) AddUserPoints(userID string, points int) error {
 
 func (r *userRepository) CreateSession(session *models.UserSession) error {
 	session.RefreshToken = utils.HashToken(session.RefreshToken)
-	return postgres.DB.Create(session).Error
+	return r.db.Create(session).Error
 }
 func (r *userRepository) UpdateUser(user *models.User) error {
-	return postgres.DB.Save(user).Error
+	return r.db.Save(user).Error
 }
 func (r *userRepository) GetSession(refreshToken string) (*models.UserSession, error) {
 
 	var session models.UserSession
 	hashed := utils.HashToken(refreshToken)
 
-	err := postgres.DB.
+	err := r.db.
 		Where("refresh_token = ? AND expires_at > ?", hashed, time.Now()).
 		First(&session).Error
 	// NOTE: is_revoked filter removed from WHERE (fixes Bug 3 reuse-detection too) —
 	// caller must check session.IsRevoked explicitly after fetch.
 	if err != nil {
-		return nil, errors.New("session not found")
+		return nil, err
 	}
 
 	return &session, nil
@@ -156,7 +175,7 @@ func (r *userRepository) GetSession(refreshToken string) (*models.UserSession, e
 func (r *userRepository) GetSessionByToken(refreshToken string) (*models.UserSession, error) {
 	var session models.UserSession
 	hashed := utils.HashToken(refreshToken)
-	err := postgres.DB.Where("refresh_token = ?", hashed).First(&session).Error
+	err := r.db.Where("refresh_token = ?", hashed).First(&session).Error
 	if err != nil {
 		return nil, errors.New("session not found")
 	}
@@ -165,14 +184,14 @@ func (r *userRepository) GetSessionByToken(refreshToken string) (*models.UserSes
 
 func (r *userRepository) RevokeSession(refreshToken string) error {
 	hashed := utils.HashToken(refreshToken)
-	return postgres.DB.
+	return r.db.
 		Model(&models.UserSession{}).
 		Where("refresh_token = ?", hashed).
 		Update("is_revoked", true).Error
 }
 
 func (r *userRepository) RevokeSessionByID(sessionID uuid.UUID) error {
-	return postgres.DB.
+	return r.db.
 		Model(&models.UserSession{}).
 		Where("id = ?", sessionID).
 		Update("is_revoked", true).Error
@@ -182,7 +201,7 @@ func (r *userRepository) RevokeSessionByID(sessionID uuid.UUID) error {
 func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
 	oldHashed := utils.HashToken(oldToken)
 	newHashed := utils.HashToken(newToken)
-	return postgres.DB.
+	return r.db.
 		Model(&models.UserSession{}).
 		Where("refresh_token = ? AND is_revoked = false", oldHashed).
 		Update("refresh_token", newHashed).Error
@@ -190,7 +209,7 @@ func (r *userRepository) UpdateRefreshToken(oldToken, newToken string) error {
 
 func (r *userRepository) UpdatePassword(userID string, passwordHash string) error {
 
-	return postgres.DB.
+	return r.db.
 		Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("password_hash", passwordHash).Error
@@ -198,7 +217,7 @@ func (r *userRepository) UpdatePassword(userID string, passwordHash string) erro
 
 func (r *userRepository) RevokeAllSessions(userID string) error {
 
-	return postgres.DB.
+	return r.db.
 		Model(&models.UserSession{}).
 		Where("user_id = ?", userID).
 		Update("is_revoked", true).Error
@@ -207,7 +226,7 @@ func (r *userRepository) RevokeAllSessions(userID string) error {
 // attach this function with userRepo struct
 func (r *userRepository) GetIndividualProfileBySlug(slug string) (*models.IndividualProfile, error) {
 	var profile models.IndividualProfile
-	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	err := r.db.Where("public_url_slug = ?", slug).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +235,7 @@ func (r *userRepository) GetIndividualProfileBySlug(slug string) (*models.Indivi
 
 func (r *userRepository) GetAgencyProfileBySlug(slug string) (*models.AgencyProfile, error) {
 	var profile models.AgencyProfile
-	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	err := r.db.Where("public_url_slug = ?", slug).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +244,7 @@ func (r *userRepository) GetAgencyProfileBySlug(slug string) (*models.AgencyProf
 
 func (r *userRepository) GetClientProfileBySlug(slug string) (*models.ClientProfile, error) {
 	var profile models.ClientProfile
-	err := postgres.DB.Where("public_url_slug = ?", slug).First(&profile).Error
+	err := r.db.Where("public_url_slug = ?", slug).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +253,7 @@ func (r *userRepository) GetClientProfileBySlug(slug string) (*models.ClientProf
 
 func (r *userRepository) GetVerificationRecordByUserID(userID string) (*models.VerificationRecord, error) {
 	var record models.VerificationRecord
-	err := postgres.DB.Where("user_id = ?", userID).First(&record).Error
+	err := r.db.Where("user_id = ?", userID).First(&record).Error
 	if err != nil {
 		return nil, err
 
@@ -244,7 +263,7 @@ func (r *userRepository) GetVerificationRecordByUserID(userID string) (*models.V
 
 func (r *userRepository) GetIndividualProfileByUserID(userID string) (*models.IndividualProfile, error) {
 	var profile models.IndividualProfile
-	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	err := r.db.Where("user_id = ?", userID).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -253,12 +272,12 @@ func (r *userRepository) GetIndividualProfileByUserID(userID string) (*models.In
 
 func (r *userRepository) UpdateIndividualProfile(profile *models.IndividualProfile) error {
 	// GORM's Save method automatically runs UPDATE if the record exists
-	return postgres.DB.Save(profile).Error
+	return r.db.Save(profile).Error
 }
 
 func (r *userRepository) GetAgencyProfileByUserID(userID string) (*models.AgencyProfile, error) {
 	var profile models.AgencyProfile
-	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	err := r.db.Where("user_id = ?", userID).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -266,12 +285,12 @@ func (r *userRepository) GetAgencyProfileByUserID(userID string) (*models.Agency
 }
 
 func (r *userRepository) UpdateAgencyProfile(profile *models.AgencyProfile) error {
-	return postgres.DB.Save(profile).Error
+	return r.db.Save(profile).Error
 }
 
 func (r *userRepository) GetClientProfileByUserID(userID string) (*models.ClientProfile, error) {
 	var profile models.ClientProfile
-	err := postgres.DB.Where("user_id = ?", userID).First(&profile).Error
+	err := r.db.Where("user_id = ?", userID).First(&profile).Error
 	if err != nil {
 		return nil, err
 	}
@@ -279,5 +298,5 @@ func (r *userRepository) GetClientProfileByUserID(userID string) (*models.Client
 }
 
 func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) error {
-	return postgres.DB.Save(profile).Error
+	return r.db.Save(profile).Error
 }

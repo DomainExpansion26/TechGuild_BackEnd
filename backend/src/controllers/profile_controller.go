@@ -425,6 +425,9 @@ func DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.De
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
+		if errors.Is(err, services.ErrForbidden) {
+			return nil, huma.Error403Forbidden(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
@@ -598,6 +601,9 @@ func DeleteProfileAccountHandler(ctx context.Context, input *dto.DeleteProfileAc
 	if err := profileService.DeleteAccount(userID, input.Body.Password); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidPassword) {
+			return nil, huma.Error401Unauthorized(err.Error())
 		}
 		if errors.Is(err, services.ErrForbidden) {
 			return nil, huma.Error403Forbidden(err.Error())

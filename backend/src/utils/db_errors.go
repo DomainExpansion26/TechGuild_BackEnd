@@ -13,3 +13,13 @@ func IsDuplicateKeyError(err error) bool {
 	}
 	return false
 }
+
+// GetDuplicateKeyConstraint returns the constraint name that caused a
+// unique-violation error, or "" if err is not a duplicate-key error.
+func GetDuplicateKeyConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
