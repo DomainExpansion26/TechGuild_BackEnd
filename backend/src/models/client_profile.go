@@ -28,12 +28,13 @@ type ClientProfile struct {
 	ContactName string  `gorm:"size:100"`
 	Phone       *string `gorm:"type:varchar(20);uniqueIndex"`
 
-	Country     string
-	State       string
-	City        string
-	TimeZone    string
-	CountryCode string
-	PublicUrlSlug string `gorm:"type:varchar(255);uniqueIndex"`
+	Country           string
+	State             string
+	City              string
+	TimeZone          string
+	CountryCode       string
+	PublicUrlSlug     string `gorm:"type:varchar(255);uniqueIndex"`
+	ProfileVisibility string `gorm:"type:varchar(50);default:'public'"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

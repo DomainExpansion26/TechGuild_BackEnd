@@ -13,7 +13,7 @@ func ptr[T any](v T) *T { return &v }
 func RegisterProfileRoutes(api huma.API) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 
-	// Public
+	// Public — slug availability check (static route, stays under /v1/profile/)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{},
 		OperationID: "check-slug",
@@ -22,11 +22,15 @@ func RegisterProfileRoutes(api huma.API) {
 		Tags:        []string{"Profile"},
 	}, controllers.CheckSlugHandler)
 
+	// Public — profile lookup by slug, moved to its own /v1/u/* namespace
+	// so user-generated slugs can never collide with static /v1/profile/*
+	// routes (e.g. individual, agency, client, avatar, logo, etc.)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{},
 		OperationID: "get-public-profile",
-		Method:      "GET", Path: "/v1/profile/{slug}",
-		Tags: []string{"Profile"},
+		Method:      "GET",
+		Path:        "/v1/u/{slug}",
+		Tags:        []string{"Profile"},
 	}, controllers.GetPublicProfileHandler)
 
 	// Protected
@@ -155,8 +159,8 @@ func RegisterProfileRoutes(api huma.API) {
 						Gender:            ptr("male"),
 						AvatarURL:         ptr("https://storage.example.com/avatars/user.png"),
 						PreferredLanguage: ptr("en"),
+						Phone:             ptr("+919876543210"),
 						TermsConfirmed:    ptr(true),
-						ProfileVisibility: ptr("public"),
 					},
 				},
 			},
@@ -182,6 +186,7 @@ func RegisterProfileRoutes(api huma.API) {
 						ServicesOffered: ptr([]string{"Web Development", "Mobile App Development"}),
 						Industries:      ptr([]string{"Technology", "E-commerce"}),
 						TeamSize:        ptr("10-50"),
+						Phone:           ptr("+919876543210"),
 						ContactName:     ptr("Jane Smith"),
 						Country:         ptr("India"),
 						City:            ptr("Mumbai"),
@@ -212,6 +217,7 @@ func RegisterProfileRoutes(api huma.API) {
 						ProjectTypes: ptr([]string{"Web Development", "Mobile App"}),
 						BudgetRange:  ptr("$5,000 - $20,000"),
 						TeamSize:     ptr("5-10"),
+						Phone:        ptr("+919876543210"),
 						Country:      ptr("United States"),
 						City:         ptr("San Francisco"),
 						TimeZone:     ptr("America/Los_Angeles"),
