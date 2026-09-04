@@ -7,6 +7,7 @@ import (
 )
 
 type CreateIndividualProfileRequest struct {
+	Phone             *string `json:"phone" huma:"" example:"+1234567890"`
 	DateOfBirth       *string `json:"date_of_birth" huma:"" example:"1990-01-15"`
 	Gender            *string `json:"gender" huma:"" example:"male"`
 	AvatarURL         *string `json:"avatar_url" huma:"" example:"https://storage.example.com/avatars/user.png"`
@@ -28,8 +29,7 @@ type CreateIndividualProfileRequest struct {
 	LinkedinURL  *string `json:"linkedin_url" huma:"" example:"https://linkedin.com/in/johndoe"`
 	ResumeURL    *string `json:"resume_url" huma:"" example:"https://storage.example.com/resumes/johndoe.pdf"`
 
-	TermsConfirmed    *bool   `json:"terms_confirmed" huma:"" example:"true"`
-	ProfileVisibility *string `json:"profile_visibility" huma:"" example:"public"`
+	TermsConfirmed *bool `json:"terms_confirmed" huma:"" example:"true"`
 }
 
 type UpdateIndividualProfileRequest struct {
@@ -54,11 +54,11 @@ type UpdateIndividualProfileRequest struct {
 	LinkedinURL  *string `json:"linkedin_url" huma:"" example:"https://linkedin.com/in/johndoe"`
 	ResumeURL    *string `json:"resume_url" huma:"" example:"https://storage.example.com/resumes/johndoe.pdf"`
 
-	TermsConfirmed    *bool   `json:"terms_confirmed" huma:"" example:"true"`
-	ProfileVisibility *string `json:"profile_visibility" huma:"" example:"public"`
+	TermsConfirmed *bool `json:"terms_confirmed" huma:"" example:"true"`
 }
 
 type CreateAgencyProfileRequest struct {
+	Phone           *string   `json:"phone" huma:"" example:"+919876543210"`
 	AgencyName      string    `json:"agency_name" huma:"required" example:"Acme Digital Agency"`
 	LogoURL         *string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/acme.png"`
 	Description     *string   `json:"description" huma:"maxLength=1000" example:"Digital agency specializing in web and mobile development"`
@@ -89,6 +89,7 @@ type UpdateAgencyProfileRequest struct {
 }
 
 type CreateClientProfileRequest struct {
+	Phone        *string   `json:"phone" huma:"" example:"+919876543210"`
 	CompanyName  string    `json:"company_name" huma:"required" example:"TechStart Inc"`
 	LogoURL      *string   `json:"logo_url" huma:"" example:"https://storage.example.com/logos/techstart.png"`
 	Industry     *string   `json:"industry" huma:"" example:"technology"`
@@ -97,8 +98,8 @@ type CreateClientProfileRequest struct {
 	BudgetRange  *string   `json:"budget_range" huma:"" example:"$5,000 - $20,000"`
 	TeamSize     *string   `json:"team_size" huma:"" example:"5-10"`
 
-	Country *string `json:"country" huma:"" example:"United States"`
-	City    *string `json:"city" huma:"" example:"San Francisco"`
+	Country  *string `json:"country" huma:"" example:"United States"`
+	City     *string `json:"city" huma:"" example:"San Francisco"`
 	TimeZone *string `json:"timezone" huma:"" example:"America/Los_Angeles"`
 }
 
@@ -127,36 +128,67 @@ type SetAccountTypeRequest struct {
 	AccountType string `json:"account_type" huma:"required,enum=individual;agency;client" example:"individual"`
 }
 
-type PublicProfileResponse struct {
-	FirstName   string `json:"first_name" example:"John"`
-	LastName    string `json:"last_name" example:"Doe"`
-	AccountType string `json:"account_type" example:"individual"`
-	Points      int    `json:"points" example:"150"`
-
-	Phone             string   `json:"phone,omitempty" example:"+1234567890"`
-	DateOfBirth       string   `json:"date_of_birth,omitempty" example:"1990-01-15"`
-	Gender            string   `json:"gender,omitempty" example:"male"`
-	AvatarURL         string   `json:"avatar_url,omitempty" example:"https://storage.example.com/avatars/user.png"`
-	Bio               string   `json:"bio,omitempty" example:"Full-stack developer with 5 years of experience"`
-	Country           string   `json:"country,omitempty" example:"India"`
-	State             string   `json:"state,omitempty" example:"Maharashtra"`
-	City              string   `json:"city,omitempty" example:"Mumbai"`
-	Headline          string   `json:"headline,omitempty" example:"Senior Full-Stack Developer"`
-	PreferredLanguage string   `json:"preferred_language,omitempty" example:"en"`
-	TimeZone          string   `json:"timezone,omitempty" example:"Asia/Kolkata"`
-	CountryCode       string   `json:"country_code,omitempty" example:"+91"`
+// PublicIndividualProfile is the public-facing shape for individual profiles.
+type PublicIndividualProfile struct {
+	FirstName         string   `json:"first_name" example:"John"`
+	LastName          string   `json:"last_name" example:"Doe"`
+	AvatarURL         string   `json:"avatar_url,omitempty"`
+	Bio               string   `json:"bio,omitempty"`
+	Country           string   `json:"country,omitempty"`
+	Headline          string   `json:"headline,omitempty"`
+	PreferredLanguage string   `json:"preferred_language,omitempty"`
+	TimeZone          string   `json:"timezone,omitempty"`
 	PublicUrlSlug     string   `json:"public_url_slug" example:"john-doe"`
-	ExperienceLevel   string   `json:"experience_level,omitempty" example:"senior"`
-	Availability      string   `json:"availability,omitempty" example:"full-time"`
+	ExperienceLevel   string   `json:"experience_level,omitempty"`
+	Availability      string   `json:"availability,omitempty"`
 	Skills            []string `json:"skills,omitempty"`
 	ToolsTechnologies []string `json:"tools_technologies,omitempty"`
 	ServiceCategories []string `json:"service_categories,omitempty"`
-	PortfolioURL      string   `json:"portfolio_url,omitempty" example:"https://portfolio.example.com/johndoe"`
-	GithubURL         string   `json:"github_url,omitempty" example:"https://github.com/johndoe"`
-	LinkedinURL       string   `json:"linkedin_url,omitempty" example:"https://linkedin.com/in/johndoe"`
-	ResumeURL         string   `json:"resume_url,omitempty" example:"https://storage.example.com/resumes/johndoe.pdf"`
-	ProfileVisibility string   `json:"profile_visibility,omitempty" example:"public"`
-	MemberSince       string   `json:"member_since" example:"2026-01-15T00:00:00Z"`
+	PortfolioURL      string   `json:"portfolio_url,omitempty"`
+	GithubURL         string   `json:"github_url,omitempty"`
+	LinkedinURL       string   `json:"linkedin_url,omitempty"`
+	MemberSince       string   `json:"member_since" example:"August 2026"`
+}
+
+// PublicAgencyProfile is the public-facing shape for agency profiles.
+type PublicAgencyProfile struct {
+	FirstName       string   `json:"first_name" example:"Jane"`
+	LastName        string   `json:"last_name" example:"Smith"`
+	AgencyName      string   `json:"agency_name" example:"Acme Digital Agency"`
+	LogoURL         string   `json:"logo_url,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	WebsiteURL      string   `json:"website_url,omitempty"`
+	ServicesOffered []string `json:"services_offered,omitempty"`
+	Industries      []string `json:"industries,omitempty"`
+	TeamSize        string   `json:"team_size,omitempty"`
+	Country         string   `json:"country,omitempty"`
+	TimeZone        string   `json:"timezone,omitempty"`
+	PublicUrlSlug   string   `json:"public_url_slug" example:"acme-digital-agency"`
+	MemberSince     string   `json:"member_since" example:"August 2026"`
+}
+
+// PublicClientProfile is the public-facing shape for client profiles.
+type PublicClientProfile struct {
+	FirstName     string   `json:"first_name" example:"Jane"`
+	LastName      string   `json:"last_name" example:"Smith"`
+	CompanyName   string   `json:"company_name" example:"TechStart Inc"`
+	LogoURL       string   `json:"logo_url,omitempty"`
+	Industry      string   `json:"industry,omitempty"`
+	WebsiteURL    string   `json:"website_url,omitempty"`
+	ProjectTypes  []string `json:"project_types,omitempty"`
+	TeamSize      string   `json:"team_size,omitempty"`
+	Country       string   `json:"country,omitempty"`
+	TimeZone      string   `json:"timezone,omitempty"`
+	PublicUrlSlug string   `json:"public_url_slug" example:"techstart-inc"`
+	MemberSince   string   `json:"member_since" example:"August 2026"`
+}
+
+// same pattern as GetMyProfileResponse.
+type GetPublicProfileResponse struct {
+	AccountType string                   `json:"account_type" example:"individual"`
+	Individual  *PublicIndividualProfile `json:"individual,omitempty"`
+	Agency      *PublicAgencyProfile     `json:"agency,omitempty"`
+	Client      *PublicClientProfile     `json:"client,omitempty"`
 }
 
 type UserPointsResponse struct {
@@ -232,7 +264,7 @@ type GetMyProfileOutput struct {
 // GetMyProfileResponse is a typed union of the three profile shapes.
 // Only the field corresponding to the authenticated user's account type is populated.
 type GetMyProfileResponse struct {
-	AccountType string `json:"account_type" example:"individual"`
+	AccountType string               `json:"account_type" example:"individual"`
 	Individual  *MyIndividualProfile `json:"individual,omitempty"`
 	Agency      *MyAgencyProfile     `json:"agency,omitempty"`
 	Client      *MyClientProfile     `json:"client,omitempty"`
@@ -246,7 +278,6 @@ type MyIndividualProfile struct {
 	AvatarURL         string   `json:"avatar_url,omitempty"`
 	Bio               string   `json:"bio,omitempty"`
 	Country           string   `json:"country,omitempty"`
-	State             string   `json:"state,omitempty"`
 	City              string   `json:"city,omitempty"`
 	Headline          string   `json:"headline,omitempty"`
 	PreferredLanguage string   `json:"preferred_language,omitempty"`
@@ -265,45 +296,46 @@ type MyIndividualProfile struct {
 }
 
 type MyAgencyProfile struct {
-	PublicUrlSlug   string   `json:"public_url_slug" example:"acme-digital-agency"`
-	AgencyName      string   `json:"agency_name" example:"Acme Digital Agency"`
-	LogoURL         string   `json:"logo_url,omitempty"`
-	Description     string   `json:"description,omitempty"`
-	WebsiteURL      string   `json:"website_url,omitempty"`
-	ServicesOffered []string `json:"services_offered,omitempty"`
-	Industries      []string `json:"industries,omitempty"`
-	TeamSize        string   `json:"team_size,omitempty"`
-	ContactName     string   `json:"contact_name,omitempty"`
-	Phone           *string  `json:"phone,omitempty"`
-	RegistrationNo  string   `json:"registration_no,omitempty"`
-	Country         string   `json:"country,omitempty"`
-	State           string   `json:"state,omitempty"`
-	City            string   `json:"city,omitempty"`
-	TimeZone        string   `json:"timezone,omitempty"`
-	CountryCode     string   `json:"country_code,omitempty"`
+	PublicUrlSlug     string   `json:"public_url_slug" example:"acme-digital-agency"`
+	AgencyName        string   `json:"agency_name" example:"Acme Digital Agency"`
+	LogoURL           string   `json:"logo_url,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	WebsiteURL        string   `json:"website_url,omitempty"`
+	ServicesOffered   []string `json:"services_offered,omitempty"`
+	Industries        []string `json:"industries,omitempty"`
+	TeamSize          string   `json:"team_size,omitempty"`
+	ContactName       string   `json:"contact_name,omitempty"`
+	Phone             *string  `json:"phone,omitempty"`
+	RegistrationNo    string   `json:"registration_no,omitempty"`
+	Country           string   `json:"country,omitempty"`
+	City              string   `json:"city,omitempty"`
+	TimeZone          string   `json:"timezone,omitempty"`
+	CountryCode       string   `json:"country_code,omitempty"`
+	ProfileVisibility string   `json:"profile_visibility,omitempty" example:"public"`
 }
 
 type MyClientProfile struct {
-	PublicUrlSlug string   `json:"public_url_slug" example:"techstart-inc"`
-	CompanyName   string   `json:"company_name" example:"TechStart Inc"`
-	LogoURL       string   `json:"logo_url,omitempty"`
-	Industry      string   `json:"industry,omitempty"`
-	WebsiteURL    string   `json:"website_url,omitempty"`
-	ProjectTypes  []string `json:"project_types,omitempty"`
-	BudgetRange   string   `json:"budget_range,omitempty"`
-	TeamSize      string   `json:"team_size,omitempty"`
-	ContactName   string   `json:"contact_name,omitempty"`
-	Phone         *string  `json:"phone,omitempty"`
-	Country       string   `json:"country,omitempty"`
-	State         string   `json:"state,omitempty"`
-	City          string   `json:"city,omitempty"`
-	TimeZone      string   `json:"timezone,omitempty"`
-	CountryCode   string   `json:"country_code,omitempty"`
+	PublicUrlSlug     string   `json:"public_url_slug" example:"techstart-inc"`
+	CompanyName       string   `json:"company_name" example:"TechStart Inc"`
+	LogoURL           string   `json:"logo_url,omitempty"`
+	Industry          string   `json:"industry,omitempty"`
+	WebsiteURL        string   `json:"website_url,omitempty"`
+	ProjectTypes      []string `json:"project_types,omitempty"`
+	BudgetRange       string   `json:"budget_range,omitempty"`
+	TeamSize          string   `json:"team_size,omitempty"`
+	ContactName       string   `json:"contact_name,omitempty"`
+	Phone             *string  `json:"phone,omitempty"`
+	Country           string   `json:"country,omitempty"`
+	City              string   `json:"city,omitempty"`
+	TimeZone          string   `json:"timezone,omitempty"`
+	CountryCode       string   `json:"country_code,omitempty"`
+	ProfileVisibility string   `json:"profile_visibility,omitempty" example:"public"`
 }
 
 type SetAccountTypeInput struct {
 	Body SetAccountTypeRequest
 }
+
 // SetAccountTypeResponse mirrors the create-profile message but without an
 // implied public slug.
 type SetAccountTypeResponse struct {
@@ -374,7 +406,7 @@ type GetPublicProfileInput struct {
 	Slug string `path:"slug" doc:"Profile slug"`
 }
 type GetPublicProfileOutput struct {
-	Body PublicProfileResponse
+	Body GetPublicProfileResponse
 }
 
 type GetUserPointsInput struct{}

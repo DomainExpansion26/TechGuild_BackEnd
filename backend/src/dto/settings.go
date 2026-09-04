@@ -1,10 +1,8 @@
 package dto
 
 type UpdateAccountRequest struct {
-	Email       string  `json:"email" example:"test@example.com"`
-	Phone       *string `json:"phone" example:"+1234567890"`
-	Password    string  `json:"password" example:"test@123"` // For verification if changing email/password
-	NewPassword string  `json:"new_password" example:"newpass@123"`
+	Password    string `json:"password" example:"test@123"` // For verification if changing email/password
+	NewPassword string `json:"new_password" huma:"minLength=8" example:"newpass@123"`
 }
 
 type UpdateNotificationsRequest struct {
