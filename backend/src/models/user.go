@@ -40,7 +40,7 @@ type User struct {
 
 	PasswordHash string `gorm:"type:text"`
 
-	TwoFASecret string `gorm:"type:text"`
+	// TwoFASecret string `gorm:"type:text"`
 
 	AccountType *AccountType `gorm:"type:varchar(30)"`
 
@@ -65,6 +65,7 @@ type User struct {
 	ClientContracts []ProjectContract `gorm:"foreignKey:ClientID"`
 
 	FreelancerContracts []ProjectContract `gorm:"foreignKey:FreelancerID"`
+	TwoFactorEnabled    bool              `gorm:"default:false;not null"`
 	CreatedAt           time.Time
 
 	UpdatedAt time.Time

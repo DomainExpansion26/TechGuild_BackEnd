@@ -21,6 +21,7 @@ type AuthService struct {
 	userRepo         repository.UserRepository
 	verificationRepo *repository.VerificationRepository
 	blacklistRepo    *repository.TokenBlacklistRepository
+	tfaRepo          repository.TwoFactorRepository
 }
 
 func NewAuthService(redisClient *redis.Client) *AuthService {
@@ -28,6 +29,7 @@ func NewAuthService(redisClient *redis.Client) *AuthService {
 		userRepo:         repository.NewUserRepository(),
 		verificationRepo: repository.NewVerificationRepository(redisClient),
 		blacklistRepo:    repository.NewTokenBlacklistRepository(redisClient),
+		tfaRepo:          repository.NewTwoFactorRepository(),
 	}
 }
 
@@ -246,6 +248,22 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 		return nil, "", errors.New("account is not active")
 	}
 
+	// ---------- 2FA CHECK (new) ----------
+	if user.TwoFactorEnabled {
+		record, err := s.tfaRepo.GetByUserID(user.ID)
+		if err == nil && record.Status == models.TwoFAStatusEnabled {
+			tempToken, err := utils.GenerateTemporary2FAToken(user.ID.String())
+			if err != nil {
+				return nil, "", err
+			}
+			return &dto.LoginResponse{
+				Message:           "Two-factor authentication required",
+				RequiresTwoFactor: true,
+				TemporaryToken:    tempToken,
+			}, "", nil
+		}
+	}
+
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -442,4 +460,18 @@ func (s *AuthService) BlacklistAccessToken(accessToken string) error {
 
 	ttl := time.Until(claims.ExpiresAt.Time)
 	return s.blacklistRepo.Blacklist(utils.HashToken(accessToken), ttl)
+}
+
+// for oauth
+func (s *AuthService) SetAccountTypeAuthenticated(userID string, accountType models.AccountType) error {
+	validTypes := map[models.AccountType]bool{
+		models.AccountTypeIndividual:  true,
+		models.AccountTypeAgencyAdmin: true,
+		models.AccountTypeClientAdmin: true,
+	}
+	if !validTypes[accountType] {
+		return errors.New("invalid account type")
+	}
+
+	return s.userRepo.UpdateAccountType(userID, accountType)
 }

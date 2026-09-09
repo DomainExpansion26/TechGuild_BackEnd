@@ -1,7 +1,5 @@
 package dto
 
-import "context"
-
 type GoogleLoginRequest struct {
 	GoogleID string `json:"google_id" example:"110234567890123456789"`
 	Email    string `json:"email" example:"test@example.com"`
@@ -10,9 +8,11 @@ type GoogleLoginRequest struct {
 }
 
 type GoogleLoginResponse struct {
-	Message     string `json:"message" example:"Login successful"`
-	AccessToken string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	ExpiresIn   int    `json:"expires_in" example:"3600"`
+	Message           string `json:"message" example:"Login successful"`
+	AccessToken       string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	RequiresTwoFactor bool   `json:"requires_two_factor" example:"true"`
+	TemporaryToken    string `json:"temporary_token" example:"temp_token"`
+	ExpiresIn         int    `json:"expires_in" example:"3600"`
 }
 
 type GitHubLoginRequest struct {
@@ -23,9 +23,11 @@ type GitHubLoginRequest struct {
 }
 
 type GitHubLoginResponse struct {
-	Message     string `json:"message" example:"Login successful"`
-	AccessToken string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	ExpiresIn   int    `json:"expires_in" example:"3600"`
+	Message           string `json:"message" example:"Login successful"`
+	AccessToken       string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	ExpiresIn         int    `json:"expires_in" example:"3600"`
+	RequiresTwoFactor bool   `json:"requires_two_factor" example:"true"`
+	TemporaryToken    string `json:"temporary_token" example:"temp_token"`
 }
 
 // ---------- Huma Input/Output wrapper structs ----------
@@ -63,5 +65,3 @@ type GitHubCallbackOutput struct {
 	SetCookie string `header:"Set-Cookie"`
 	Body      GitHubLoginResponse
 }
-
-var _ = context.Background // placeholder to avoid unused import if needed elsewhere
