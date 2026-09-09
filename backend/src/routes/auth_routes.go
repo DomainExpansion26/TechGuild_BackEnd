@@ -203,4 +203,22 @@ func RegisterAuthRoutes(api huma.API) {
 			},
 		},
 	}, controllers.SetAccountTypeHandler)
+
+	// ---------- for oauth ----------
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"bearerAuth": {}}},
+		OperationID: "set-account-type-authenticated",
+		Method:      "POST",
+		Path:        "/auth/account-type",
+		Tags:        []string{"Authentication"},
+		Summary:     "Set account type for an already-logged-in user (e.g. OAuth signup)",
+		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
+		RequestBody: &huma.RequestBody{
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.SetAccountTypeAuthRequest{AccountType: "individual"},
+				},
+			},
+		},
+	}, controllers.SetAccountTypeAuthenticatedHandler)
 }

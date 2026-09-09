@@ -8,6 +8,7 @@ import (
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
+	"techguild-backend/src/models"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
 
@@ -36,6 +37,11 @@ func LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput,
 	res, refreshToken, err := authService.Login(input.Body)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	// 2FA required no cookie, no final token yet
+	if res.RequiresTwoFactor {
+		return &dto.LoginOutput{Body: *res}, nil
 	}
 
 	cookie := &http.Cookie{
@@ -209,5 +215,20 @@ func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*
 
 	out := &dto.DeleteAccountOutput{}
 	out.Body.Message = "Account deleted successfully"
+	return out, nil
+}
+
+// for oauth
+func SetAccountTypeAuthenticatedHandler(ctx context.Context, input *dto.SetAccountTypeAuthInput) (*dto.SetAccountTypeAuthOutput, error) {
+	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+
+	authService := services.NewAuthService(postgres.RedisDB)
+
+	if err := authService.SetAccountTypeAuthenticated(userID, models.AccountType(input.Body.AccountType)); err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	out := &dto.SetAccountTypeAuthOutput{}
+	out.Body.Message = "Account type set successfully"
 	return out, nil
 }

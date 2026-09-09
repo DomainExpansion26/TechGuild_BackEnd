@@ -120,6 +120,11 @@ func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) 
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
+	// 2FA required no cookie yet
+	if result.RequiresTwoFactor {
+		return &dto.GoogleCallbackOutput{Body: *result}, nil
+	}
+
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -239,6 +244,11 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 	})
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	//2FA required no cookie yet
+	if result.RequiresTwoFactor {
+		return &dto.GitHubCallbackOutput{Body: *result}, nil
 	}
 
 	cookie := &http.Cookie{
