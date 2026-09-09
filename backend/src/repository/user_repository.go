@@ -50,6 +50,8 @@ type UserRepository interface {
 	RevokeSessionByID(sessionID uuid.UUID) error
 
 	WithTransaction(fn func(txRepo UserRepository) error) error
+
+	UpdateTwoFactorEnabled(userID string, enabled bool) error
 }
 
 type userRepository struct {
@@ -63,6 +65,14 @@ func NewUserRepository() UserRepository {
 // NEW: returns a repo bound to a transaction
 func NewUserRepositoryTx(tx *gorm.DB) UserRepository {
 	return &userRepository{db: tx}
+}
+
+// repository/user_repository.go — implementation add karo
+func (r *userRepository) UpdateTwoFactorEnabled(userID string, enabled bool) error {
+	return r.db.
+		Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("two_factor_enabled", enabled).Error
 }
 
 func (r *userRepository) CreateUser(user *models.User) error {

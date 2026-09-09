@@ -22,7 +22,7 @@ func SendVerificationEmail(toEmail string, token string) error {
 	frontendURL := os.Getenv("FRONTEND_URL")
 
 	verificationURL := fmt.Sprintf(
-		"%s/verify-email?token=%s",
+		"%s/auth/verify-email?token=%s",
 		frontendURL,
 		token,
 	)
