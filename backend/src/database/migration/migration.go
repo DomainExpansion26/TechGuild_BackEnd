@@ -47,6 +47,10 @@ func Migrate() {
 		&models.TeamInvitation{},
 		&models.TeamPortfolio{},
 		&models.TeamSkill{},
+
+		// 2FA Authentication
+		&models.UserTwoFactorAuthentication{},
+		&models.UserRecoveryCode{},
 	)
 
 	if err != nil {

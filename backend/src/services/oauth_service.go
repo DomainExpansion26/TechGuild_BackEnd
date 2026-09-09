@@ -16,12 +16,14 @@ import (
 
 type OAuthService struct {
 	userRepo repository.UserRepository
+	tfaRepo  repository.TwoFactorRepository
 	redis    *redis.Client
 }
 
 func NewOAuthService(redisClient *redis.Client) *OAuthService {
 	return &OAuthService{
 		userRepo: repository.NewUserRepository(),
+		tfaRepo:  repository.NewTwoFactorRepository(),
 		redis:    redisClient,
 	}
 }
@@ -30,26 +32,54 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+// checkTwoFactor returns (temporaryToken, requiresTwoFactor, error).
+// FAILS CLOSED: any real DB error is returned as error, not treated as "no 2FA".
+func (s *OAuthService) checkTwoFactor(user *models.User) (string, bool, error) {
+	if !user.TwoFactorEnabled {
+		return "", false, nil
+	}
+
+	record, err := s.tfaRepo.GetByUserID(user.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if record.Status != models.TwoFAStatusEnabled {
+		return "", false, nil
+	}
+
+	tempToken, err := utils.GenerateTemporary2FAToken(user.ID.String())
+	if err != nil {
+		return "", false, err
+	}
+	return tempToken, true, nil
+}
+
+func splitName(fullName string) (string, string) {
+	firstName := fullName
+	lastName := ""
+	if parts := strings.Split(fullName, " "); len(parts) > 1 {
+		firstName = parts[0]
+		lastName = strings.Join(parts[1:], " ")
+	}
+	return firstName, lastName
+}
+
 func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, string, error) {
 
 	req.Email = utils.NormalizeEmail(req.Email)
 
 	user, err := s.userRepo.GetUserByEmail(req.Email)
-
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, "", errors.New("something went wrong please try again")
 	}
 
 	if user == nil {
+		firstName, lastName := splitName(req.FullName)
 
-		firstName := req.FullName
-		lastName := ""
-		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
-			firstName = parts[0]
-			lastName = strings.Join(parts[1:], " ")
-		}
-
-		user = &models.User{
+		newUser := &models.User{
 			Email:         req.Email,
 			FirstName:     firstName,
 			LastName:      lastName,
@@ -60,43 +90,62 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 			OAuthID:       stringPtr(req.GoogleID),
 		}
 
-		err = s.userRepo.CreateUser(user)
+		err = s.userRepo.CreateUser(newUser)
 		if err != nil {
 			if utils.IsDuplicateKeyError(err) {
-				return nil, "", errors.New("user with this email already exists")
+				// race: someone else created this user between our GetUserByEmail and CreateUser.
+				// self-heal by re-fetching instead of erroring.
+				user, err = s.userRepo.GetUserByEmail(req.Email)
+				if err != nil {
+					return nil, "", errors.New("something went wrong please try again")
+				}
+			} else {
+				return nil, "", err
 			}
-			return nil, "", err
-		}
-
-		// Not using user.FullName here as it doesn't exist.
-		// we already have firstName from above
-		profile := &models.IndividualProfile{
-			UserID:        user.ID,
-			PublicUrlSlug: utils.GenerateSlug(firstName),
-		}
-
-		err = s.userRepo.CreateProfile(profile)
-		if err != nil {
-			return nil, "", err
-		}
-	} else {
-		if user.Status == models.StatusPendingDeletion {
-			user.Status = models.StatusActive
-			user.ScheduledDeletionDate = nil
-			if err := s.userRepo.UpdateUser(user); err != nil {
+		} else {
+			user = newUser
+			profile := &models.IndividualProfile{
+				UserID:        user.ID,
+				PublicUrlSlug: utils.GenerateSlug(firstName),
+			}
+			if err := s.userRepo.CreateProfile(profile); err != nil {
 				return nil, "", err
 			}
 		}
-		if user.Status != models.StatusActive {
-			return nil, "", errors.New("user account is not active")
-		}
+	}
+
+	// user now guaranteed non-nil (new, raced-and-refetched, or pre-existing)
+	if user.OAuthID == nil {
+		user.OAuthProvider = stringPtr("google")
+		user.OAuthID = stringPtr(req.GoogleID)
+	}
+	if user.Status == models.StatusPendingDeletion {
+		user.Status = models.StatusActive
+		user.ScheduledDeletionDate = nil
+	}
+	if err := s.userRepo.UpdateUser(user); err != nil {
+		return nil, "", err
+	}
+	if user.Status != models.StatusActive {
+		return nil, "", errors.New("user account is not active")
+	}
+
+	tempToken, requires2FA, err := s.checkTwoFactor(user)
+	if err != nil {
+		return nil, "", err
+	}
+	if requires2FA {
+		return &dto.GoogleLoginResponse{
+			Message:           "2FA verification required",
+			RequiresTwoFactor: true,
+			TemporaryToken:    tempToken,
+		}, "", nil
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
 	}
-
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -108,9 +157,7 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
 		IsRevoked:    false,
 	}
-
-	err = s.userRepo.CreateSession(session)
-	if err != nil {
+	if err := s.userRepo.CreateSession(session); err != nil {
 		return nil, "", errors.New("failed to create session")
 	}
 
@@ -120,6 +167,7 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
 	}, refreshToken, nil
 }
+
 func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginResponse, string, error) {
 
 	req.Email = utils.NormalizeEmail(req.Email)
@@ -130,15 +178,9 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 	}
 
 	if user == nil {
+		firstName, lastName := splitName(req.FullName)
 
-		firstName := req.FullName
-		lastName := ""
-		if parts := strings.Split(req.FullName, " "); len(parts) > 1 {
-			firstName = parts[0]
-			lastName = strings.Join(parts[1:], " ")
-		}
-
-		user = &models.User{
+		newUser := &models.User{
 			Email:         req.Email,
 			FirstName:     firstName,
 			LastName:      lastName,
@@ -149,42 +191,60 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 			OAuthID:       stringPtr(req.GitHubID),
 		}
 
-		err = s.userRepo.CreateUser(user)
+		err = s.userRepo.CreateUser(newUser)
 		if err != nil {
 			if utils.IsDuplicateKeyError(err) {
-				return nil, "", errors.New("user with this email already exists")
+				user, err = s.userRepo.GetUserByEmail(req.Email)
+				if err != nil {
+					return nil, "", errors.New("something went wrong please try again")
+				}
+			} else {
+				return nil, "", err
 			}
-			return nil, "", err
-		}
-
-		profile := &models.IndividualProfile{
-			UserID:        user.ID,
-			PublicUrlSlug: utils.GenerateSlug(firstName),
-			AvatarURL:     req.Avatar,
-		}
-
-		err = s.userRepo.CreateProfile(profile)
-		if err != nil {
-			return nil, "", err
-		}
-	} else {
-		if user.Status == models.StatusPendingDeletion {
-			user.Status = models.StatusActive
-			user.ScheduledDeletionDate = nil
-			if err := s.userRepo.UpdateUser(user); err != nil {
+		} else {
+			user = newUser
+			profile := &models.IndividualProfile{
+				UserID:        user.ID,
+				PublicUrlSlug: utils.GenerateSlug(firstName),
+				AvatarURL:     req.Avatar,
+			}
+			if err := s.userRepo.CreateProfile(profile); err != nil {
 				return nil, "", err
 			}
 		}
-		if user.Status != models.StatusActive {
-			return nil, "", errors.New("user account is not active")
-		}
+	}
+
+	if user.OAuthID == nil {
+		user.OAuthProvider = stringPtr("github")
+		user.OAuthID = stringPtr(req.GitHubID)
+	}
+	if user.Status == models.StatusPendingDeletion {
+		user.Status = models.StatusActive
+		user.ScheduledDeletionDate = nil
+	}
+	if err := s.userRepo.UpdateUser(user); err != nil {
+		return nil, "", err
+	}
+	if user.Status != models.StatusActive {
+		return nil, "", errors.New("user account is not active")
+	}
+
+	tempToken, requires2FA, err := s.checkTwoFactor(user)
+	if err != nil {
+		return nil, "", err
+	}
+	if requires2FA {
+		return &dto.GitHubLoginResponse{
+			Message:           "2FA verification required",
+			RequiresTwoFactor: true,
+			TemporaryToken:    tempToken,
+		}, "", nil
 	}
 
 	accessToken, err := utils.GenerateAccessToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
 	}
-
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -196,9 +256,7 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
 		IsRevoked:    false,
 	}
-
-	err = s.userRepo.CreateSession(session)
-	if err != nil {
+	if err := s.userRepo.CreateSession(session); err != nil {
 		return nil, "", errors.New("failed to create session")
 	}
 
