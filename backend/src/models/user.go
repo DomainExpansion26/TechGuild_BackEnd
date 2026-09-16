@@ -11,10 +11,25 @@ import (
 type AccountType string
 
 const (
-	AccountTypeIndividual  AccountType = "individual"
-	AccountTypeAgencyAdmin AccountType = "agency"
-	AccountTypeClientAdmin AccountType = "client"
-	AccountTypeAdmin       AccountType = "admin"
+	AccountTypeIndividual   AccountType = "individual"
+	AccountTypeAgencyAdmin  AccountType = "agency"
+	AccountTypeClientAdmin  AccountType = "client"
+	AccountTypeAdmin        AccountType = "admin"
+	AccountTypeClient       AccountType = "client"
+	AccountTypeClientOwner  AccountType = "client_admin"
+	AccountTypeClientMember AccountType = "client_member"
+)
+
+const (
+	RankF   = "F"
+	RankE   = "E"
+	RankD   = "D"
+	RankC   = "C"
+	RankB   = "B"
+	RankA   = "A"
+	RankS   = "S"
+	RankSS  = "SS"
+	RankSSS = "SSS"
 )
 
 type UserStatus string
