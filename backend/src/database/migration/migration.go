@@ -41,6 +41,11 @@ func Migrate() {
 		&models.ProjectMilestone{},
 		&models.ProjectSubmission{},
 
+		// Quests (Gamified Client Creation)
+		&models.Quest{},
+		&models.QuestMilestone{},
+		&models.QuestSkill{},
+
 		// Team Collaboration
 		&models.Team{},
 		&models.TeamMember{},
