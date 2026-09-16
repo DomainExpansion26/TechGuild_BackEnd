@@ -87,6 +87,7 @@ func main() {
 	routes.RegisterTeamRoutes(api)
 	routes.RegisterVerificationRoutes(api)
 	routes.RegisterTwoFactorRoutes(api)
+	routes.RegisterQuestRoutes(api)
 
 	log.Println("Server running on :8080")
 

@@ -82,3 +82,35 @@ func AdminMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Con
 		next(ctx)
 	}
 }
+
+func ClientMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		userID, _ := ctx.Context().Value(UserIDKey).(string)
+		if userID == "" {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user ID missing")
+			return
+		}
+
+		var user models.User
+		if err := postgres.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user not found")
+			return
+		}
+
+		if user.AccountType == nil {
+			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Client access required")
+			return
+		}
+
+		accType := string(*user.AccountType)
+		if accType != string(models.AccountTypeClientAdmin) &&
+			accType != string(models.AccountTypeClient) &&
+			accType != string(models.AccountTypeClientOwner) &&
+			accType != string(models.AccountTypeClientMember) {
+			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Client access required")
+			return
+		}
+
+		next(ctx)
+	}
+}
