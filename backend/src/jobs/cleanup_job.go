@@ -62,8 +62,8 @@ func runCleanup() {
 
 	err := postgres.DB.
 		Where(
-			"status = ? AND scheduled_deletion_date < ?",
-			models.StatusPendingDeletion,
+			"status IN ? AND scheduled_deletion_date < ?",
+			[]models.UserStatus{models.StatusDeactivated, models.StatusPendingDeletion},
 			time.Now(),
 		).
 		Find(&users).Error

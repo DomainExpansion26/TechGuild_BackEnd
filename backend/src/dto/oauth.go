@@ -43,6 +43,8 @@ type GoogleCallbackInput struct {
 	Code             string `query:"code"`
 	State            string `query:"state"`
 	OauthStateCookie string `cookie:"oauth_state"`
+	UserAgent        string `header:"User-Agent"`
+	ForwardedFor     string `header:"X-Forwarded-For"`
 }
 type GoogleCallbackOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -60,6 +62,8 @@ type GitHubCallbackInput struct {
 	Code             string `query:"code"`
 	State            string `query:"state"`
 	OauthStateCookie string `cookie:"oauth_state"`
+	UserAgent        string `header:"User-Agent"`
+	ForwardedFor     string `header:"X-Forwarded-For"`
 }
 type GitHubCallbackOutput struct {
 	SetCookie string `header:"Set-Cookie"`

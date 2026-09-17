@@ -588,36 +588,3 @@ func DeprecatedProfileCreateHandler(ctx context.Context, input *dto.DeprecatedPr
 		},
 	}, nil
 }
-
-// ---------- DeleteProfileAccount ----------
-
-func DeleteProfileAccountHandler(ctx context.Context, input *dto.DeleteProfileAccountInput) (*dto.DeleteProfileAccountOutput, error) {
-	userID, err := utils.GetUserIDFromHumaContext(ctx)
-	if err != nil {
-		return nil, huma.Error401Unauthorized(err.Error())
-	}
-
-	profileService := services.NewProfileService()
-	if err := profileService.DeleteAccount(userID, input.Body.Password); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidPassword) {
-			return nil, huma.Error401Unauthorized(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	return &dto.DeleteProfileAccountOutput{
-		Body: dto.MessageResponse{Message: "account successfully scheduled for deletion"},
-	}, nil
-}

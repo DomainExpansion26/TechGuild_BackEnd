@@ -11,6 +11,26 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+func GetAccountSettingsHandler(ctx context.Context, input *dto.GetAccountSettingsInput) (*dto.GetAccountSettingsOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	accountSettings, err := profileService.GetAccountSettings(userID)
+	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return &dto.GetAccountSettingsOutput{
+		Body: *accountSettings,
+	}, nil
+}
+
 func UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountSettingsInput) (*dto.UpdateAccountSettingsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
@@ -31,27 +51,41 @@ func UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountS
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
-	return &dto.UpdateAccountSettingsOutput{Body: dto.SettingsUpdateResponse{Message: "account settings updated successfully"}}, nil
+	return &dto.UpdateAccountSettingsOutput{
+		Body: dto.SettingsUpdateResponse{
+			Message: "account settings updated successfully",
+		},
+	}, nil
+}
+
+func GetNotificationsHandler(ctx context.Context, input *dto.GetNotificationsInput) (*dto.GetNotificationsOutput, error) {
+	return nil, huma.Error501NotImplemented("Notifications settings are not implemented yet")
 }
 
 func UpdateNotificationsHandler(ctx context.Context, input *dto.UpdateNotificationsInput) (*dto.UpdateNotificationsOutput, error) {
+	return nil, huma.Error501NotImplemented("Notifications settings are not implemented yet")
+}
+
+func GetPrivacySettingsHandler(ctx context.Context, input *dto.GetPrivacySettingsInput) (*dto.GetPrivacySettingsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
-
 	profileService := services.NewProfileService()
-	if err := profileService.UpdateNotifications(userID, input.Body); err != nil {
+	privacySettings, err := profileService.GetPrivacySettings(userID)
+	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		if errors.Is(err, services.ErrValidation) {
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrAccountTypeNotSet) || errors.Is(err, services.ErrInvalidAccountType) {
 			return nil, huma.Error400BadRequest(err.Error())
 		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
-	return &dto.UpdateNotificationsOutput{Body: dto.SettingsUpdateResponse{Message: "notifications updated successfully"}}, nil
+	return &dto.GetPrivacySettingsOutput{Body: *privacySettings}, nil
 }
 
 func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyInput) (*dto.UpdatePrivacyOutput, error) {
@@ -81,4 +115,143 @@ func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyI
 	}
 
 	return &dto.UpdatePrivacyOutput{Body: dto.SettingsUpdateResponse{Message: "privacy settings updated successfully"}}, nil
+}
+
+func GetBillingSettingsHandler(ctx context.Context, input *dto.GetBillingSettingsInput) (*dto.GetBillingSettingsOutput, error) {
+	return nil, huma.Error501NotImplemented("billing settings are not implemented yet")
+}
+
+func UpdatePayoutMethodHandler(ctx context.Context, input *dto.UpdatePayoutMethodInput) (*dto.UpdatePayoutMethodOutput, error) {
+	return nil, huma.Error501NotImplemented("payout method is not implemented yet")
+}
+
+func UpdatePayoutScheduleHandler(ctx context.Context, input *dto.UpdatePayoutScheduleInput) (*dto.UpdatePayoutScheduleOutput, error) {
+	return nil, huma.Error501NotImplemented("payout schedule is not implemented yet")
+}
+
+func DeactivateAccountHandler(ctx context.Context, input *dto.DeactivateAccountInput) (*dto.DeactivateAccountOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	if err := profileService.DeactivateAccount(userID, input.Body); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidPassword) {
+			return nil, huma.Error401Unauthorized(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	return &dto.DeactivateAccountOutput{
+		Body: dto.SettingsUpdateResponse{
+			Message: "account deactivated. log in within 30 days to reactivate, or it will be permanently deleted",
+		},
+	}, nil
+}
+
+func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*dto.DeleteAccountOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	if err := profileService.DeleteAccountPermanently(userID, input.Body.Password); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrInvalidPassword) {
+			return nil, huma.Error401Unauthorized(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return &dto.DeleteAccountOutput{
+		Body: dto.SettingsUpdateResponse{
+			Message: "account permanently deleted",
+		},
+	}, nil
+}
+
+func GetSessionsHandler(ctx context.Context, input *dto.GetSessionsInput) (*dto.GetSessionsOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+
+	sessions, err := profileService.GetSessions(userID)
+	if err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return &dto.GetSessionsOutput{
+		Body: *sessions,
+	}, nil
+}
+
+func RevokeSessionHandler(ctx context.Context, input *dto.RevokeSessionInput) (*dto.RevokeSessionOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	if err := profileService.RevokeSession(userID, input.ID); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrSessionNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrValidation) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	return &dto.RevokeSessionOutput{
+		Body: dto.SettingsUpdateResponse{
+			Message: "session revoked successfully",
+		},
+	}, nil
+}
+
+func SignOutOtherSessionsHandler(ctx context.Context, input *dto.SignOtherSessionsInput) (*dto.SignOtherSessionsOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+	currentSessionID, err := utils.GetSessionIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	profileService := services.NewProfileService()
+	if err := profileService.SignOutOtherSessions(userID, currentSessionID); err != nil {
+		if errors.Is(err, services.ErrUserNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		if errors.Is(err, services.ErrSessionNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	return &dto.SignOtherSessionsOutput{
+		Body: dto.SettingsUpdateResponse{
+			Message: "signed out of all other sessions successfully",
+		},
+	}, nil
 }
