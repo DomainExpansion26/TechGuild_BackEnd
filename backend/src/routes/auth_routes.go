@@ -175,16 +175,6 @@ func RegisterAuthRoutes(api huma.API) {
 	}, controllers.ChangePasswordHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "delete-account",
-		Method:      "DELETE",
-		Path:        "/auth/account",
-		Tags:        []string{"Authentication"},
-		Summary:     "Delete account",
-		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
-	}, controllers.DeleteAccountHandler)
-
-	huma.Register(api, huma.Operation{
 		OperationID: "set-account-type",
 		Method:      "POST",
 		Path:        "/auth/register/account-type",

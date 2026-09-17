@@ -34,7 +34,9 @@ func RegisterHandler(ctx context.Context, input *dto.RegisterInput) (*dto.Regist
 func LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	res, refreshToken, err := authService.Login(input.Body)
+	ip := utils.GetClientIP(input.ForwardedFor)
+	device := input.UserAgent
+	res, refreshToken, err := authService.Login(input.Body, device, ip, input.UserAgent)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
@@ -135,7 +137,8 @@ func RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dt
 
 	authService := services.NewAuthService(postgres.RedisDB)
 
-	res, newRefreshToken, err := authService.RefreshToken(oldToken)
+	ip := utils.GetClientIP(input.ForwardedFor)
+	res, newRefreshToken, err := authService.RefreshToken(oldToken, input.UserAgent, ip, input.UserAgent)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
@@ -200,22 +203,6 @@ func ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) 
 	return &dto.ChangePasswordOutput{
 		Body: dto.ChangePasswordResponse{Message: "Password changed successfully"},
 	}, nil
-}
-
-// ---------- DeleteAccount (protected) ----------
-
-func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*dto.DeleteAccountOutput, error) {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
-
-	authService := services.NewAuthService(postgres.RedisDB)
-
-	if err := authService.DeleteAccount(userID); err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
-	}
-
-	out := &dto.DeleteAccountOutput{}
-	out.Body.Message = "Account deleted successfully"
-	return out, nil
 }
 
 // for oauth

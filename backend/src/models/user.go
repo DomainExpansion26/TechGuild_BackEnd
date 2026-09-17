@@ -26,6 +26,7 @@ const (
 	StatusRejected            UserStatus = "rejected"
 	StatusPendingDeletion     UserStatus = "pending_deletion"
 	StatusDeleted             UserStatus = "deleted"
+	StatusDeactivated         UserStatus = "deactivated"
 )
 
 type User struct {

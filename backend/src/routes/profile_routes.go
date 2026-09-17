@@ -84,24 +84,6 @@ func RegisterProfileRoutes(api huma.API) {
 		Path:        "/v1/profile",
 		Tags:        []string{"Profile"},
 		Middlewares: authMw}, controllers.GetMyProfileHandler)
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "delete-profile-account",
-		Method:      "DELETE",
-		Path:        "/v1/profile",
-		Tags:        []string{"Profile"},
-		Summary:     "Delete profile account",
-		Middlewares: authMw,
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: dto.DeleteAccountRequest{
-						Password: "test@123",
-					},
-				},
-			},
-		},
-	}, controllers.DeleteProfileAccountHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -256,40 +238,4 @@ func RegisterProfileRoutes(api huma.API) {
 		Summary:     "Update client profile",
 		Middlewares: authMw,
 	}, controllers.UpdateClientProfileHandler)
-}
-
-// ---------- Settings routes (migrated to Huma) ----------
-
-func RegisterSettingsRoutes(api huma.API) {
-	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
-
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "update-account-settings",
-		Method:      "PATCH",
-		Path:        "/v1/settings/account",
-		Tags:        []string{"Settings"},
-		Summary:     "Update account settings",
-		Middlewares: authMw,
-	}, controllers.UpdateAccountSettingsHandler)
-
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "update-notifications",
-		Method:      "PATCH",
-		Path:        "/v1/settings/notifications",
-		Tags:        []string{"Settings"},
-		Summary:     "Update notification settings",
-		Middlewares: authMw,
-	}, controllers.UpdateNotificationsHandler)
-
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "update-privacy-settings",
-		Method:      "PATCH",
-		Path:        "/v1/settings/privacy",
-		Tags:        []string{"Settings"},
-		Summary:     "Update privacy settings",
-		Middlewares: authMw,
-	}, controllers.UpdatePrivacySettingsHandler)
 }

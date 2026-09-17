@@ -100,7 +100,9 @@ type RegisterOutput struct {
 }
 
 type LoginInput struct {
-	Body LoginRequest
+	Body         LoginRequest
+	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For"`
 }
 type LoginOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -134,6 +136,8 @@ type LogoutOutput struct {
 type RefreshTokenInput struct {
 	RefreshTokenCookie string `cookie:"refresh_token"`
 	Body               RefreshRequest
+	UserAgent          string `header:"User-Agent"`
+	ForwardedFor       string `header:"X-Forwarded-For"`
 }
 type RefreshTokenOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -160,11 +164,4 @@ type ChangePasswordInput struct {
 }
 type ChangePasswordOutput struct {
 	Body ChangePasswordResponse
-}
-
-type DeleteAccountInput struct{}
-type DeleteAccountOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
 }

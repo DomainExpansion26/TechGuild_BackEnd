@@ -23,7 +23,8 @@ func getJwtSecret() []byte {
 }
 
 type Claims struct {
-	UserID string `json:"user_id"`
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
@@ -32,6 +33,7 @@ type Claims struct {
 type ctxKey string
 
 const UserIDKey ctxKey = "user_id"
+const SessionIDKey ctxKey = "session_id"
 
 func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
@@ -56,6 +58,7 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 
 		claims := token.Claims.(*Claims)
 		newCtx := huma.WithValue(ctx, UserIDKey, claims.UserID)
+		newCtx = huma.WithValue(newCtx, SessionIDKey, claims.SessionID)
 		next(newCtx)
 	}
 }
