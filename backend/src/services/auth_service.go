@@ -212,7 +212,7 @@ func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest)
 	return s.SendVerificationEmail(user.ID.String(), user.Email)
 }
 
-func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, error) {
+func (s *AuthService) Login(req dto.LoginRequest, device, ipAddress, userAgent string) (*dto.LoginResponse, string, error) {
 	req.Email = utils.NormalizeEmail(req.Email)
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
@@ -236,7 +236,7 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 		return nil, "", errors.New("please select an account type first")
 	}
 
-	if user.Status == models.StatusPendingDeletion {
+	if user.Status == models.StatusPendingDeletion || user.Status == models.StatusDeactivated {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
 		if err := s.userRepo.UpdateUser(user); err != nil {
@@ -264,11 +264,6 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 		}
 	}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, "", err
-	}
-
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -277,11 +272,19 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 	session := &models.UserSession{
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		IsRevoked:    false,
 		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 
 	err = s.userRepo.CreateSession(session)
+	if err != nil {
+		return nil, "", err
+	}
+
+	accessToken, err := utils.GenerateAccessToken(user.ID.String(), session.ID.String())
 	if err != nil {
 		return nil, "", err
 	}
@@ -300,7 +303,7 @@ func (s *AuthService) Logout(refreshToken string) error {
 	return s.userRepo.RevokeSession(refreshToken)
 }
 
-func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, string, error) {
+func (s *AuthService) RefreshToken(oldToken string, device string, ipAddress string, userAgent string) (*dto.RefreshResponse, string, error) {
 
 	session, err := s.userRepo.GetSession(oldToken)
 	if err != nil {
@@ -326,11 +329,6 @@ func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, strin
 		return nil, "", errors.New("invalid token")
 	}
 
-	newAccessToken, err := utils.GenerateAccessToken(userID)
-	if err != nil {
-		return nil, "", err
-	}
-
 	newRefreshToken, err := utils.GenerateRefreshToken(userID)
 	if err != nil {
 		return nil, "", err
@@ -349,10 +347,18 @@ func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, strin
 	newSession := &models.UserSession{
 		UserID:       session.UserID,
 		RefreshToken: newRefreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		IsRevoked:    false,
 		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 	if err := s.userRepo.CreateSession(newSession); err != nil {
+		return nil, "", err
+	}
+
+	newAccessToken, err := utils.GenerateAccessToken(userID, newSession.ID.String())
+	if err != nil {
 		return nil, "", err
 	}
 
@@ -441,15 +447,6 @@ func (s *AuthService) ChangePassword(userID string, req dto.ChangePasswordReques
 	}
 
 	return nil
-}
-
-func (s *AuthService) DeleteAccount(userID string) error {
-	user, err := s.userRepo.GetUserByID(userID)
-	if err != nil {
-		return errors.New("user not found")
-	}
-
-	return s.userRepo.DeleteUser(user.ID.String())
 }
 
 func (s *AuthService) BlacklistAccessToken(accessToken string) error {

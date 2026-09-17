@@ -3,10 +3,12 @@ package utils
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"techguild-backend/src/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func GetUserIDFromContext(c *gin.Context) (string, error) {
@@ -27,4 +29,21 @@ func GetUserIDFromHumaContext(ctx context.Context) (string, error) {
 		return "", errors.New("user is not authenticated")
 	}
 	return userID, nil
+}
+
+func GetSessionIDFromHumaContext(ctx context.Context) (uuid.UUID, error) {
+	sessionIDstr, ok := ctx.Value(middleware.SessionIDKey).(string)
+	if !ok || sessionIDstr == "" {
+		return uuid.Nil, errors.New("session id not found in context")
+	}
+	return uuid.Parse(sessionIDstr)
+}
+
+// GetClientIP X-Forwarded-For
+func GetClientIP(forwardedFor string) string {
+	if forwardedFor == "" {
+		return ""
+	}
+	parts := strings.Split(forwardedFor, ",")
+	return strings.TrimSpace(parts[0])
 }

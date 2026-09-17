@@ -67,7 +67,7 @@ func splitName(fullName string) (string, string) {
 	return firstName, lastName
 }
 
-func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLoginResponse, string, error) {
+func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest, device, ipAddress, userAgent string) (*dto.GoogleLoginResponse, string, error) {
 
 	req.Email = utils.NormalizeEmail(req.Email)
 
@@ -142,10 +142,6 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 		}, "", nil
 	}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, "", err
-	}
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -154,11 +150,19 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 	session := &models.UserSession{
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
 		IsRevoked:    false,
 	}
 	if err := s.userRepo.CreateSession(session); err != nil {
 		return nil, "", errors.New("failed to create session")
+	}
+
+	accessToken, err := utils.GenerateAccessToken(user.ID.String(), session.ID.String())
+	if err != nil {
+		return nil, "", err
 	}
 
 	return &dto.GoogleLoginResponse{
@@ -168,7 +172,7 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest) (*dto.GoogleLogin
 	}, refreshToken, nil
 }
 
-func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLoginResponse, string, error) {
+func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest, device, ipAddress, userAgent string) (*dto.GitHubLoginResponse, string, error) {
 
 	req.Email = utils.NormalizeEmail(req.Email)
 
@@ -241,10 +245,6 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 		}, "", nil
 	}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, "", err
-	}
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, "", err
@@ -253,11 +253,19 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest) (*dto.GitHubLogin
 	session := &models.UserSession{
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
 		IsRevoked:    false,
 	}
 	if err := s.userRepo.CreateSession(session); err != nil {
 		return nil, "", errors.New("failed to create session")
+	}
+
+	accessToken, err := utils.GenerateAccessToken(user.ID.String(), session.ID.String())
+	if err != nil {
+		return nil, "", err
 	}
 
 	return &dto.GitHubLoginResponse{
