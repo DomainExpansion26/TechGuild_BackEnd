@@ -8,7 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-func RegisterSettingsRoutes(api huma.API) {
+func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 
 	// fetch account settings info
@@ -20,7 +20,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Get account settings",
 		Middlewares: authMw,
-	}, controllers.GetAccountSettingsHandler)
+	}, c.GetAccountSettingsHandler)
 
 	// edit account settings info
 	huma.Register(api, huma.Operation{
@@ -42,7 +42,7 @@ func RegisterSettingsRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.UpdateAccountSettingsHandler)
+	}, c.UpdateAccountSettingsHandler)
 
 	// fetch notification settings info
 	huma.Register(api, huma.Operation{
@@ -53,7 +53,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Get notification settings",
 		Middlewares: authMw,
-	}, controllers.GetNotificationsHandler)
+	}, c.GetNotificationsHandler)
 
 	// edit notification settings info
 	huma.Register(api, huma.Operation{
@@ -64,7 +64,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Update notification settings",
 		Middlewares: authMw,
-	}, controllers.UpdateNotificationsHandler)
+	}, c.UpdateNotificationsHandler)
 
 	// fetch privacy settings info
 	huma.Register(api, huma.Operation{
@@ -75,7 +75,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Get privacy settings",
 		Middlewares: authMw,
-	}, controllers.GetPrivacySettingsHandler)
+	}, c.GetPrivacySettingsHandler)
 
 	// edit privacy settings info
 	huma.Register(api, huma.Operation{
@@ -95,7 +95,7 @@ func RegisterSettingsRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.UpdatePrivacySettingsHandler)
+	}, c.UpdatePrivacySettingsHandler)
 
 	// fetch billing settings info
 	huma.Register(api, huma.Operation{
@@ -106,7 +106,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Get billing settings",
 		Middlewares: authMw,
-	}, controllers.GetBillingSettingsHandler)
+	}, c.GetBillingSettingsHandler)
 
 	// setup payout method info
 	huma.Register(api, huma.Operation{
@@ -117,7 +117,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Update billing settings",
 		Middlewares: authMw,
-	}, controllers.UpdatePayoutMethodHandler)
+	}, c.UpdatePayoutMethodHandler)
 
 	// edit payout schedule info
 	huma.Register(api, huma.Operation{
@@ -128,7 +128,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Update billing settings",
 		Middlewares: authMw,
-	}, controllers.UpdatePayoutScheduleHandler)
+	}, c.UpdatePayoutScheduleHandler)
 
 	// deactivate account
 	huma.Register(api, huma.Operation{
@@ -139,7 +139,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Deactivate account",
 		Middlewares: authMw,
-	}, controllers.DeactivateAccountHandler)
+	}, c.DeactivateAccountHandler)
 
 	// delete account
 	huma.Register(api, huma.Operation{
@@ -159,7 +159,7 @@ func RegisterSettingsRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.DeleteAccountHandler)
+	}, c.DeleteAccountHandler)
 
 	// fetch session info
 	huma.Register(api, huma.Operation{
@@ -170,7 +170,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Get session info",
 		Middlewares: authMw,
-	}, controllers.GetSessionsHandler)
+	}, c.GetSessionsHandler)
 
 	// revoke specific session
 	huma.Register(api, huma.Operation{
@@ -181,7 +181,7 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Revoke specific session",
 		Middlewares: authMw,
-	}, controllers.RevokeSessionHandler)
+	}, c.RevokeSessionHandler)
 
 	// sign out of all other sessions
 	huma.Register(api, huma.Operation{
@@ -192,5 +192,5 @@ func RegisterSettingsRoutes(api huma.API) {
 		Tags:        []string{"Settings"},
 		Summary:     "Sign out of all other sessions",
 		Middlewares: authMw,
-	}, controllers.SignOutOtherSessionsHandler)
+	}, c.SignOutOtherSessionsHandler)
 }

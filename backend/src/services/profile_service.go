@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
@@ -35,11 +36,13 @@ var ErrSessionNotFound = errors.New("session not found")
 const maxSlugRetries = 3
 
 type ProfileService struct {
+	cfg      *config.Config
 	userRepo repository.UserRepository
 }
 
-func NewProfileService() *ProfileService {
+func NewProfileService(cfg *config.Config) *ProfileService {
 	return &ProfileService{
+		cfg:      cfg,
 		userRepo: repository.NewUserRepository(),
 	}
 }
@@ -1004,6 +1007,42 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 		return nil, ErrUserNotFound
 	}
 
+	if user.AccountType == nil {
+		return nil, ErrAccountTypeNotSet
+	}
+
+	var profileData interface{}
+	switch *user.AccountType {
+	case models.AccountTypeIndividual:
+		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			return nil, ErrInternal
+		}
+		profileData = profile
+	case models.AccountTypeAgencyAdmin:
+		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			return nil, ErrInternal
+		}
+		profileData = profile
+	case models.AccountTypeClientAdmin:
+		profile, err := s.userRepo.GetClientProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			return nil, ErrInternal
+		}
+		profileData = profile
+	default:
+		return nil, ErrInvalidAccountType
+	}
 	exportData := map[string]interface{}{
 		"user": map[string]interface{}{
 			"id":             user.ID,
@@ -1017,26 +1056,9 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 			"created_at":     user.CreatedAt,
 			"updated_at":     user.UpdatedAt,
 		},
+		"profile":     profileData,
+		"exported_at": time.Now().UTC().Format(time.RFC3339),
 	}
-
-	if user.AccountType != nil {
-		switch *user.AccountType {
-		case models.AccountTypeIndividual:
-			if profile, err := s.userRepo.GetIndividualProfileByUserID(userID); err == nil {
-				exportData["profile"] = profile
-			}
-		case models.AccountTypeAgencyAdmin:
-			if profile, err := s.userRepo.GetAgencyProfileByUserID(userID); err == nil {
-				exportData["profile"] = profile
-			}
-		case models.AccountTypeClientAdmin:
-			if profile, err := s.userRepo.GetClientProfileByUserID(userID); err == nil {
-				exportData["profile"] = profile
-			}
-		}
-	}
-
-	exportData["exported_at"] = time.Now().UTC().Format(time.RFC3339)
 
 	jsonData, err := json.MarshalIndent(exportData, "", "  ")
 	if err != nil {
@@ -1049,7 +1071,7 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 		return nil, errors.New("failed to upload export file")
 	}
 
-	go utils.SendDataExportEmail(user.Email, user.FirstName, downloadURL)
+	go utils.SendDataExportEmail(s.cfg, user.Email, user.FirstName, downloadURL)
 
 	return &dto.ExportResponse{
 		Message:     "Your data export is ready. A download link has been sent to your email.",
