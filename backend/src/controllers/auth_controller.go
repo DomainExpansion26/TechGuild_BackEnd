@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
@@ -15,10 +16,18 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+type AuthController struct {
+	cfg *config.Config
+}
+
+func NewAuthController(cfg *config.Config) *AuthController {
+	return &AuthController{cfg: cfg}
+}
+
 // ---------- Register ----------
 
-func RegisterHandler(ctx context.Context, input *dto.RegisterInput) (*dto.RegisterOutput, error) {
-	authService := services.NewAuthService(postgres.RedisDB)
+func (c *AuthController) RegisterHandler(ctx context.Context, input *dto.RegisterInput) (*dto.RegisterOutput, error) {
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.Register(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -31,8 +40,8 @@ func RegisterHandler(ctx context.Context, input *dto.RegisterInput) (*dto.Regist
 
 // ---------- Login ----------
 
-func LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput, error) {
-	authService := services.NewAuthService(postgres.RedisDB)
+func (c *AuthController) LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput, error) {
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	ip := utils.GetClientIP(input.ForwardedFor)
 	device := input.UserAgent
@@ -64,8 +73,8 @@ func LoginHandler(ctx context.Context, input *dto.LoginInput) (*dto.LoginOutput,
 
 // ---------- VerifyEmail ----------
 
-func VerifyEmailHandler(ctx context.Context, input *dto.VerifyEmailInput) (*dto.VerifyEmailOutput, error) {
-	authService := services.NewAuthService(postgres.RedisDB)
+func (c *AuthController) VerifyEmailHandler(ctx context.Context, input *dto.VerifyEmailInput) (*dto.VerifyEmailOutput, error) {
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	res, err := authService.VerifyEmail(dto.VerifyEmailRequest{Token: input.Token})
 	if err != nil {
@@ -77,8 +86,8 @@ func VerifyEmailHandler(ctx context.Context, input *dto.VerifyEmailInput) (*dto.
 
 // ---------- ResendVerificationEmail ----------
 
-func ResendVerificationEmailHandler(ctx context.Context, input *dto.ResendVerificationInput) (*dto.ResendVerificationOutput, error) {
-	authService := services.NewAuthService(postgres.RedisDB)
+func (c *AuthController) ResendVerificationEmailHandler(ctx context.Context, input *dto.ResendVerificationInput) (*dto.ResendVerificationOutput, error) {
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.ResendVerificationEmail(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -91,13 +100,13 @@ func ResendVerificationEmailHandler(ctx context.Context, input *dto.ResendVerifi
 
 // ---------- Logout ----------
 
-func LogoutHandler(ctx context.Context, input *dto.LogoutInput) (*dto.LogoutOutput, error) {
+func (c *AuthController) LogoutHandler(ctx context.Context, input *dto.LogoutInput) (*dto.LogoutOutput, error) {
 	token := input.RefreshTokenCookie
 	if token == "" {
 		token = input.Body.RefreshToken
 	}
 
-	authService := services.NewAuthService(postgres.RedisDB)
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.Logout(token); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -125,7 +134,7 @@ func LogoutHandler(ctx context.Context, input *dto.LogoutInput) (*dto.LogoutOutp
 
 // ---------- RefreshToken ----------
 
-func RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dto.RefreshTokenOutput, error) {
+func (c *AuthController) RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dto.RefreshTokenOutput, error) {
 	oldToken := input.RefreshTokenCookie
 	if oldToken == "" {
 		oldToken = input.Body.RefreshToken
@@ -135,7 +144,7 @@ func RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dt
 		return nil, huma.Error401Unauthorized("refresh token missing")
 	}
 
-	authService := services.NewAuthService(postgres.RedisDB)
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	ip := utils.GetClientIP(input.ForwardedFor)
 	res, newRefreshToken, err := authService.RefreshToken(oldToken, input.UserAgent, ip, input.UserAgent)
@@ -161,10 +170,10 @@ func RefreshTokenHandler(ctx context.Context, input *dto.RefreshTokenInput) (*dt
 
 // ---------- ResetPassword ----------
 
-func ResetPasswordHandler(ctx context.Context, input *dto.ResetPasswordInput) (*dto.ResetPasswordOutput, error) {
+func (c *AuthController) ResetPasswordHandler(ctx context.Context, input *dto.ResetPasswordInput) (*dto.ResetPasswordOutput, error) {
 	input.Body.Token = input.Token
 
-	authService := services.NewAuthService(postgres.RedisDB)
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.ResetPassword(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -177,8 +186,8 @@ func ResetPasswordHandler(ctx context.Context, input *dto.ResetPasswordInput) (*
 
 // ---------- ForgotPassword ----------
 
-func ForgotPasswordHandler(ctx context.Context, input *dto.ForgotPasswordInput) (*dto.ForgotPasswordOutput, error) {
-	authService := services.NewAuthService(postgres.RedisDB)
+func (c *AuthController) ForgotPasswordHandler(ctx context.Context, input *dto.ForgotPasswordInput) (*dto.ForgotPasswordOutput, error) {
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.ForgotPassword(input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -191,10 +200,10 @@ func ForgotPasswordHandler(ctx context.Context, input *dto.ForgotPasswordInput) 
 
 // ---------- ChangePassword (protected) ----------
 
-func ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) (*dto.ChangePasswordOutput, error) {
+func (c *AuthController) ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) (*dto.ChangePasswordOutput, error) {
 	userID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	authService := services.NewAuthService(postgres.RedisDB)
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.ChangePassword(userID, input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -206,10 +215,10 @@ func ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) 
 }
 
 // for oauth
-func SetAccountTypeAuthenticatedHandler(ctx context.Context, input *dto.SetAccountTypeAuthInput) (*dto.SetAccountTypeAuthOutput, error) {
+func (c *AuthController) SetAccountTypeAuthenticatedHandler(ctx context.Context, input *dto.SetAccountTypeAuthInput) (*dto.SetAccountTypeAuthOutput, error) {
 	userID, _ := ctx.Value(middleware.UserIDKey).(string)
 
-	authService := services.NewAuthService(postgres.RedisDB)
+	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
 	if err := authService.SetAccountTypeAuthenticated(userID, models.AccountType(input.Body.AccountType)); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())

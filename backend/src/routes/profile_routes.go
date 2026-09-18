@@ -10,7 +10,7 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-func RegisterProfileRoutes(api huma.API) {
+func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 
 	// Public — slug availability check (static route, stays under /v1/profile/)
@@ -20,7 +20,7 @@ func RegisterProfileRoutes(api huma.API) {
 		Method:      "GET",
 		Path:        "/v1/profile/check-slug",
 		Tags:        []string{"Profile"},
-	}, controllers.CheckSlugHandler)
+	}, c.CheckSlugHandler)
 
 	// Public — profile lookup by slug, moved to its own /v1/u/* namespace
 	// so user-generated slugs can never collide with static /v1/profile/*
@@ -31,7 +31,7 @@ func RegisterProfileRoutes(api huma.API) {
 		Method:      "GET",
 		Path:        "/v1/u/{slug}",
 		Tags:        []string{"Profile"},
-	}, controllers.GetPublicProfileHandler)
+	}, c.GetPublicProfileHandler)
 
 	// Protected
 	huma.Register(api, huma.Operation{
@@ -40,42 +40,90 @@ func RegisterProfileRoutes(api huma.API) {
 		Method:      "POST",
 		Path:        "/v1/profile/upload-resume",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.UploadResumeHandler)
+		RequestBody: &huma.RequestBody{
+			Content: map[string]*huma.MediaType{
+				"multipart/form-data": {
+					Schema: &huma.Schema{
+						Type: "object",
+						Properties: map[string]*huma.Schema{
+							"file": {
+								Type:   "string",
+								Format: "binary",
+							},
+						},
+						Required: []string{"file"},
+					},
+				},
+			},
+		},
+		Middlewares: authMw}, c.UploadResumeHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "upload-avatar",
 		Method:      "POST",
 		Path:        "/v1/profile/avatar",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.UploadAvatarHandler)
+		RequestBody: &huma.RequestBody{
+			Content: map[string]*huma.MediaType{
+				"multipart/form-data": {
+					Schema: &huma.Schema{
+						Type: "object",
+						Properties: map[string]*huma.Schema{
+							"file": {
+								Type:   "string",
+								Format: "binary",
+							},
+						},
+						Required: []string{"file"},
+					},
+				},
+			},
+		},
+		Middlewares: authMw}, c.UploadAvatarHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "upload-logo",
 		Method:      "POST",
 		Path:        "/v1/profile/logo",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.UploadLogoHandler)
+		RequestBody: &huma.RequestBody{
+			Content: map[string]*huma.MediaType{
+				"multipart/form-data": {
+					Schema: &huma.Schema{
+						Type: "object",
+						Properties: map[string]*huma.Schema{
+							"file": {
+								Type:   "string",
+								Format: "binary",
+							},
+						},
+						Required: []string{"file"},
+					},
+				},
+			},
+		},
+		Middlewares: authMw}, c.UploadLogoHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "delete-avatar",
 		Method:      "DELETE",
 		Path:        "/v1/profile/avatar",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.DeleteAvatarHandler)
+		Middlewares: authMw}, c.DeleteAvatarHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "delete-logo",
 		Method:      "DELETE",
 		Path:        "/v1/profile/logo",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.DeleteLogoHandler)
+		Middlewares: authMw}, c.DeleteLogoHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "delete-resume",
 		Method:      "DELETE",
 		Path:        "/v1/profile/resume",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.DeleteResumeHandler)
+		Middlewares: authMw}, c.DeleteResumeHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -83,7 +131,7 @@ func RegisterProfileRoutes(api huma.API) {
 		Method:      "GET",
 		Path:        "/v1/profile",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.GetMyProfileHandler)
+		Middlewares: authMw}, c.GetMyProfileHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -91,25 +139,25 @@ func RegisterProfileRoutes(api huma.API) {
 		Method:      "GET",
 		Path:        "/v1/profile/points",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.GetUserPointsHandler)
+		Middlewares: authMw}, c.GetUserPointsHandler)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "export-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/export",
 		Tags:        []string{"Profile"},
-		Middlewares: authMw}, controllers.ExportProfileHandler)
+		Middlewares: authMw}, c.ExportProfileHandler)
 
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "create-profile-deprecated",
-		Method:      "POST",
-		Path:        "/v1/profile",
-		Tags:        []string{"Profile"},
-		Summary:     "Deprecated: use POST /v1/profile/{type} instead",
-		Deprecated:  true,
-		Middlewares: authMw,
-	}, controllers.DeprecatedProfileCreateHandler)
+	// huma.Register(api, huma.Operation{
+	// 	Security:    []map[string][]string{{"bearerAuth": {}}},
+	// 	OperationID: "create-profile-deprecated",
+	// 	Method:      "POST",
+	// 	Path:        "/v1/profile",
+	// 	Tags:        []string{"Profile"},
+	// 	Summary:     "Deprecated: use POST /v1/profile/{type} instead",
+	// 	Deprecated:  true,
+	// 	Middlewares: authMw,
+	// }, c.DeprecatedProfileCreateHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -147,7 +195,7 @@ func RegisterProfileRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.CreateIndividualProfileHandler)
+	}, c.CreateIndividualProfileHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -177,7 +225,7 @@ func RegisterProfileRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.CreateAgencyProfileHandler)
+	}, c.CreateAgencyProfileHandler)
 
 	// client profile creation
 	huma.Register(api, huma.Operation{
@@ -207,7 +255,7 @@ func RegisterProfileRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.CreateClientProfileHandler)
+	}, c.CreateClientProfileHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -217,7 +265,7 @@ func RegisterProfileRoutes(api huma.API) {
 		Tags:        []string{"Profile"},
 		Summary:     "Update individual profile",
 		Middlewares: authMw,
-	}, controllers.UpdateIndividualProfileHandler)
+	}, c.UpdateIndividualProfileHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -227,7 +275,7 @@ func RegisterProfileRoutes(api huma.API) {
 		Tags:        []string{"Profile"},
 		Summary:     "Update agency profile",
 		Middlewares: authMw,
-	}, controllers.UpdateAgencyProfileHandler)
+	}, c.UpdateAgencyProfileHandler)
 
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
@@ -237,5 +285,5 @@ func RegisterProfileRoutes(api huma.API) {
 		Tags:        []string{"Profile"},
 		Summary:     "Update client profile",
 		Middlewares: authMw,
-	}, controllers.UpdateClientProfileHandler)
+	}, c.UpdateClientProfileHandler)
 }

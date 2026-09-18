@@ -2,12 +2,12 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
@@ -16,15 +16,23 @@ import (
 	"gorm.io/gorm"
 )
 
+type ProfileController struct {
+	cfg *config.Config
+}
+
+func NewProfileController(cfg *config.Config) *ProfileController {
+	return &ProfileController{cfg: cfg}
+}
+
 // ---------- CreateIndividualProfile (JSON body version) ----------
 
-func CreateIndividualProfileHandler(ctx context.Context, input *dto.IndividualProfileInput) (*dto.IndividualProfileOutput, error) {
+func (c *ProfileController) CreateIndividualProfileHandler(ctx context.Context, input *dto.IndividualProfileInput) (*dto.IndividualProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateIndividualProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -54,13 +62,13 @@ func CreateIndividualProfileHandler(ctx context.Context, input *dto.IndividualPr
 
 // ---------- UpdateIndividualProfile ----------
 
-func UpdateIndividualProfileHandler(ctx context.Context, input *dto.UpdateIndividualProfileInput) (*dto.UpdateIndividualProfileOutput, error) {
+func (c *ProfileController) UpdateIndividualProfileHandler(ctx context.Context, input *dto.UpdateIndividualProfileInput) (*dto.UpdateIndividualProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.UpdateIndividualProfile(userID, input.Body)
 
 	if err != nil {
@@ -91,13 +99,13 @@ func UpdateIndividualProfileHandler(ctx context.Context, input *dto.UpdateIndivi
 
 // ---------- CreateOrUpdateAgencyProfile ----------
 
-func CreateAgencyProfileHandler(ctx context.Context, input *dto.AgencyProfileInput) (*dto.AgencyProfileOutput, error) {
+func (c *ProfileController) CreateAgencyProfileHandler(ctx context.Context, input *dto.AgencyProfileInput) (*dto.AgencyProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateAgencyProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -125,13 +133,13 @@ func CreateAgencyProfileHandler(ctx context.Context, input *dto.AgencyProfileInp
 	}, nil
 }
 
-func UpdateAgencyProfileHandler(ctx context.Context, input *dto.UpdateAgencyProfileInput) (*dto.UpdateAgencyProfileOutput, error) {
+func (c *ProfileController) UpdateAgencyProfileHandler(ctx context.Context, input *dto.UpdateAgencyProfileInput) (*dto.UpdateAgencyProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.UpdateAgencyProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -160,13 +168,13 @@ func UpdateAgencyProfileHandler(ctx context.Context, input *dto.UpdateAgencyProf
 }
 
 // ---------- CreateOrUpdateClientProfile ----------
-func CreateClientProfileHandler(ctx context.Context, input *dto.ClientProfileInput) (*dto.ClientProfileOutput, error) {
+func (c *ProfileController) CreateClientProfileHandler(ctx context.Context, input *dto.ClientProfileInput) (*dto.ClientProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateClientProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -194,13 +202,13 @@ func CreateClientProfileHandler(ctx context.Context, input *dto.ClientProfileInp
 	}, nil
 }
 
-func UpdateClientProfileHandler(ctx context.Context, input *dto.UpdateClientProfileInput) (*dto.UpdateClientProfileOutput, error) {
+func (c *ProfileController) UpdateClientProfileHandler(ctx context.Context, input *dto.UpdateClientProfileInput) (*dto.UpdateClientProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.UpdateClientProfile(userID, input.Body)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -230,13 +238,13 @@ func UpdateClientProfileHandler(ctx context.Context, input *dto.UpdateClientProf
 
 // ---------- GetMyProfile ----------
 
-func GetMyProfileHandler(ctx context.Context, input *dto.GetMyProfileInput) (*dto.GetMyProfileOutput, error) {
+func (c *ProfileController) GetMyProfileHandler(ctx context.Context, input *dto.GetMyProfileInput) (*dto.GetMyProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	profile, err := profileService.GetMyProfile(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -256,8 +264,8 @@ func GetMyProfileHandler(ctx context.Context, input *dto.GetMyProfileInput) (*dt
 
 // ---------- SetAccountType ----------
 
-func SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) (*dto.SetAccountTypeOutput, error) {
-	profileService := services.NewProfileService()
+func (c *ProfileController) SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) (*dto.SetAccountTypeOutput, error) {
+	profileService := services.NewProfileService(c.cfg)
 
 	if err := profileService.SetAccountType(input.Body); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -288,7 +296,7 @@ func SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) 
 
 // ---------- UploadResume ----------
 
-func UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dto.UploadResumeOutput, error) {
+func (c *ProfileController) UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dto.UploadResumeOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
@@ -320,7 +328,7 @@ func UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dt
 
 // ---------- UploadAvatar ----------
 
-func UploadAvatarHandler(ctx context.Context, input *dto.UploadAvatarInput) (*dto.UploadAvatarOutput, error) {
+func (c *ProfileController) UploadAvatarHandler(ctx context.Context, input *dto.UploadAvatarInput) (*dto.UploadAvatarOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
@@ -353,7 +361,7 @@ func UploadAvatarHandler(ctx context.Context, input *dto.UploadAvatarInput) (*dt
 
 // ---------- UploadLogo ----------
 
-func UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.UploadLogoOutput, error) {
+func (c *ProfileController) UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.UploadLogoOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
@@ -386,13 +394,13 @@ func UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.Up
 
 // ---------- DeleteAvatar / DeleteLogo / DeleteResume ----------
 
-func DeleteAvatarHandler(ctx context.Context, input *dto.DeleteAvatarInput) (*dto.DeleteAvatarOutput, error) {
+func (c *ProfileController) DeleteAvatarHandler(ctx context.Context, input *dto.DeleteAvatarInput) (*dto.DeleteAvatarOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteAvatar(userID); err != nil {
 		if errors.Is(err, services.ErrProfileNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -408,13 +416,13 @@ func DeleteAvatarHandler(ctx context.Context, input *dto.DeleteAvatarInput) (*dt
 	}, nil
 }
 
-func DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.DeleteLogoOutput, error) {
+func (c *ProfileController) DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.DeleteLogoOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteLogo(userID); err != nil {
 		if errors.Is(err, services.ErrProfileNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -436,13 +444,13 @@ func DeleteLogoHandler(ctx context.Context, input *dto.DeleteLogoInput) (*dto.De
 	}, nil
 }
 
-func DeleteResumeHandler(ctx context.Context, input *dto.DeleteResumeInput) (*dto.DeleteResumeOutput, error) {
+func (c *ProfileController) DeleteResumeHandler(ctx context.Context, input *dto.DeleteResumeInput) (*dto.DeleteResumeOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteResume(userID); err != nil {
 		if errors.Is(err, services.ErrProfileNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -463,8 +471,8 @@ func DeleteResumeHandler(ctx context.Context, input *dto.DeleteResumeInput) (*dt
 
 // ---------- GetPublicProfile ----------
 
-func GetPublicProfileHandler(ctx context.Context, input *dto.GetPublicProfileInput) (*dto.GetPublicProfileOutput, error) {
-	profileService := services.NewProfileService()
+func (c *ProfileController) GetPublicProfileHandler(ctx context.Context, input *dto.GetPublicProfileInput) (*dto.GetPublicProfileOutput, error) {
+	profileService := services.NewProfileService(c.cfg)
 	profile, err := profileService.GetPublicProfile(input.Slug)
 	if err != nil {
 		if errors.Is(err, services.ErrInternal) {
@@ -478,13 +486,13 @@ func GetPublicProfileHandler(ctx context.Context, input *dto.GetPublicProfileInp
 
 // ---------- GetUserPoints ----------
 
-func GetUserPointsHandler(ctx context.Context, input *dto.GetUserPointsInput) (*dto.GetUserPointsOutput, error) {
+func (c *ProfileController) GetUserPointsHandler(ctx context.Context, input *dto.GetUserPointsInput) (*dto.GetUserPointsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	points, err := profileService.GetUserPoints(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -498,19 +506,31 @@ func GetUserPointsHandler(ctx context.Context, input *dto.GetUserPointsInput) (*
 
 // ---------- ExportProfile ----------
 
-func ExportProfileHandler(ctx context.Context, input *dto.ExportProfileInput) (*dto.ExportProfileOutput, error) {
+func (c *ProfileController) ExportProfileHandler(ctx context.Context, input *dto.ExportProfileInput) (*dto.ExportProfileOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	result, err := profileService.ExportUserData(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		if errors.Is(err, services.ErrAccountTypeNotSet) {
+			return nil, huma.Error400BadRequest("account type not set, cannot export profile")
+		}
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound("profile not found, create it first")
+		}
+		if errors.Is(err, services.ErrInvalidAccountType) {
+			return nil, huma.Error400BadRequest("invalid account type, cannot export profile")
+		}
+		if errors.Is(err, services.ErrInternal) {
+			return nil, huma.Error500InternalServerError("failed to export user data")
+		}
+		return nil, huma.Error500InternalServerError("failed to export user data: " + err.Error())
 	}
 
 	return &dto.ExportProfileOutput{Body: *result}, nil
@@ -518,8 +538,8 @@ func ExportProfileHandler(ctx context.Context, input *dto.ExportProfileInput) (*
 
 // ---------- CheckSlug ----------
 
-func CheckSlugHandler(ctx context.Context, input *dto.CheckSlugInput) (*dto.CheckSlugOutput, error) {
-	profileService := services.NewProfileService()
+func (c *ProfileController) CheckSlugHandler(ctx context.Context, input *dto.CheckSlugInput) (*dto.CheckSlugOutput, error) {
+	profileService := services.NewProfileService(c.cfg)
 	resp, err := profileService.CheckSlugAvailability(input.Slug)
 	if err != nil {
 		return nil, huma.Error500InternalServerError(err.Error())
@@ -528,63 +548,63 @@ func CheckSlugHandler(ctx context.Context, input *dto.CheckSlugInput) (*dto.Chec
 	return &dto.CheckSlugOutput{Body: *resp}, nil
 }
 
-// ---------- DeprecatedProfileCreate ----------
+// // ---------- DeprecatedProfileCreate ----------
 
-func DeprecatedProfileCreateHandler(ctx context.Context, input *dto.DeprecatedProfileCreateInput) (*dto.DeprecatedProfileCreateOutput, error) {
-	userID, err := utils.GetUserIDFromHumaContext(ctx)
-	if err != nil {
-		return nil, huma.Error401Unauthorized(err.Error())
-	}
+// func (c *ProfileController) DeprecatedProfileCreateHandler(ctx context.Context, input *dto.DeprecatedProfileCreateInput) (*dto.DeprecatedProfileCreateOutput, error) {
+// 	userID, err := utils.GetUserIDFromHumaContext(ctx)
+// 	if err != nil {
+// 		return nil, huma.Error401Unauthorized(err.Error())
+// 	}
 
-	profileService := services.NewProfileService()
+// 	profileService := services.NewProfileService(c.cfg)
 
-	var slug string
-	switch input.Body.AccountType {
-	case "individual":
-		var req dto.CreateIndividualProfileRequest
-		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid request body")
-		}
-		slug, err = profileService.CreateIndividualProfile(userID, req)
-	case "agency":
-		var req dto.CreateAgencyProfileRequest
-		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid request body")
-		}
-		slug, err = profileService.CreateAgencyProfile(userID, req)
-	case "client":
-		var req dto.CreateClientProfileRequest
-		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
-			return nil, huma.Error400BadRequest("invalid request body")
-		}
-		slug, err = profileService.CreateClientProfile(userID, req)
-	default:
-		return nil, huma.Error400BadRequest("unknown account_type: must be individual, agency, or client")
-	}
+// 	var slug string
+// 	switch input.Body.AccountType {
+// 	case "individual":
+// 		var req dto.CreateIndividualProfileRequest
+// 		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
+// 			return nil, huma.Error400BadRequest("invalid request body")
+// 		}
+// 		slug, err = profileService.CreateIndividualProfile(userID, req)
+// 	case "agency":
+// 		var req dto.CreateAgencyProfileRequest
+// 		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
+// 			return nil, huma.Error400BadRequest("invalid request body")
+// 		}
+// 		slug, err = profileService.CreateAgencyProfile(userID, req)
+// 	case "client":
+// 		var req dto.CreateClientProfileRequest
+// 		if err := json.Unmarshal(input.Body.ProfileData, &req); err != nil {
+// 			return nil, huma.Error400BadRequest("invalid request body")
+// 		}
+// 		slug, err = profileService.CreateClientProfile(userID, req)
+// 	default:
+// 		return nil, huma.Error400BadRequest("unknown account_type: must be individual, agency, or client")
+// 	}
 
-	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileAlreadyExists) {
-			return nil, huma.Error409Conflict(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
+// 	if err != nil {
+// 		if errors.Is(err, services.ErrUserNotFound) {
+// 			return nil, huma.Error404NotFound(err.Error())
+// 		}
+// 		if errors.Is(err, services.ErrProfileAlreadyExists) {
+// 			return nil, huma.Error409Conflict(err.Error())
+// 		}
+// 		if errors.Is(err, services.ErrForbidden) {
+// 			return nil, huma.Error403Forbidden(err.Error())
+// 		}
+// 		if errors.Is(err, services.ErrValidation) {
+// 			return nil, huma.Error400BadRequest(err.Error())
+// 		}
+// 		if errors.Is(err, services.ErrInternal) {
+// 			return nil, huma.Error500InternalServerError(err.Error())
+// 		}
+// 		return nil, huma.Error500InternalServerError(err.Error())
+// 	}
 
-	return &dto.DeprecatedProfileCreateOutput{
-		Body: dto.CreateProfileResponse{
-			Message:       "Profile created successfully (deprecated: use POST /v1/profile/{type} instead)",
-			PublicUrlSlug: slug,
-		},
-	}, nil
-}
+// 	return &dto.DeprecatedProfileCreateOutput{
+// 		Body: dto.CreateProfileResponse{
+// 			Message:       "Profile created successfully (deprecated: use POST /v1/profile/{type} instead)",
+// 			PublicUrlSlug: slug,
+// 		},
+// 	}, nil
+// }

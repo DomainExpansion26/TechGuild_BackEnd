@@ -31,6 +31,11 @@ func LoadConfig() (*Config, error) {
 
 		FrontendURL: viper.GetString("FRONTEND_URL"),
 		ZudokuURL:   viper.GetString("ZUDOKU_URL"),
+
+		SMTPHost:     viper.GetString("SMTP_HOST"),
+		SMTPPort:     viper.GetString("SMTP_PORT"),
+		SMTPEmail:    viper.GetString("SMTP_EMAIL"),
+		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
 	}
 
 	return cfg, nil

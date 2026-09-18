@@ -13,7 +13,7 @@ import (
 // frontend and Zudoku origins (FRONTEND_URL + ZUDOKU_URL, comma-separated).
 // Falls back to the local dev frontend when neither is set.
 func CORS(cfg *config.Config) gin.HandlerFunc {
-	origins := []string{"http://localhost:3000"}
+	origins := []string{"http://localhost:5173"}
 	for _, raw := range []string{cfg.FrontendURL, cfg.ZudokuURL} {
 		for _, o := range strings.Split(raw, ",") {
 			if o = strings.TrimSpace(o); o != "" {
