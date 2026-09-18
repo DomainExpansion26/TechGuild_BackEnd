@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
@@ -11,13 +12,21 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-func GetAccountSettingsHandler(ctx context.Context, input *dto.GetAccountSettingsInput) (*dto.GetAccountSettingsOutput, error) {
+type SettingsController struct {
+	cfg *config.Config
+}
+
+func NewSettingsController(cfg *config.Config) *SettingsController {
+	return &SettingsController{cfg: cfg}
+}
+
+func (c *SettingsController) GetAccountSettingsHandler(ctx context.Context, input *dto.GetAccountSettingsInput) (*dto.GetAccountSettingsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	accountSettings, err := profileService.GetAccountSettings(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -31,13 +40,13 @@ func GetAccountSettingsHandler(ctx context.Context, input *dto.GetAccountSetting
 	}, nil
 }
 
-func UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountSettingsInput) (*dto.UpdateAccountSettingsOutput, error) {
+func (c *SettingsController) UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountSettingsInput) (*dto.UpdateAccountSettingsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.UpdateAccountSettings(userID, input.Body); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -58,20 +67,20 @@ func UpdateAccountSettingsHandler(ctx context.Context, input *dto.UpdateAccountS
 	}, nil
 }
 
-func GetNotificationsHandler(ctx context.Context, input *dto.GetNotificationsInput) (*dto.GetNotificationsOutput, error) {
+func (c *SettingsController) GetNotificationsHandler(ctx context.Context, input *dto.GetNotificationsInput) (*dto.GetNotificationsOutput, error) {
 	return nil, huma.Error501NotImplemented("Notifications settings are not implemented yet")
 }
 
-func UpdateNotificationsHandler(ctx context.Context, input *dto.UpdateNotificationsInput) (*dto.UpdateNotificationsOutput, error) {
+func (c *SettingsController) UpdateNotificationsHandler(ctx context.Context, input *dto.UpdateNotificationsInput) (*dto.UpdateNotificationsOutput, error) {
 	return nil, huma.Error501NotImplemented("Notifications settings are not implemented yet")
 }
 
-func GetPrivacySettingsHandler(ctx context.Context, input *dto.GetPrivacySettingsInput) (*dto.GetPrivacySettingsOutput, error) {
+func (c *SettingsController) GetPrivacySettingsHandler(ctx context.Context, input *dto.GetPrivacySettingsInput) (*dto.GetPrivacySettingsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	privacySettings, err := profileService.GetPrivacySettings(userID)
 	if err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
@@ -88,13 +97,13 @@ func GetPrivacySettingsHandler(ctx context.Context, input *dto.GetPrivacySetting
 	return &dto.GetPrivacySettingsOutput{Body: *privacySettings}, nil
 }
 
-func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyInput) (*dto.UpdatePrivacyOutput, error) {
+func (c *SettingsController) UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyInput) (*dto.UpdatePrivacyOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.UpdatePrivacySettings(userID, input.Body); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -117,25 +126,25 @@ func UpdatePrivacySettingsHandler(ctx context.Context, input *dto.UpdatePrivacyI
 	return &dto.UpdatePrivacyOutput{Body: dto.SettingsUpdateResponse{Message: "privacy settings updated successfully"}}, nil
 }
 
-func GetBillingSettingsHandler(ctx context.Context, input *dto.GetBillingSettingsInput) (*dto.GetBillingSettingsOutput, error) {
+func (c *SettingsController) GetBillingSettingsHandler(ctx context.Context, input *dto.GetBillingSettingsInput) (*dto.GetBillingSettingsOutput, error) {
 	return nil, huma.Error501NotImplemented("billing settings are not implemented yet")
 }
 
-func UpdatePayoutMethodHandler(ctx context.Context, input *dto.UpdatePayoutMethodInput) (*dto.UpdatePayoutMethodOutput, error) {
+func (c *SettingsController) UpdatePayoutMethodHandler(ctx context.Context, input *dto.UpdatePayoutMethodInput) (*dto.UpdatePayoutMethodOutput, error) {
 	return nil, huma.Error501NotImplemented("payout method is not implemented yet")
 }
 
-func UpdatePayoutScheduleHandler(ctx context.Context, input *dto.UpdatePayoutScheduleInput) (*dto.UpdatePayoutScheduleOutput, error) {
+func (c *SettingsController) UpdatePayoutScheduleHandler(ctx context.Context, input *dto.UpdatePayoutScheduleInput) (*dto.UpdatePayoutScheduleOutput, error) {
 	return nil, huma.Error501NotImplemented("payout schedule is not implemented yet")
 }
 
-func DeactivateAccountHandler(ctx context.Context, input *dto.DeactivateAccountInput) (*dto.DeactivateAccountOutput, error) {
+func (c *SettingsController) DeactivateAccountHandler(ctx context.Context, input *dto.DeactivateAccountInput) (*dto.DeactivateAccountOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeactivateAccount(userID, input.Body); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -155,13 +164,13 @@ func DeactivateAccountHandler(ctx context.Context, input *dto.DeactivateAccountI
 	}, nil
 }
 
-func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*dto.DeleteAccountOutput, error) {
+func (c *SettingsController) DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*dto.DeleteAccountOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteAccountPermanently(userID, input.Body.Password); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -182,13 +191,13 @@ func DeleteAccountHandler(ctx context.Context, input *dto.DeleteAccountInput) (*
 	}, nil
 }
 
-func GetSessionsHandler(ctx context.Context, input *dto.GetSessionsInput) (*dto.GetSessionsOutput, error) {
+func (c *SettingsController) GetSessionsHandler(ctx context.Context, input *dto.GetSessionsInput) (*dto.GetSessionsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 
 	sessions, err := profileService.GetSessions(userID)
 	if err != nil {
@@ -203,13 +212,13 @@ func GetSessionsHandler(ctx context.Context, input *dto.GetSessionsInput) (*dto.
 	}, nil
 }
 
-func RevokeSessionHandler(ctx context.Context, input *dto.RevokeSessionInput) (*dto.RevokeSessionOutput, error) {
+func (c *SettingsController) RevokeSessionHandler(ctx context.Context, input *dto.RevokeSessionInput) (*dto.RevokeSessionOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.RevokeSession(userID, input.ID); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
@@ -229,7 +238,7 @@ func RevokeSessionHandler(ctx context.Context, input *dto.RevokeSessionInput) (*
 	}, nil
 }
 
-func SignOutOtherSessionsHandler(ctx context.Context, input *dto.SignOtherSessionsInput) (*dto.SignOtherSessionsOutput, error) {
+func (c *SettingsController) SignOutOtherSessionsHandler(ctx context.Context, input *dto.SignOtherSessionsInput) (*dto.SignOtherSessionsOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
@@ -239,7 +248,7 @@ func SignOutOtherSessionsHandler(ctx context.Context, input *dto.SignOtherSessio
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	profileService := services.NewProfileService()
+	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.SignOutOtherSessions(userID, currentSessionID); err != nil {
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())

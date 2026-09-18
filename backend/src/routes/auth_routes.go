@@ -10,7 +10,7 @@ import (
 
 // ---------- Huma routes (naye, migrated handlers) ----------
 
-func RegisterAuthRoutes(api huma.API) {
+func RegisterAuthRoutes(api huma.API, c *controllers.AuthController, pc *controllers.ProfileController) {
 
 	// Public routes
 	huma.Register(api, huma.Operation{
@@ -32,7 +32,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.RegisterHandler)
+	}, c.RegisterHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "login",
@@ -51,7 +51,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.LoginHandler)
+	}, c.LoginHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "logout",
@@ -69,7 +69,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.LogoutHandler)
+	}, c.LogoutHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "refresh-token",
@@ -87,7 +87,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.RefreshTokenHandler)
+	}, c.RefreshTokenHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "verify-email",
@@ -96,7 +96,7 @@ func RegisterAuthRoutes(api huma.API) {
 		Tags:        []string{"Authentication"},
 		Summary:     "Verify email",
 		Security:    []map[string][]string{},
-	}, controllers.VerifyEmailHandler)
+	}, c.VerifyEmailHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "resend-verification",
@@ -114,7 +114,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.ResendVerificationEmailHandler)
+	}, c.ResendVerificationEmailHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "forgot-password",
@@ -132,7 +132,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.ForgotPasswordHandler)
+	}, c.ForgotPasswordHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "reset-password",
@@ -151,7 +151,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.ResetPasswordHandler)
+	}, c.ResetPasswordHandler)
 
 	// Protected routes
 	huma.Register(api, huma.Operation{
@@ -172,7 +172,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.ChangePasswordHandler)
+	}, c.ChangePasswordHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "set-account-type",
@@ -192,7 +192,7 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.SetAccountTypeHandler)
+	}, pc.SetAccountTypeHandler)
 
 	// ---------- for oauth ----------
 	huma.Register(api, huma.Operation{
@@ -210,5 +210,5 @@ func RegisterAuthRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.SetAccountTypeAuthenticatedHandler)
+	}, c.SetAccountTypeAuthenticatedHandler)
 }
