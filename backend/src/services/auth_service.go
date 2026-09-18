@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
@@ -18,14 +19,16 @@ import (
 const dummyHash = "$2a$10$N9qo8uLOickgx2ZMRZoMy.MrqQKBrEmYq5YoZLxs6VJ1J7bDVU1Aa"
 
 type AuthService struct {
+	cfg              *config.Config
 	userRepo         repository.UserRepository
 	verificationRepo *repository.VerificationRepository
 	blacklistRepo    *repository.TokenBlacklistRepository
 	tfaRepo          repository.TwoFactorRepository
 }
 
-func NewAuthService(redisClient *redis.Client) *AuthService {
+func NewAuthService(redisClient *redis.Client, cfg *config.Config) *AuthService {
 	return &AuthService{
+		cfg:              cfg,
 		userRepo:         repository.NewUserRepository(),
 		verificationRepo: repository.NewVerificationRepository(redisClient),
 		blacklistRepo:    repository.NewTokenBlacklistRepository(redisClient),
@@ -100,7 +103,7 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 		return err
 	}
 
-	go sendWithRetry(email, token, userID)
+	go s.sendWithRetry(email, token, userID)
 
 	// Send email asynchronously
 	// go func(email, token string) {
@@ -117,12 +120,12 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 	return nil
 }
 
-func sendWithRetry(email, token, userID string) {
+func (s *AuthService) sendWithRetry(email, token, userID string) {
 	const maxAttempts = 3
 	backoff := 2 * time.Second
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err := utils.SendVerificationEmail(email, token)
+		err := utils.SendVerificationEmail(s.cfg, email, token)
 		if err == nil {
 			log.Printf("Verification email sent to %s (attempt %d)", email, attempt)
 			return
@@ -385,7 +388,7 @@ func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
 		return err
 	}
 
-	err = utils.SendResetPasswordEmail(req.Email, token)
+	err = utils.SendResetPasswordEmail(s.cfg, req.Email, token)
 	if err != nil {
 		return err
 	}

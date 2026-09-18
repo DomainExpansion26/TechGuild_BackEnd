@@ -5,9 +5,10 @@ import (
 	"html"
 	"net/smtp"
 	"net/url"
-	"os"
 	"strings"
 	"time"
+
+	"techguild-backend/src/config"
 
 	"github.com/google/uuid"
 )
@@ -20,11 +21,11 @@ func sanitizeHeader(s string) string {
 }
 
 // sendEmail is the single internal function all email senders use.
-func sendEmail(toEmail, subject, htmlBody string) error {
-	from := os.Getenv("SMTP_EMAIL")
-	password := os.Getenv("SMTP_PASSWORD")
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
+func sendEmail(cfg *config.Config, toEmail, subject, htmlBody string) error {
+	from := cfg.SMTPEmail
+	password := cfg.SMTPPassword
+	host := cfg.SMTPHost
+	port := cfg.SMTPPort
 
 	if from == "" || password == "" || host == "" || port == "" {
 		return fmt.Errorf("smtp config missing: check SMTP_EMAIL/SMTP_PASSWORD/SMTP_HOST/SMTP_PORT")
@@ -51,8 +52,8 @@ func sendEmail(toEmail, subject, htmlBody string) error {
 	return smtp.SendMail(host+":"+port, auth, from, []string{toEmail}, message)
 }
 
-func SendVerificationEmail(toEmail string, token string) error {
-	frontendURL := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
+func SendVerificationEmail(cfg *config.Config, toEmail string, token string) error {
+	frontendURL := strings.TrimRight(cfg.FrontendURL, "/")
 	verificationURL := fmt.Sprintf(
 		"%s/verify-email?token=%s",
 		frontendURL,
@@ -77,11 +78,11 @@ func SendVerificationEmail(toEmail string, token string) error {
 		</html>
 	`, verificationURL)
 
-	return sendEmail(toEmail, "Verify your TechGuild Email", body)
+	return sendEmail(cfg, toEmail, "Verify your TechGuild Email", body)
 }
 
-func SendResetPasswordEmail(toEmail string, token string) error {
-	frontendURL := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
+func SendResetPasswordEmail(cfg *config.Config, toEmail string, token string) error {
+	frontendURL := strings.TrimRight(cfg.FrontendURL, "/")
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", frontendURL, url.QueryEscape(token))
 
 	body := fmt.Sprintf(`
@@ -102,10 +103,10 @@ func SendResetPasswordEmail(toEmail string, token string) error {
 		</html>
 	`, resetLink)
 
-	return sendEmail(toEmail, "TechGuild Password Reset", body)
+	return sendEmail(cfg, toEmail, "TechGuild Password Reset", body)
 }
 
-func SendDataExportEmail(toEmail string, firstName string, downloadURL string) error {
+func SendDataExportEmail(cfg *config.Config, toEmail string, firstName string, downloadURL string) error {
 	safeName := html.EscapeString(firstName)
 
 	body := fmt.Sprintf(`
@@ -127,5 +128,5 @@ func SendDataExportEmail(toEmail string, firstName string, downloadURL string) e
 		</html>
 	`, safeName, downloadURL)
 
-	return sendEmail(toEmail, "Your TechGuild Data Export is Ready", body)
+	return sendEmail(cfg, toEmail, "Your TechGuild Data Export is Ready", body)
 }

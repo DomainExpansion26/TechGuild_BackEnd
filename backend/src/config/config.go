@@ -22,4 +22,9 @@ type Config struct {
 
 	FrontendURL string
 	ZudokuURL   string
+
+	SMTPHost     string
+	SMTPPort     string
+	SMTPEmail    string
+	SMTPPassword string
 }
