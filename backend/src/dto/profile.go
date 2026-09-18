@@ -208,10 +208,6 @@ type CheckSlugResponse struct {
 	Alternatives []string `json:"alternatives,omitempty"`
 }
 
-type DeleteAccountRequest struct {
-	Password string `json:"password" huma:"required" example:"test@123"`
-}
-
 // ---------- Huma Input/Output wrapper structs ----------
 
 type IndividualProfileInput struct {
@@ -424,13 +420,6 @@ type CheckSlugInput struct {
 }
 type CheckSlugOutput struct {
 	Body CheckSlugResponse
-}
-
-type DeleteProfileAccountInput struct {
-	Body DeleteAccountRequest
-}
-type DeleteProfileAccountOutput struct {
-	Body MessageResponse
 }
 
 // DeprecatedLegacyProfileRequest is the old unified profile request shape.

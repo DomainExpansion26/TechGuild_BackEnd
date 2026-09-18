@@ -62,7 +62,9 @@ type VerifySetup2FAOutput struct {
 }
 
 type VerifyLogin2FAInput struct {
-	Body VerifyLogin2FARequest
+	Body         VerifyLogin2FARequest
+	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For"`
 }
 type VerifyLogin2FAOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -70,7 +72,9 @@ type VerifyLogin2FAOutput struct {
 }
 
 type VerifyRecoveryCodeInput struct {
-	Body VerifyRecoveryCodeRequest
+	Body         VerifyRecoveryCodeRequest
+	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For"`
 }
 type VerifyRecoveryCodeOutput struct {
 	SetCookie string `header:"Set-Cookie"`

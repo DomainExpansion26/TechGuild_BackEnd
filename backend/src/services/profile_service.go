@@ -14,6 +14,7 @@ import (
 	"techguild-backend/src/repository"
 	"techguild-backend/src/utils"
 
+	"github.com/google/uuid"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -29,6 +30,7 @@ var ErrValidation = errors.New("validation error")
 var ErrAccountTypeNotSet = errors.New("account type not set")
 var ErrInvalidAccountType = errors.New("invalid account type")
 var ErrInvalidPassword = errors.New("invalid password")
+var ErrSessionNotFound = errors.New("session not found")
 
 const maxSlugRetries = 3
 
@@ -1103,28 +1105,6 @@ func (s *ProfileService) isSlugTaken(slug string) (bool, error) {
 	return false, nil
 }
 
-func (s *ProfileService) DeleteAccount(userID string, password string) error {
-	user, err := s.userRepo.GetUserByID(userID)
-	if err != nil {
-		return ErrUserNotFound
-	}
-
-	if !utils.CheckPassword(password, user.PasswordHash) {
-		return ErrInvalidPassword
-	}
-
-	user.Status = models.StatusPendingDeletion
-	deletionDate := time.Now().Add(30 * 24 * time.Hour)
-	user.ScheduledDeletionDate = &deletionDate
-
-	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
-		if err := txRepo.UpdateUser(user); err != nil {
-			return err
-		}
-		return txRepo.RevokeAllSessions(userID)
-	})
-}
-
 func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAccountRequest) error {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
@@ -1134,6 +1114,12 @@ func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAcco
 	if req.NewPassword != "" {
 		if !utils.CheckPassword(req.Password, user.PasswordHash) {
 			return ErrInvalidPassword
+		}
+		if req.NewPassword != req.ConfirmPassword {
+			return fmt.Errorf("%w: new password and confirm password do not match", ErrValidation)
+		}
+		if req.Password == req.NewPassword {
+			return fmt.Errorf("%w: new password must be different from current password", ErrValidation)
 		}
 		hashed, err := utils.HashPassword(req.NewPassword)
 		if err != nil {
@@ -1220,4 +1206,199 @@ func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePriv
 	b, _ := json.Marshal(pref)
 	user.PrivacySettings = datatypes.JSON(b)
 	return s.userRepo.UpdateUser(user)
+}
+
+func (s *ProfileService) GetAccountSettings(userID string) (*dto.GetAccountSettingsResponse, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	return &dto.GetAccountSettingsResponse{
+		Email:         user.Email,
+		EmailVerified: user.EmailVerified,
+	}, nil
+}
+
+func (s *ProfileService) GetPrivacySettings(userID string) (*dto.GetPrivacySettingsResponse, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	if user.AccountType == nil {
+		return nil, ErrAccountTypeNotSet
+	}
+
+	var visibility string
+
+	switch *user.AccountType {
+	case models.AccountTypeIndividual:
+		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			log.Printf("GetPrivacySettings: failed to fetch individual profile for user=%s: %v", userID, err)
+			return nil, ErrInternal
+		}
+		visibility = profile.ProfileVisibility
+
+	case models.AccountTypeAgencyAdmin:
+		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			log.Printf("GetPrivacySettings: failed to fetch agency profile for user=%s: %v", userID, err)
+			return nil, ErrInternal
+		}
+		visibility = profile.ProfileVisibility
+
+	case models.AccountTypeClientAdmin:
+		profile, err := s.userRepo.GetClientProfileByUserID(userID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrProfileNotFound
+			}
+			log.Printf("GetPrivacySettings: failed to fetch client profile for user=%s: %v", userID, err)
+			return nil, ErrInternal
+		}
+		visibility = profile.ProfileVisibility
+
+	default:
+		return nil, ErrInvalidAccountType
+	}
+	return &dto.GetPrivacySettingsResponse{
+		ProfileVisibility: visibility,
+	}, nil
+}
+
+func (s *ProfileService) DeactivateAccount(userID string, req dto.DeactivateAccountRequest) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if !utils.CheckPassword(req.Password, user.PasswordHash) {
+		return ErrInvalidPassword
+	}
+
+	user.Status = models.StatusDeactivated
+	deletionDate := time.Now().Add(30 * 24 * time.Hour)
+	user.ScheduledDeletionDate = &deletionDate
+
+	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+		if err := txRepo.UpdateUser(user); err != nil {
+			return err
+		}
+		return txRepo.RevokeAllSessions(userID)
+	})
+}
+
+func (s *ProfileService) GetSessions(
+	userID string,
+) (*dto.GetSessionsResponse, error) {
+
+	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	sessions, err := s.userRepo.GetSessionsByUserID(userID)
+	if err != nil {
+		log.Printf(
+			"GetSessions: failed to fetch sessions for user=%s: %v",
+			userID,
+			err,
+		)
+		return nil, ErrInternal
+	}
+
+	response := &dto.GetSessionsResponse{
+		Sessions: make([]dto.SessionResponse, 0, len(sessions)),
+	}
+
+	for _, session := range sessions {
+		response.Sessions = append(response.Sessions, dto.SessionResponse{
+			ID:           session.ID.String(),
+			Device:       session.Device,
+			IPAddress:    session.IPAddress,
+			UserAgent:    session.UserAgent,
+			LastActiveAt: session.UpdatedAt,
+			CreatedAt:    session.CreatedAt,
+			IsCurrent:    false,
+		})
+	}
+
+	return response, nil
+}
+
+func (s *ProfileService) RevokeSession(userID string, sessionID string) error {
+	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	sessionUUID, err := uuid.Parse(sessionID)
+	if err != nil {
+		return ErrValidation
+	}
+
+	session, err := s.userRepo.GetSessionByID(sessionUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSessionNotFound
+		}
+
+		return ErrInternal
+	}
+
+	if session.UserID.String() != userID {
+		return ErrSessionNotFound
+	}
+
+	if err := s.userRepo.RevokeSessionByID(sessionUUID); err != nil {
+		log.Printf(
+			"RevokeSession: failed to revoke session=%s user=%s: %v",
+			sessionID,
+			userID,
+			err,
+		)
+		return ErrInternal
+	}
+
+	return nil
+}
+
+func (s *ProfileService) SignOutOtherSessions(userID string, currentSessionID uuid.UUID) error {
+	_, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if err := s.userRepo.RevokeOtherSessions(userID, currentSessionID); err != nil {
+		log.Printf("SignOutOtherSessions: failed for user=%s: %v", userID, err)
+		return ErrInternal
+	}
+
+	return nil
+}
+
+func (s *ProfileService) DeleteAccountPermanently(userID string, password string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if !utils.CheckPassword(password, user.PasswordHash) {
+		return ErrInvalidPassword
+	}
+
+	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+		if err := txRepo.RevokeAllSessions(userID); err != nil {
+			return err
+		}
+		return txRepo.DeleteUser(userID)
+	})
 }

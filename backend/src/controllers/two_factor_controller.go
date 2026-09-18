@@ -49,7 +49,7 @@ func VerifySetup2FAHandler(ctx context.Context, input *dto.VerifySetup2FAInput) 
 // ---------- VerifyLogin ----------
 
 func VerifyLogin2FAHandler(ctx context.Context, input *dto.VerifyLogin2FAInput) (*dto.VerifyLogin2FAOutput, error) {
-	res, refreshToken, err := services.NewTwoFactorService().VerifyLogin(input.Body.TemporaryToken, input.Body.Code)
+	res, refreshToken, err := services.NewTwoFactorService().VerifyLogin(input.Body.TemporaryToken, input.Body.Code, input.UserAgent, utils.GetClientIP(input.ForwardedFor), input.UserAgent)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
@@ -73,7 +73,13 @@ func VerifyLogin2FAHandler(ctx context.Context, input *dto.VerifyLogin2FAInput) 
 // ---------- VerifyRecoveryCode ----------
 
 func VerifyRecoveryCodeHandler(ctx context.Context, input *dto.VerifyRecoveryCodeInput) (*dto.VerifyRecoveryCodeOutput, error) {
-	res, refreshToken, err := services.NewTwoFactorService().VerifyRecoveryCode(input.Body.TemporaryToken, input.Body.Code)
+	res, refreshToken, err := services.NewTwoFactorService().VerifyRecoveryCode(
+		input.Body.TemporaryToken,
+		input.Body.Code,
+		input.UserAgent,
+		utils.GetClientIP(input.ForwardedFor),
+		input.UserAgent,
+	)
 	if err != nil {
 		return nil, huma.Error401Unauthorized(err.Error())
 	}

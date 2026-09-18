@@ -52,6 +52,10 @@ type UserRepository interface {
 	WithTransaction(fn func(txRepo UserRepository) error) error
 
 	UpdateTwoFactorEnabled(userID string, enabled bool) error
+
+	GetSessionsByUserID(userID string) ([]models.UserSession, error)
+	GetSessionByID(sessionUUID uuid.UUID) (*models.UserSession, error)
+	RevokeOtherSessions(userID string, currentSessionID uuid.UUID) error
 }
 
 type userRepository struct {
@@ -309,4 +313,35 @@ func (r *userRepository) GetClientProfileByUserID(userID string) (*models.Client
 
 func (r *userRepository) UpdateClientProfile(profile *models.ClientProfile) error {
 	return r.db.Save(profile).Error
+}
+
+func (r *userRepository) GetSessionsByUserID(userID string) ([]models.UserSession, error) {
+	var sessions []models.UserSession
+	err := r.db.
+		Where("user_id = ? AND is_revoked = false AND expires_at > ?", userID, time.Now()).
+		Order("created_at DESC").
+		Find(&sessions).Error
+
+	return sessions, err
+}
+
+func (r *userRepository) GetSessionByID(sessionUUID uuid.UUID) (*models.UserSession, error) {
+	var session models.UserSession
+
+	err := r.db.
+		Where("id = ?", sessionUUID).
+		First(&session).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+func (r *userRepository) RevokeOtherSessions(userID string, currentSessionID uuid.UUID) error {
+	return r.db.
+		Model(&models.UserSession{}).
+		Where("user_id = ? AND id != ?", userID, currentSessionID).
+		Update("is_revoked", true).Error
 }

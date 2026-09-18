@@ -145,7 +145,7 @@ func (s *TwoFactorService) VerifySetup(userID uuid.UUID, code string) (*dto.Veri
 
 // ---------- VerifyLogin ----------
 
-func (s *TwoFactorService) VerifyLogin(temporaryToken, code string) (*dto.LoginResponse, string, error) {
+func (s *TwoFactorService) VerifyLogin(temporaryToken, code string, device string, ipAddress string, userAgent string) (*dto.LoginResponse, string, error) {
 	userID, err := utils.ValidateTemporary2FAToken(temporaryToken)
 	if err != nil {
 		return nil, "", errors.New("invalid or expired session")
@@ -166,12 +166,12 @@ func (s *TwoFactorService) VerifyLogin(temporaryToken, code string) (*dto.LoginR
 		return nil, "", errors.New("invalid code")
 	}
 	utils.LogSecurityEvent(utils.EventTwoFALoginSuccess, userID.String(), "")
-	return s.issueFinalTokens(userID)
+	return s.issueFinalTokens(userID, device, ipAddress, userAgent)
 }
 
 // ---------- VerifyRecoveryCode ----------
 
-func (s *TwoFactorService) VerifyRecoveryCode(temporaryToken, code string) (*dto.LoginResponse, string, error) {
+func (s *TwoFactorService) VerifyRecoveryCode(temporaryToken, code string, device string, ipAddress string, userAgent string) (*dto.LoginResponse, string, error) {
 	userID, err := utils.ValidateTemporary2FAToken(temporaryToken)
 	if err != nil {
 		return nil, "", errors.New("invalid or expired session")
@@ -186,7 +186,7 @@ func (s *TwoFactorService) VerifyRecoveryCode(temporaryToken, code string) (*dto
 		if s.totp.VerifyRecoveryCode(code, c.CodeHash) {
 			_ = s.tfaRepo.MarkRecoveryCodeUsed(c.ID)
 			utils.LogSecurityEvent(utils.EventRecoveryCodeUsed, userID.String(), "")
-			return s.issueFinalTokens(userID)
+			return s.issueFinalTokens(userID, device, ipAddress, userAgent)
 		}
 	}
 
@@ -287,11 +287,7 @@ func (s *TwoFactorService) RegenerateRecoveryCodes(userID uuid.UUID, password st
 
 // ---------- helper ----------
 
-func (s *TwoFactorService) issueFinalTokens(userID uuid.UUID) (*dto.LoginResponse, string, error) {
-	accessToken, err := utils.GenerateAccessToken(userID.String())
-	if err != nil {
-		return nil, "", err
-	}
+func (s *TwoFactorService) issueFinalTokens(userID uuid.UUID, device, ipAddress, userAgent string) (*dto.LoginResponse, string, error) {
 	refreshToken, err := utils.GenerateRefreshToken(userID.String())
 	if err != nil {
 		return nil, "", err
@@ -300,10 +296,18 @@ func (s *TwoFactorService) issueFinalTokens(userID uuid.UUID) (*dto.LoginRespons
 	session := &models.UserSession{
 		UserID:       userID,
 		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		IsRevoked:    false,
 		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 	if err := s.userRepo.CreateSession(session); err != nil {
+		return nil, "", err
+	}
+
+	accessToken, err := utils.GenerateAccessToken(userID.String(), session.ID.String())
+	if err != nil {
 		return nil, "", err
 	}
 

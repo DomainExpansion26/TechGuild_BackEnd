@@ -35,11 +35,12 @@ func GenerateRefreshToken(userID string) (string, error) {
 	return token.SignedString([]byte(refreshSecret))
 }
 
-func GenerateAccessToken(userID string) (string, error) {
+func GenerateAccessToken(userID string, sessionID string) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(AccessTokenTTL).Unix(),
-		"type":    "access",
+		"user_id":    userID,
+		"session_id": sessionID, // Assuming you have a session ID to include
+		"exp":        time.Now().Add(AccessTokenTTL).Unix(),
+		"type":       "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(accessSecret))
