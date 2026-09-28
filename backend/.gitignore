@@ -2,3 +2,6 @@
 
 .air.toml
 tmp/
+seed_data.json
+PARTY_MANAGEMENT_SUGGESTIONS.md
+test_remaining.go
