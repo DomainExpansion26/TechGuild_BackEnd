@@ -7,16 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
-type TeamStatus string
+// type PartyStatus string
 
-const (
-	TeamPending  TeamStatus = "pending"
-	TeamActive   TeamStatus = "active"
-	TeamSuspended TeamStatus = "suspended"
-	TeamArchived TeamStatus = "archived"
-)
+// const (
+// 	PartyPending  PartyStatus = "pending"
+// 	PartyActive   PartyStatus = "active"
+// 	PartySuspended PartyStatus = "suspended"
+// 	PartyArchived PartyStatus = "archived"
+// )
 
-type Team struct {
+type Party struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
 	// Basic Information
@@ -31,23 +31,23 @@ type Team struct {
 	LeaderID uuid.UUID `gorm:"type:uuid;not null;index"`
 	Leader   User      `gorm:"foreignKey:LeaderID;constraint:OnDelete:CASCADE"`
 
-	// Team Settings
+	// Party Settings
 	IsHiring   bool `gorm:"default:false"`
 	IsVerified bool `gorm:"default:false"`
 
-	Status TeamStatus `gorm:"type:varchar(30);default:'pending'"`
+	// Status PartyStatus `gorm:"type:varchar(30);default:'pending'"`
 
 	// Relations
-	Members     []TeamMember     `gorm:"foreignKey:TeamID"`
-	Invitations []TeamInvitation `gorm:"foreignKey:TeamID"`
-	Portfolio   []TeamPortfolio  `gorm:"foreignKey:TeamID"`
-	Skills      []TeamSkill      `gorm:"foreignKey:TeamID"`
+	Members     []PartyMember     `gorm:"foreignKey:PartyID"`
+	Invitations []PartyInvitation `gorm:"foreignKey:PartyID"`
+	Portfolio   []PartyPortfolio  `gorm:"foreignKey:PartyID"`
+	Skills      []PartySkill      `gorm:"foreignKey:PartyID"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-func (t *Team) BeforeCreate(tx *gorm.DB) error {
+func (t *Party) BeforeCreate(tx *gorm.DB) error {
 	t.ID = uuid.New()
 	return nil
 }

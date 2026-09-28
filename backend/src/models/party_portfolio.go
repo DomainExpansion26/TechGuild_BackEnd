@@ -7,12 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
-type TeamPortfolio struct {
+type PartyPortfolio struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	// Team Relationship
-	TeamID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Team   Team      `gorm:"foreignKey:TeamID;constraint:OnDelete:CASCADE"`
+	// Party Relationship
+	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
+	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	// Portfolio Details
 	Title       string `gorm:"size:200;not null"`
@@ -28,7 +28,7 @@ type TeamPortfolio struct {
 	UpdatedAt time.Time
 }
 
-func (p *TeamPortfolio) BeforeCreate(tx *gorm.DB) error {
+func (p *PartyPortfolio) BeforeCreate(tx *gorm.DB) error {
 
 	p.ID = uuid.New()
 

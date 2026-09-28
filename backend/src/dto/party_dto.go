@@ -2,34 +2,40 @@ package dto
 
 // ---------- Requests ----------
 
-type CreateTeamRequest struct {
+type CreatePartyRequest struct {
 	Name        string `json:"name" huma:"required" example:"TechGuild Devs"`
 	Slug        string `json:"slug" huma:"required" example:"techguild-devs"`
-	Description string `json:"description" example:"A team of full-stack developers"`
-	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/team.png"`
-	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/team.png"`
+	Description string `json:"description" example:"A party of full-stack developers"`
+	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/party.png"`
+	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/party.png"`
 	IsHiring    bool   `json:"is_hiring" example:"true"`
 }
 
-type UpdateTeamRequest struct {
+type UpdatePartyRequest struct {
 	Name        string `json:"name" example:"TechGuild Devs v2"`
-	Description string `json:"description" example:"Updated team description"`
-	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/team-v2.png"`
-	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/team-v2.png"`
+	Description string `json:"description" example:"Updated party description"`
+	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/party-v2.png"`
+	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/party-v2.png"`
 	IsHiring    bool   `json:"is_hiring" example:"false"`
 }
 
 type InviteMemberRequest struct {
 	UserID  string `json:"user_id" huma:"required" example:"550e8400-e29b-41d4-a716-446655440000"`
-	Message string `json:"message" example:"We'd love to have you on our team!"`
+	Message string `json:"message" example:"We'd love to have you on our party!"`
+}
+
+type GetAvailablePartiesInput struct {
+    Search string `query:"search"`
+    Page   int    `query:"page"`
+    Limit  int    `query:"limit"`
 }
 
 type RejectInvitationRequest struct {
 	Reason string `json:"reason" example:"Currently busy with other projects"`
 }
 
-type LeaveTeamRequest struct {
-	Reason string `json:"reason" example:"Joining another team"`
+type LeavePartyRequest struct {
+	Reason string `json:"reason" example:"Joining another party"`
 }
 
 type UpdateMemberRoleRequest struct {
@@ -59,24 +65,45 @@ type AddSkillRequest struct {
 
 // ---------- Responses ----------
 
-type TeamResponse struct {
+type PartyResponse struct {
 	ID          string `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	Name        string `json:"name" example:"TechGuild Devs"`
 	Slug        string `json:"slug" example:"techguild-devs"`
-	Description string `json:"description" example:"A team of full-stack developers"`
-	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/team.png"`
-	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/team.png"`
+	Description string `json:"description" example:"A party of full-stack developers"`
+	LogoURL     string `json:"logo_url" example:"https://storage.example.com/logos/party.png"`
+	BannerURL   string `json:"banner_url" example:"https://storage.example.com/banners/party.png"`
 	LeaderID    string `json:"leader_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	IsHiring    bool   `json:"is_hiring" example:"true"`
 	IsVerified  bool   `json:"is_verified" example:"true"`
-	Status      string `json:"status" example:"active"`
+	// Status      string `json:"status" example:"active"`
 	CreatedAt   string `json:"created_at" example:"2026-01-15T00:00:00Z"`
 	UpdatedAt   string `json:"updated_at" example:"2026-01-15T00:00:00Z"`
 }
 
-type TeamMemberResponse struct {
+//new
+type PartyDetailsResponse struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`
+    Slug        string `json:"slug"`
+    Description string `json:"description"`
+    LogoURL     string `json:"logo_url"`
+    BannerURL   string `json:"banner_url"`
+    LeaderID    string `json:"leader_id"`
+    IsHiring    bool   `json:"is_hiring"`
+    IsVerified  bool   `json:"is_verified"`
+
+    Members   []PartyMemberResponse    `json:"members"`
+    Portfolio []PartyPortfolioResponse `json:"portfolio"`
+    Skills    []PartySkillResponse     `json:"skills"`
+
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+}
+
+//continued
+type PartyMemberResponse struct {
 	ID        string `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	TeamID    string `json:"team_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PartyID    string `json:"party_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	UserID    string `json:"user_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	Role      string `json:"role" example:"member"`
 	Status    string `json:"status" example:"active"`
@@ -85,21 +112,21 @@ type TeamMemberResponse struct {
 	UpdatedAt string `json:"updated_at" example:"2026-01-15T00:00:00Z"`
 }
 
-type TeamInvitationResponse struct {
+type PartyInvitationResponse struct {
 	ID            string `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	TeamID        string `json:"team_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PartyID        string `json:"party_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	InvitedByID   string `json:"invited_by_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	InvitedUserID string `json:"invited_user_id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	Message       string `json:"message" example:"We'd love to have you on our team!"`
+	Message       string `json:"message" example:"We'd love to have you on our party!"`
 	Status        string `json:"status" example:"pending"`
 	ExpiresAt     string `json:"expires_at" example:"2026-02-15T00:00:00Z"`
 	RespondedAt   string `json:"responded_at" example:"2026-01-20T00:00:00Z"`
 	CreatedAt     string `json:"created_at" example:"2026-01-15T00:00:00Z"`
 }
 
-type TeamPortfolioResponse struct {
+type PartyPortfolioResponse struct {
 	ID          string `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	TeamID      string `json:"team_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PartyID      string `json:"party_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	Title       string `json:"title" example:"E-commerce Platform"`
 	Description string `json:"description" example:"Built a full-stack e-commerce platform with React and Go"`
 	ImageURL    string `json:"image_url" example:"https://storage.example.com/portfolio/project.png"`
@@ -109,38 +136,45 @@ type TeamPortfolioResponse struct {
 	UpdatedAt   string `json:"updated_at" example:"2026-01-15T00:00:00Z"`
 }
 
-type TeamSkillResponse struct {
+type PartySkillResponse struct {
 	ID              string `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-	TeamID          string `json:"team_id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PartyID          string `json:"party_id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	SkillName       string `json:"skill_name" example:"Go"`
 	ExperienceLevel string `json:"experience_level" example:"intermediate"`
 	CreatedAt       string `json:"created_at" example:"2026-01-15T00:00:00Z"`
 	UpdatedAt       string `json:"updated_at" example:"2026-01-15T00:00:00Z"`
 }
 
-type TeamListResponse struct {
-	Teams []TeamResponse `json:"teams"`
+type AvailablePartyListResponse struct {
+    Parties []PartyResponse `json:"parties"`
+    Total   int             `json:"total"`
+    Page    int             `json:"page"`
+    Limit   int             `json:"limit"`
+}
+
+type PartyListResponse struct {
+	Parties []PartyResponse `json:"parties"`
 	Total int            `json:"total" example:"1"`
 }
 
-type TeamMemberListResponse struct {
-	Members []TeamMemberResponse `json:"members"`
-	Total   int                  `json:"total" example:"1"`
+type PartyMemberListResponse struct {
+    Members []PartyMemberResponse `json:"members"`
+    Total   int                   `json:"total" example:"1"`
 }
 
-type TeamInvitationListResponse struct {
-	Invitations []TeamInvitationResponse `json:"invitations"`
-	Total       int                      `json:"total" example:"1"`
+type PartyInvitationListResponse struct {
+    Invitations []PartyInvitationResponse `json:"invitations"`
+    Total       int                       `json:"total" example:"1"`
 }
 
-type TeamPortfolioListResponse struct {
-	Portfolio []TeamPortfolioResponse `json:"portfolio"`
-	Total     int                     `json:"total" example:"1"`
+type PartyPortfolioListResponse struct {
+    Portfolio []PartyPortfolioResponse `json:"portfolio"`
+    Total     int                     `json:"total" example:"1"`
 }
 
-type TeamSkillListResponse struct {
-	Skills []TeamSkillResponse `json:"skills"`
-	Total  int                 `json:"total" example:"1"`
+type PartySkillListResponse struct {
+    Skills []PartySkillResponse `json:"skills"`
+    Total  int                  `json:"total" example:"1"`
 }
 
 type MessageResponse struct {
@@ -149,42 +183,76 @@ type MessageResponse struct {
 
 // ---------- Huma Input/Output wrapper structs ----------
 
-type CreateTeamInput struct {
-	Body CreateTeamRequest
+type CreatePartyInput struct {
+	Body CreatePartyRequest
 }
-type CreateTeamOutput struct {
-	Body TeamResponse
+type CreatePartyOutput struct {
+	Body PartyResponse
 }
 
-type UpdateTeamInput struct {
-	ID   string `path:"team_id" doc:"Team ID"`
-	Body UpdateTeamRequest
+type UpdatePartyInput struct {
+	ID   string `path:"party_id" doc:"Party ID"`
+	Body UpdatePartyRequest
 }
-type UpdateTeamOutput struct {
+type UpdatePartyOutput struct {
 	Body MessageResponse
 }
 
-type DeleteTeamInput struct {
-	ID string `path:"team_id" doc:"Team ID"`
+type DeletePartyInput struct {
+	ID string `path:"party_id" doc:"Party ID"`
 }
-type DeleteTeamOutput struct {
+type DeletePartyOutput struct {
 	Body MessageResponse
 }
-
-type GetTeamInput struct {
-	ID string `path:"team_id" doc:"Team ID"`
+type GetAvailablePartiesOutput struct {
+    Body AvailablePartyListResponse
 }
-type GetTeamOutput struct {
-	Body TeamResponse
+type GetPartyInput struct {
+	ID string `path:"party_id" doc:"Party ID"`
+}
+type GetPartyOutput struct {
+	Body PartyDetailsResponse
+}
+//New
+type GetPartyMembersInput struct {
+    PartyID string `path:"party_id" doc:"Party ID"`
 }
 
-type GetMyTeamsInput struct{}
-type GetMyTeamsOutput struct {
-	Body TeamListResponse
+type GetPartyMembersOutput struct {
+    Body PartyMemberListResponse
+}
+
+type GetPartyInvitationsInput struct {
+    PartyID string `path:"party_id" doc:"Party ID"`
+}
+
+type GetPartyInvitationsOutput struct {
+    Body PartyInvitationListResponse
+}
+
+type GetPartyPortfolioInput struct {
+    PartyID string `path:"party_id" doc:"Party ID"`
+}
+
+type GetPartyPortfolioOutput struct {
+    Body PartyPortfolioListResponse
+}
+
+type GetPartySkillsInput struct {
+    PartyID string `path:"party_id" doc:"Party ID"`
+}
+
+type GetPartySkillsOutput struct {
+    Body PartySkillListResponse
+}
+//continued
+type GetMyPartiesInput struct{}
+type GetMyPartiesOutput struct {
+	Body PartyListResponse
 }
 
 type InviteMemberInput struct {
-	TeamID string `path:"team_id" doc:"Team ID"`
+	PartyID string `path:"party_id" doc:"Party ID"`
 	Body   InviteMemberRequest
 }
 type InviteMemberOutput struct {
@@ -207,23 +275,23 @@ type RejectInvitationOutput struct {
 }
 
 type RemoveMemberInput struct {
-	TeamID   string `path:"team_id" doc:"Team ID"`
+	PartyID   string `path:"party_id" doc:"Party ID"`
 	MemberID string `path:"member_id" doc:"Member ID"`
 }
 type RemoveMemberOutput struct {
 	Body MessageResponse
 }
 
-type LeaveTeamInput struct {
-	TeamID string `path:"team_id" doc:"Team ID"`
-	Body   LeaveTeamRequest
+type LeavePartyInput struct {
+	PartyID string `path:"party_id" doc:"Party ID"`
+	Body   LeavePartyRequest
 }
-type LeaveTeamOutput struct {
+type LeavePartyOutput struct {
 	Body MessageResponse
 }
 
 type CreatePortfolioInput struct {
-	TeamID string `path:"team_id" doc:"Team ID"`
+	PartyID string `path:"party_id" doc:"Party ID"`
 	Body   CreatePortfolioRequest
 }
 type CreatePortfolioOutput struct {
@@ -246,7 +314,7 @@ type DeletePortfolioOutput struct {
 }
 
 type AddSkillInput struct {
-	TeamID string `path:"team_id" doc:"Team ID"`
+	PartyID string `path:"party_id" doc:"Party ID"`
 	Body   AddSkillRequest
 }
 type AddSkillOutput struct {
