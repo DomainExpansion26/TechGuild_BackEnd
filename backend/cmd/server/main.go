@@ -84,7 +84,7 @@ func main() {
 	routes.RegisterProjectRoutes(api)
 	routes.RegisterProjectApplicationRoutes(api)
 	routes.RegisterSubmissionRoutes(api)
-	routes.RegisterTeamRoutes(api)
+	routes.RegisterPartyRoutes(api)
 	routes.RegisterVerificationRoutes(api)
 
 	log.Println("Server running on :8080")

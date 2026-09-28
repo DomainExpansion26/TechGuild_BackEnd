@@ -41,12 +41,25 @@ func Migrate() {
 		&models.ProjectMilestone{},
 		&models.ProjectSubmission{},
 
+<<<<<<< Updated upstream
 		// Team Collaboration
 		&models.Team{},
 		&models.TeamMember{},
 		&models.TeamInvitation{},
 		&models.TeamPortfolio{},
 		&models.TeamSkill{},
+=======
+		// Party Collaboration
+		&models.Party{},
+		&models.PartyMember{},
+		&models.PartyInvitation{},
+		&models.PartyPortfolio{},
+		&models.PartySkill{},
+
+		// 2FA Authentication
+		&models.UserTwoFactorAuthentication{},
+		&models.UserRecoveryCode{},
+>>>>>>> Stashed changes
 	)
 
 	if err != nil {
