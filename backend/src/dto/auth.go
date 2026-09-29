@@ -18,10 +18,11 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Message     string `json:"message" example:"Login successful"`
-	AccessToken string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	// RefreshToken string `json:"refresh_token"`
-	ExpiresIn int `json:"expires_in" example:"3600"`
+	Message           string `json:"message" example:"Login successful"`
+	AccessToken       string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	ExpiresIn         int    `json:"expires_in" example:"3600"`
+	RequiresTwoFactor bool   `json:"requires_2fa,omitempty"`
+	TemporaryToken    string `json:"temporary_token,omitempty" `
 }
 
 type VerifyEmailRequest struct {
@@ -74,6 +75,19 @@ type ChangePasswordResponse struct {
 	Message string `json:"message" example:"Password changed successfully"`
 }
 
+type SetAccountTypeAuthRequest struct {
+	AccountType string `json:"account_type" binding:"required" example:"individual"`
+}
+
+type SetAccountTypeAuthInput struct {
+	Body SetAccountTypeAuthRequest
+}
+type SetAccountTypeAuthOutput struct {
+	Body struct {
+		Message string `json:"message"`
+	}
+}
+
 // ---------- Huma operation I/O (auth) ----------
 
 type RegisterInput struct {
@@ -86,7 +100,9 @@ type RegisterOutput struct {
 }
 
 type LoginInput struct {
-	Body LoginRequest
+	Body         LoginRequest
+	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For"`
 }
 type LoginOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -120,6 +136,8 @@ type LogoutOutput struct {
 type RefreshTokenInput struct {
 	RefreshTokenCookie string `cookie:"refresh_token"`
 	Body               RefreshRequest
+	UserAgent          string `header:"User-Agent"`
+	ForwardedFor       string `header:"X-Forwarded-For"`
 }
 type RefreshTokenOutput struct {
 	SetCookie string `header:"Set-Cookie"`
@@ -146,11 +164,4 @@ type ChangePasswordInput struct {
 }
 type ChangePasswordOutput struct {
 	Body ChangePasswordResponse
-}
-
-type DeleteAccountInput struct{}
-type DeleteAccountOutput struct {
-	Body struct {
-		Message string `json:"message"`
-	}
 }

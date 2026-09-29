@@ -11,10 +11,25 @@ import (
 type AccountType string
 
 const (
-	AccountTypeIndividual  AccountType = "individual"
-	AccountTypeAgencyAdmin AccountType = "agency"
-	AccountTypeClientAdmin AccountType = "client"
-	AccountTypeAdmin       AccountType = "admin"
+	AccountTypeIndividual   AccountType = "individual"
+	AccountTypeAgencyAdmin  AccountType = "agency"
+	AccountTypeClientAdmin  AccountType = "client"
+	AccountTypeAdmin        AccountType = "admin"
+	AccountTypeClient       AccountType = "client"
+	AccountTypeClientOwner  AccountType = "client_admin"
+	AccountTypeClientMember AccountType = "client_member"
+)
+
+const (
+	RankF   = "F"
+	RankE   = "E"
+	RankD   = "D"
+	RankC   = "C"
+	RankB   = "B"
+	RankA   = "A"
+	RankS   = "S"
+	RankSS  = "SS"
+	RankSSS = "SSS"
 )
 
 type UserStatus string
@@ -26,6 +41,7 @@ const (
 	StatusRejected            UserStatus = "rejected"
 	StatusPendingDeletion     UserStatus = "pending_deletion"
 	StatusDeleted             UserStatus = "deleted"
+	StatusDeactivated         UserStatus = "deactivated"
 )
 
 type User struct {
@@ -40,7 +56,7 @@ type User struct {
 
 	PasswordHash string `gorm:"type:text"`
 
-	TwoFASecret string `gorm:"type:text"`
+	// TwoFASecret string `gorm:"type:text"`
 
 	AccountType *AccountType `gorm:"type:varchar(30)"`
 
@@ -65,6 +81,7 @@ type User struct {
 	ClientContracts []ProjectContract `gorm:"foreignKey:ClientID"`
 
 	FreelancerContracts []ProjectContract `gorm:"foreignKey:FreelancerID"`
+	TwoFactorEnabled    bool              `gorm:"default:false;not null"`
 	CreatedAt           time.Time
 
 	UpdatedAt time.Time

@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
@@ -18,16 +19,20 @@ import (
 const dummyHash = "$2a$10$N9qo8uLOickgx2ZMRZoMy.MrqQKBrEmYq5YoZLxs6VJ1J7bDVU1Aa"
 
 type AuthService struct {
+	cfg              *config.Config
 	userRepo         repository.UserRepository
 	verificationRepo *repository.VerificationRepository
 	blacklistRepo    *repository.TokenBlacklistRepository
+	tfaRepo          repository.TwoFactorRepository
 }
 
-func NewAuthService(redisClient *redis.Client) *AuthService {
+func NewAuthService(redisClient *redis.Client, cfg *config.Config) *AuthService {
 	return &AuthService{
+		cfg:              cfg,
 		userRepo:         repository.NewUserRepository(),
 		verificationRepo: repository.NewVerificationRepository(redisClient),
 		blacklistRepo:    repository.NewTokenBlacklistRepository(redisClient),
+		tfaRepo:          repository.NewTwoFactorRepository(),
 	}
 }
 
@@ -98,7 +103,7 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 		return err
 	}
 
-	go sendWithRetry(email, token, userID)
+	go s.sendWithRetry(email, token, userID)
 
 	// Send email asynchronously
 	// go func(email, token string) {
@@ -115,12 +120,12 @@ func (s *AuthService) SendVerificationEmail(userID string, email string) error {
 	return nil
 }
 
-func sendWithRetry(email, token, userID string) {
+func (s *AuthService) sendWithRetry(email, token, userID string) {
 	const maxAttempts = 3
 	backoff := 2 * time.Second
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err := utils.SendVerificationEmail(email, token)
+		err := utils.SendVerificationEmail(s.cfg, email, token)
 		if err == nil {
 			log.Printf("Verification email sent to %s (attempt %d)", email, attempt)
 			return
@@ -210,7 +215,7 @@ func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest)
 	return s.SendVerificationEmail(user.ID.String(), user.Email)
 }
 
-func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, error) {
+func (s *AuthService) Login(req dto.LoginRequest, device, ipAddress, userAgent string) (*dto.LoginResponse, string, error) {
 	req.Email = utils.NormalizeEmail(req.Email)
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
@@ -234,7 +239,7 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 		return nil, "", errors.New("please select an account type first")
 	}
 
-	if user.Status == models.StatusPendingDeletion {
+	if user.Status == models.StatusPendingDeletion || user.Status == models.StatusDeactivated {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
 		if err := s.userRepo.UpdateUser(user); err != nil {
@@ -246,9 +251,20 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 		return nil, "", errors.New("account is not active")
 	}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID.String())
-	if err != nil {
-		return nil, "", err
+	// ---------- 2FA CHECK (new) ----------
+	if user.TwoFactorEnabled {
+		record, err := s.tfaRepo.GetByUserID(user.ID)
+		if err == nil && record.Status == models.TwoFAStatusEnabled {
+			tempToken, err := utils.GenerateTemporary2FAToken(user.ID.String())
+			if err != nil {
+				return nil, "", err
+			}
+			return &dto.LoginResponse{
+				Message:           "Two-factor authentication required",
+				RequiresTwoFactor: true,
+				TemporaryToken:    tempToken,
+			}, "", nil
+		}
 	}
 
 	refreshToken, err := utils.GenerateRefreshToken(user.ID.String())
@@ -259,11 +275,19 @@ func (s *AuthService) Login(req dto.LoginRequest) (*dto.LoginResponse, string, e
 	session := &models.UserSession{
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		IsRevoked:    false,
 		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 
 	err = s.userRepo.CreateSession(session)
+	if err != nil {
+		return nil, "", err
+	}
+
+	accessToken, err := utils.GenerateAccessToken(user.ID.String(), session.ID.String())
 	if err != nil {
 		return nil, "", err
 	}
@@ -282,7 +306,7 @@ func (s *AuthService) Logout(refreshToken string) error {
 	return s.userRepo.RevokeSession(refreshToken)
 }
 
-func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, string, error) {
+func (s *AuthService) RefreshToken(oldToken string, device string, ipAddress string, userAgent string) (*dto.RefreshResponse, string, error) {
 
 	session, err := s.userRepo.GetSession(oldToken)
 	if err != nil {
@@ -308,11 +332,6 @@ func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, strin
 		return nil, "", errors.New("invalid token")
 	}
 
-	newAccessToken, err := utils.GenerateAccessToken(userID)
-	if err != nil {
-		return nil, "", err
-	}
-
 	newRefreshToken, err := utils.GenerateRefreshToken(userID)
 	if err != nil {
 		return nil, "", err
@@ -331,10 +350,18 @@ func (s *AuthService) RefreshToken(oldToken string) (*dto.RefreshResponse, strin
 	newSession := &models.UserSession{
 		UserID:       session.UserID,
 		RefreshToken: newRefreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		IsRevoked:    false,
 		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 	}
 	if err := s.userRepo.CreateSession(newSession); err != nil {
+		return nil, "", err
+	}
+
+	newAccessToken, err := utils.GenerateAccessToken(userID, newSession.ID.String())
+	if err != nil {
 		return nil, "", err
 	}
 
@@ -361,7 +388,7 @@ func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
 		return err
 	}
 
-	err = utils.SendResetPasswordEmail(req.Email, token)
+	err = utils.SendResetPasswordEmail(s.cfg, req.Email, token)
 	if err != nil {
 		return err
 	}
@@ -425,15 +452,6 @@ func (s *AuthService) ChangePassword(userID string, req dto.ChangePasswordReques
 	return nil
 }
 
-func (s *AuthService) DeleteAccount(userID string) error {
-	user, err := s.userRepo.GetUserByID(userID)
-	if err != nil {
-		return errors.New("user not found")
-	}
-
-	return s.userRepo.DeleteUser(user.ID.String())
-}
-
 func (s *AuthService) BlacklistAccessToken(accessToken string) error {
 	claims, err := utils.ParseAccessTokenUnverifiedExpiry(accessToken)
 	if err != nil {
@@ -442,4 +460,18 @@ func (s *AuthService) BlacklistAccessToken(accessToken string) error {
 
 	ttl := time.Until(claims.ExpiresAt.Time)
 	return s.blacklistRepo.Blacklist(utils.HashToken(accessToken), ttl)
+}
+
+// for oauth
+func (s *AuthService) SetAccountTypeAuthenticated(userID string, accountType models.AccountType) error {
+	validTypes := map[models.AccountType]bool{
+		models.AccountTypeIndividual:  true,
+		models.AccountTypeAgencyAdmin: true,
+		models.AccountTypeClientAdmin: true,
+	}
+	if !validTypes[accountType] {
+		return errors.New("invalid account type")
+	}
+
+	return s.userRepo.UpdateAccountType(userID, accountType)
 }

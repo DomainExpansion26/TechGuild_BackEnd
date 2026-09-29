@@ -23,7 +23,8 @@ func getJwtSecret() []byte {
 }
 
 type Claims struct {
-	UserID string `json:"user_id"`
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
@@ -32,6 +33,7 @@ type Claims struct {
 type ctxKey string
 
 const UserIDKey ctxKey = "user_id"
+const SessionIDKey ctxKey = "session_id"
 
 func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
@@ -56,6 +58,7 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 
 		claims := token.Claims.(*Claims)
 		newCtx := huma.WithValue(ctx, UserIDKey, claims.UserID)
+		newCtx = huma.WithValue(newCtx, SessionIDKey, claims.SessionID)
 		next(newCtx)
 	}
 }
@@ -76,6 +79,38 @@ func AdminMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Con
 
 		if user.AccountType == nil || *user.AccountType != models.AccountTypeAdmin {
 			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Admin access required")
+			return
+		}
+
+		next(ctx)
+	}
+}
+
+func ClientMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		userID, _ := ctx.Context().Value(UserIDKey).(string)
+		if userID == "" {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user ID missing")
+			return
+		}
+
+		var user models.User
+		if err := postgres.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user not found")
+			return
+		}
+
+		if user.AccountType == nil {
+			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Client access required")
+			return
+		}
+
+		accType := string(*user.AccountType)
+		if accType != string(models.AccountTypeClientAdmin) &&
+			accType != string(models.AccountTypeClient) &&
+			accType != string(models.AccountTypeClientOwner) &&
+			accType != string(models.AccountTypeClientMember) {
+			huma.WriteErr(api, ctx, http.StatusForbidden, "Forbidden: Client access required")
 			return
 		}
 

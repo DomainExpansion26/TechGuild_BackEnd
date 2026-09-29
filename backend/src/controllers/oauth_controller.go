@@ -110,14 +110,20 @@ func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) 
 
 	oauthService := services.NewOAuthService(postgres.RedisDB)
 
+	ip := utils.GetClientIP(input.ForwardedFor)
 	result, refreshToken, err := oauthService.GoogleLogin(dto.GoogleLoginRequest{
 		GoogleID: googleUser.ID,
 		Email:    googleUser.Email,
 		FullName: googleUser.Name,
 		Picture:  googleUser.Picture,
-	})
+	}, input.UserAgent, ip, input.UserAgent)
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	// 2FA required no cookie yet
+	if result.RequiresTwoFactor {
+		return &dto.GoogleCallbackOutput{Body: *result}, nil
 	}
 
 	cookie := &http.Cookie{
@@ -231,14 +237,20 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 
 	oauthService := services.NewOAuthService(postgres.RedisDB)
 
+	ip := utils.GetClientIP(input.ForwardedFor)
 	result, refreshToken, err := oauthService.GitHubLogin(dto.GitHubLoginRequest{
 		GitHubID: strconv.FormatInt(githubUser.ID, 10),
 		Email:    githubUser.Email,
 		FullName: githubUser.Name,
 		Avatar:   githubUser.AvatarURL,
-	})
+	}, input.UserAgent, ip, input.UserAgent)
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	//2FA required no cookie yet
+	if result.RequiresTwoFactor {
+		return &dto.GitHubCallbackOutput{Body: *result}, nil
 	}
 
 	cookie := &http.Cookie{

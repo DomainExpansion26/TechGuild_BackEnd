@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"techguild-backend/src/config"
+	"techguild-backend/src/controllers"
 	"techguild-backend/src/database/migration"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/jobs"
@@ -74,11 +75,16 @@ func main() {
 
 	api := humagin.New(router, apiConfig)
 
+	// Controllers are injected with cfg (dependency injection, no globals).
+	authController := controllers.NewAuthController(cfg)
+	profileController := controllers.NewProfileController(cfg)
+	settingsController := controllers.NewSettingsController(cfg)
+
 	// naye Huma routes register karo
-	routes.RegisterAuthRoutes(api)
+	routes.RegisterAuthRoutes(api, authController, profileController)
 	routes.RegisterContractRoutes(api)
-	routes.RegisterProfileRoutes(api)
-	routes.RegisterSettingsRoutes(api)
+	routes.RegisterProfileRoutes(api, profileController)
+	routes.RegisterSettingsRoutes(api, settingsController)
 	routes.RegisterOAuthRoutes(api)
 	routes.RegisterMilestoneRoutes(api)
 	routes.RegisterProjectRoutes(api)
@@ -86,6 +92,8 @@ func main() {
 	routes.RegisterSubmissionRoutes(api)
 	routes.RegisterPartyRoutes(api)
 	routes.RegisterVerificationRoutes(api)
+	routes.RegisterTwoFactorRoutes(api)
+	routes.RegisterQuestRoutes(api)
 
 	log.Println("Server running on :8080")
 
