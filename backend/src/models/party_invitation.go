@@ -16,12 +16,12 @@ const (
 	InvitationExpired  InvitationStatus = "expired"
 )
 
-type TeamInvitation struct {
+type PartyInvitation struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	// Team
-	TeamID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Team   Team      `gorm:"foreignKey:TeamID;constraint:OnDelete:CASCADE"`
+	// Party
+	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
+	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	// Sender
 	InvitedByID uuid.UUID `gorm:"type:uuid;not null;index"`
@@ -44,7 +44,7 @@ type TeamInvitation struct {
 	UpdatedAt time.Time
 }
 
-func (i *TeamInvitation) BeforeCreate(tx *gorm.DB) error {
+func (i *PartyInvitation) BeforeCreate(tx *gorm.DB) error {
 
 	i.ID = uuid.New()
 

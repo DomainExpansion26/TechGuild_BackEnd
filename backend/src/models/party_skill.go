@@ -7,12 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
-type TeamSkill struct {
+type PartySkill struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	// Team Relationship
-	TeamID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Team   Team      `gorm:"foreignKey:TeamID;constraint:OnDelete:CASCADE"`
+	// Party Relationship
+	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
+	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	SkillName string `gorm:"size:100;not null"`
 
@@ -22,7 +22,7 @@ type TeamSkill struct {
 	UpdatedAt time.Time
 }
 
-func (s *TeamSkill) BeforeCreate(tx *gorm.DB) error {
+func (s *PartySkill) BeforeCreate(tx *gorm.DB) error {
 
 	s.ID = uuid.New()
 
