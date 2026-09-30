@@ -53,6 +53,12 @@ func Migrate() {
 		&models.PartyPortfolio{},
 		&models.PartySkill{},
 
+		// Task Management (Client TMD)
+		&models.Task{},
+		&models.QuestActivity{},
+		&models.QuestReview{},
+		&models.MilestoneApprovalLog{},
+
 		// 2FA Authentication
 		&models.UserTwoFactorAuthentication{},
 		&models.UserRecoveryCode{},
