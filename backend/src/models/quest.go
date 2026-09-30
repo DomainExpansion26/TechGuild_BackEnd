@@ -65,6 +65,10 @@ type Quest struct {
 	// Status & Lifecycle
 	Status QuestStatus `gorm:"type:varchar(30);default:'draft'"`
 
+	// Assigned Freelancer / Agency
+	AssignedFreelancerID *uuid.UUID `gorm:"type:uuid;index"`
+	AssignedFreelancer   *User      `gorm:"foreignKey:AssignedFreelancerID"`
+
 	// Associations
 	Milestones []QuestMilestone `gorm:"foreignKey:QuestID;constraint:OnDelete:CASCADE"`
 	Skills     []QuestSkill     `gorm:"foreignKey:QuestID;constraint:OnDelete:CASCADE"`
@@ -91,6 +95,13 @@ type QuestMilestone struct {
 	DueDays     int             `gorm:"not null"`
 	OrderIndex  int             `gorm:"not null"`
 	Status      MilestoneStatus `gorm:"type:varchar(30);default:'pending'"`
+
+	StartDate   *time.Time
+	DueDate     *time.Time
+	CompletedAt *time.Time
+	ApprovedAt  *time.Time
+
+	Tasks []Task `gorm:"foreignKey:MilestoneID;constraint:OnDelete:CASCADE"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

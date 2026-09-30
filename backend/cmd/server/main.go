@@ -94,6 +94,7 @@ func main() {
 	routes.RegisterVerificationRoutes(api)
 	routes.RegisterTwoFactorRoutes(api)
 	routes.RegisterQuestRoutes(api)
+	routes.RegisterTaskManagementRoutes(api)
 
 	log.Println("Server running on :8080")
 

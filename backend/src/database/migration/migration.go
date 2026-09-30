@@ -46,6 +46,12 @@ func Migrate() {
 		&models.QuestMilestone{},
 		&models.QuestSkill{},
 
+		// Task Management (Client TMD)
+		&models.Task{},
+		&models.QuestActivity{},
+		&models.QuestReview{},
+		&models.MilestoneApprovalLog{},
+
 		// Team Collaboration
 		&models.Team{},
 		&models.TeamMember{},
