@@ -6,7 +6,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-func RegisterOAuthRoutes(api huma.API) {
+func RegisterOAuthRoutes(api huma.API, c *controllers.OAuthController) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "google-login",
@@ -15,7 +15,7 @@ func RegisterOAuthRoutes(api huma.API) {
 		Tags:        []string{"OAuth"},
 		Summary:     "Login with Google",
 		Security:    []map[string][]string{},
-	}, controllers.GoogleLoginHandler)
+	}, c.GoogleLoginHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "google-callback",
@@ -24,7 +24,7 @@ func RegisterOAuthRoutes(api huma.API) {
 		Tags:        []string{"OAuth"},
 		Summary:     "Google OAuth callback",
 		Security:    []map[string][]string{},
-	}, controllers.GoogleCallbackHandler)
+	}, c.GoogleCallbackHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "github-login",
@@ -33,7 +33,7 @@ func RegisterOAuthRoutes(api huma.API) {
 		Tags:        []string{"OAuth"},
 		Summary:     "Login with GitHub",
 		Security:    []map[string][]string{},
-	}, controllers.GitHubLoginHandler)
+	}, c.GitHubLoginHandler)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "github-callback",
@@ -42,5 +42,5 @@ func RegisterOAuthRoutes(api huma.API) {
 		Tags:        []string{"OAuth"},
 		Summary:     "GitHub OAuth callback",
 		Security:    []map[string][]string{},
-	}, controllers.GitHubCallbackHandler)
+	}, c.GitHubCallbackHandler)
 }
