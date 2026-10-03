@@ -46,12 +46,18 @@ func Migrate() {
 		&models.QuestMilestone{},
 		&models.QuestSkill{},
 
-		// Team Collaboration
-		&models.Team{},
-		&models.TeamMember{},
-		&models.TeamInvitation{},
-		&models.TeamPortfolio{},
-		&models.TeamSkill{},
+		// Party Collaboration
+		&models.Party{},
+		&models.PartyMember{},
+		&models.PartyInvitation{},
+		&models.PartyPortfolio{},
+		&models.PartySkill{},
+
+		// Task Management (Client TMD)
+		&models.Task{},
+		&models.QuestActivity{},
+		&models.QuestReview{},
+		&models.MilestoneApprovalLog{},
 
 		// 2FA Authentication
 		&models.UserTwoFactorAuthentication{},
