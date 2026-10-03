@@ -79,13 +79,14 @@ func main() {
 	authController := controllers.NewAuthController(cfg)
 	profileController := controllers.NewProfileController(cfg)
 	settingsController := controllers.NewSettingsController(cfg)
+	oauthController := controllers.NewOAuthController(cfg)
 
 	// naye Huma routes register karo
 	routes.RegisterAuthRoutes(api, authController, profileController)
 	routes.RegisterContractRoutes(api)
 	routes.RegisterProfileRoutes(api, profileController)
 	routes.RegisterSettingsRoutes(api, settingsController)
-	routes.RegisterOAuthRoutes(api)
+	routes.RegisterOAuthRoutes(api, oauthController)
 	routes.RegisterMilestoneRoutes(api)
 	routes.RegisterProjectRoutes(api)
 	routes.RegisterProjectApplicationRoutes(api)

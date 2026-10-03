@@ -3,8 +3,13 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"techguild-backend/src/config"
@@ -25,12 +30,14 @@ type GoogleUser struct {
 	FamilyName    string `json:"family_name"`
 	Picture       string `json:"picture"`
 }
+
 type GitHubUser struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	Email     string `json:"email"`
 	AvatarURL string `json:"avatar_url"`
 }
+
 type GitHubEmail struct {
 	Email    string `json:"email"`
 	Primary  bool   `json:"primary"`
@@ -39,9 +46,91 @@ type GitHubEmail struct {
 
 const oauthHTTPTimeout = 10 * time.Second
 
+type OAuthExchangeData struct {
+	AccessToken       string         `json:"access_token"`
+	RefreshToken      string         `json:"refresh_token"`
+	Message           string         `json:"message"`
+	ExpiresIn         int            `json:"expires_in"`
+	RequiresTwoFactor bool           `json:"requires_two_factor"`
+	TemporaryToken    string         `json:"temporary_token"`
+	User              *dto.OAuthUser `json:"user,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+}
+
+type OAuthController struct {
+	cfg   *config.Config
+	cache sync.Map
+}
+
+func NewOAuthController(cfg *config.Config) *OAuthController {
+	return &OAuthController{
+		cfg: cfg,
+	}
+}
+
+var defaultOAuthController = NewOAuthController(nil)
+
+func (c *OAuthController) getFrontendURL() string {
+	frontendURL := ""
+	if c != nil && c.cfg != nil && c.cfg.FrontendURL != "" {
+		frontendURL = c.cfg.FrontendURL
+	}
+	if frontendURL == "" {
+		frontendURL = os.Getenv("FRONTEND_URL")
+	}
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+	parts := strings.Split(frontendURL, ",")
+	return strings.TrimRight(strings.TrimSpace(parts[0]), "/")
+}
+
+func (c *OAuthController) storeExchangeCode(ctx context.Context, code string, data *OAuthExchangeData) {
+	data.CreatedAt = time.Now()
+	if postgres.RedisDB != nil {
+		bytes, err := json.Marshal(data)
+		if err == nil {
+			_ = postgres.RedisDB.Set(ctx, "oauth_exchange:"+code, string(bytes), 60*time.Second).Err()
+		}
+	}
+	c.cache.Store(code, data)
+}
+
+func (c *OAuthController) consumeExchangeCode(ctx context.Context, code string) (*OAuthExchangeData, bool) {
+	if code == "" {
+		return nil, false
+	}
+
+	// 1. Check in-memory cache first (atomic read + delete)
+	if val, ok := c.cache.LoadAndDelete(code); ok {
+		if data, ok := val.(*OAuthExchangeData); ok {
+			if postgres.RedisDB != nil {
+				_ = postgres.RedisDB.Del(ctx, "oauth_exchange:"+code).Err()
+			}
+			if time.Since(data.CreatedAt) < 2*time.Minute {
+				return data, true
+			}
+		}
+	}
+
+	// 2. Check Redis
+	if postgres.RedisDB != nil {
+		val, err := postgres.RedisDB.Get(ctx, "oauth_exchange:"+code).Result()
+		if err == nil && val != "" {
+			_ = postgres.RedisDB.Del(ctx, "oauth_exchange:"+code).Err()
+			var data OAuthExchangeData
+			if err := json.Unmarshal([]byte(val), &data); err == nil {
+				return &data, true
+			}
+		}
+	}
+
+	return nil, false
+}
+
 // ---------- GoogleLogin (redirect) ----------
 
-func GoogleLoginHandler(ctx context.Context, input *dto.GoogleLoginInput) (*dto.GoogleLoginOutput, error) {
+func (c *OAuthController) GoogleLoginHandler(ctx context.Context, input *dto.GoogleLoginInput) (*dto.GoogleLoginOutput, error) {
 	state, err := utils.GenerateOAuthState()
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to generate state")
@@ -66,17 +155,65 @@ func GoogleLoginHandler(ctx context.Context, input *dto.GoogleLoginInput) (*dto.
 	}, nil
 }
 
+// Package-level fallback
+func GoogleLoginHandler(ctx context.Context, input *dto.GoogleLoginInput) (*dto.GoogleLoginOutput, error) {
+	return defaultOAuthController.GoogleLoginHandler(ctx, input)
+}
+
 // ---------- GoogleCallback ----------
 
-func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) (*dto.GoogleCallbackOutput, error) {
+func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) (*dto.GoogleCallbackOutput, error) {
+	frontendURL := c.getFrontendURL()
+
+	// 1. Step 2: Check if this is an API code exchange from TechGuild frontend (OAuthCallback.jsx)
+	if exchangeData, ok := c.consumeExchangeCode(ctx, input.Code); ok {
+		output := &dto.GoogleCallbackOutput{
+			Status: http.StatusOK,
+			Body: dto.GoogleLoginResponse{
+				Message:           exchangeData.Message,
+				AccessToken:       exchangeData.AccessToken,
+				ExpiresIn:         exchangeData.ExpiresIn,
+				RequiresTwoFactor: exchangeData.RequiresTwoFactor,
+				TemporaryToken:    exchangeData.TemporaryToken,
+				User:              exchangeData.User,
+			},
+		}
+		if exchangeData.RefreshToken != "" {
+			cookie := &http.Cookie{
+				Name:     "refresh_token",
+				Value:    exchangeData.RefreshToken,
+				Path:     "/",
+				MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			output.SetCookie = cookie.String()
+		}
+		return output, nil
+	}
+
+	// Helper for safe error redirects
+	errorRedirect := func(reason string) (*dto.GoogleCallbackOutput, error) {
+		isBrowser := strings.Contains(input.Accept, "text/html") || !strings.Contains(input.Accept, "application/json")
+		if isBrowser {
+			return &dto.GoogleCallbackOutput{
+				Status:   http.StatusFound,
+				Location: fmt.Sprintf("%s/login?error=%s", frontendURL, url.QueryEscape(reason)),
+			}, nil
+		}
+		return nil, huma.Error400BadRequest("authentication failed: " + reason)
+	}
+
+	// 2. Step 1: Handling Google's callback browser redirect
 	if input.Code == "" {
-		return nil, huma.Error400BadRequest("authorization code missing")
+		return errorRedirect("missing_code")
 	}
 	if input.State == "" {
-		return nil, huma.Error400BadRequest("oauth state is missing")
+		return errorRedirect("missing_state")
 	}
 	if input.OauthStateCookie == "" || input.OauthStateCookie != input.State {
-		return nil, huma.Error400BadRequest("oauth state cookie missing")
+		return errorRedirect("invalid_state")
 	}
 
 	reqCtx, cancel := context.WithTimeout(context.Background(), oauthHTTPTimeout)
@@ -84,28 +221,28 @@ func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) 
 
 	token, err := config.GoogleOAuthConfig.Exchange(reqCtx, input.Code)
 	if err != nil {
-		return nil, huma.Error400BadRequest("failed to exchange token")
+		return errorRedirect("oauth_exchange_failed")
 	}
 
 	client := config.GoogleOAuthConfig.Client(reqCtx, token)
 
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
-		return nil, huma.Error400BadRequest("failed to fetch google user")
+		return errorRedirect("oauth_user_failed")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, huma.Error502BadGateway("google user-info returned non-200")
+		return errorRedirect("oauth_user_failed")
 	}
 
 	var googleUser GoogleUser
 	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
-		return nil, huma.Error500InternalServerError("failed to decode google user")
+		return errorRedirect("oauth_decode_failed")
 	}
 
 	if !googleUser.VerifiedEmail {
-		return nil, huma.Error400BadRequest("google email is not verified")
+		return errorRedirect("email_not_verified")
 	}
 
 	oauthService := services.NewOAuthService(postgres.RedisDB)
@@ -118,13 +255,48 @@ func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) 
 		Picture:  googleUser.Picture,
 	}, input.UserAgent, ip, input.UserAgent)
 	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
+		return errorRedirect("login_failed")
 	}
 
-	// 2FA required no cookie yet
-	if result.RequiresTwoFactor {
-		return &dto.GoogleCallbackOutput{Body: *result}, nil
+	userObj := &dto.OAuthUser{
+		Email: googleUser.Email,
+		Name:  googleUser.Name,
+		Role:  "individual",
 	}
+	result.User = userObj
+
+	exchangeCode, err := utils.GenerateOAuthState()
+	if err != nil {
+		return errorRedirect("exchange_code_generation_failed")
+	}
+
+	// 2FA required
+	if result.RequiresTwoFactor {
+		c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
+			AccessToken:       "",
+			RefreshToken:      "",
+			Message:           result.Message,
+			RequiresTwoFactor: true,
+			TemporaryToken:    result.TemporaryToken,
+			User:              userObj,
+		})
+		redirectURL := fmt.Sprintf("%s/oauth/google/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
+		return &dto.GoogleCallbackOutput{
+			Status:   http.StatusFound,
+			Location: redirectURL,
+		}, nil
+	}
+
+	// Normal login: store exchange code with tokens in cache/Redis for 60s
+	c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
+		AccessToken:       result.AccessToken,
+		RefreshToken:      refreshToken,
+		Message:           result.Message,
+		ExpiresIn:         result.ExpiresIn,
+		RequiresTwoFactor: false,
+		TemporaryToken:    "",
+		User:              userObj,
+	})
 
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
@@ -136,15 +308,23 @@ func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) 
 		SameSite: http.SameSiteLaxMode,
 	}
 
+	redirectURL := fmt.Sprintf("%s/oauth/google/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
+
 	return &dto.GoogleCallbackOutput{
+		Status:    http.StatusFound,
+		Location:  redirectURL,
 		SetCookie: cookie.String(),
-		Body:      *result,
 	}, nil
+}
+
+// Package-level fallback
+func GoogleCallbackHandler(ctx context.Context, input *dto.GoogleCallbackInput) (*dto.GoogleCallbackOutput, error) {
+	return defaultOAuthController.GoogleCallbackHandler(ctx, input)
 }
 
 // ---------- GitHubLogin (redirect) ----------
 
-func GitHubLoginHandler(ctx context.Context, input *dto.GitHubLoginInput) (*dto.GitHubLoginOutput, error) {
+func (c *OAuthController) GitHubLoginHandler(ctx context.Context, input *dto.GitHubLoginInput) (*dto.GitHubLoginOutput, error) {
 	state, err := utils.GenerateOAuthState()
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to generate state")
@@ -169,17 +349,63 @@ func GitHubLoginHandler(ctx context.Context, input *dto.GitHubLoginInput) (*dto.
 	}, nil
 }
 
+// Package-level fallback
+func GitHubLoginHandler(ctx context.Context, input *dto.GitHubLoginInput) (*dto.GitHubLoginOutput, error) {
+	return defaultOAuthController.GitHubLoginHandler(ctx, input)
+}
+
 // ---------- GitHubCallback ----------
 
-func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) (*dto.GitHubCallbackOutput, error) {
+func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) (*dto.GitHubCallbackOutput, error) {
+	frontendURL := c.getFrontendURL()
+
+	// 1. Step 2: Check if this is an API code exchange from TechGuild frontend (OAuthCallback.jsx)
+	if exchangeData, ok := c.consumeExchangeCode(ctx, input.Code); ok {
+		output := &dto.GitHubCallbackOutput{
+			Status: http.StatusOK,
+			Body: dto.GitHubLoginResponse{
+				Message:           exchangeData.Message,
+				AccessToken:       exchangeData.AccessToken,
+				ExpiresIn:         exchangeData.ExpiresIn,
+				RequiresTwoFactor: exchangeData.RequiresTwoFactor,
+				TemporaryToken:    exchangeData.TemporaryToken,
+				User:              exchangeData.User,
+			},
+		}
+		if exchangeData.RefreshToken != "" {
+			cookie := &http.Cookie{
+				Name:     "refresh_token",
+				Value:    exchangeData.RefreshToken,
+				Path:     "/",
+				MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			output.SetCookie = cookie.String()
+		}
+		return output, nil
+	}
+
+	errorRedirect := func(reason string) (*dto.GitHubCallbackOutput, error) {
+		isBrowser := strings.Contains(input.Accept, "text/html") || !strings.Contains(input.Accept, "application/json")
+		if isBrowser {
+			return &dto.GitHubCallbackOutput{
+				Status:   http.StatusFound,
+				Location: fmt.Sprintf("%s/login?error=%s", frontendURL, url.QueryEscape(reason)),
+			}, nil
+		}
+		return nil, huma.Error400BadRequest("authentication failed: " + reason)
+	}
+
 	if input.Code == "" {
-		return nil, huma.Error400BadRequest("authorization code missing")
+		return errorRedirect("missing_code")
 	}
 	if input.State == "" {
-		return nil, huma.Error400BadRequest("Authorization code missing")
+		return errorRedirect("missing_state")
 	}
 	if input.OauthStateCookie == "" || input.OauthStateCookie != input.State {
-		return nil, huma.Error400BadRequest("oauth state cookie missing or mismatched")
+		return errorRedirect("invalid_state")
 	}
 
 	reqCtx, cancel := context.WithTimeout(context.Background(), oauthHTTPTimeout)
@@ -187,40 +413,40 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 
 	token, err := config.GitHubOAuthConfig.Exchange(reqCtx, input.Code)
 	if err != nil {
-		return nil, huma.Error400BadRequest("failed to exchange token")
+		return errorRedirect("oauth_exchange_failed")
 	}
 
 	client := config.GitHubOAuthConfig.Client(reqCtx, token)
 
 	resp, err := client.Get("https://api.github.com/user")
 	if err != nil {
-		return nil, huma.Error400BadRequest("failed to fetch github user")
+		return errorRedirect("oauth_user_failed")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, huma.Error502BadGateway("github userinfo returned non-200")
+		return errorRedirect("oauth_user_failed")
 	}
 
 	var githubUser GitHubUser
 	if err := json.NewDecoder(resp.Body).Decode(&githubUser); err != nil {
-		return nil, huma.Error500InternalServerError("failed to decode github user")
+		return errorRedirect("oauth_decode_failed")
 	}
 
 	if githubUser.Email == "" {
 		emailResp, err := client.Get("https://api.github.com/user/emails")
 		if err != nil {
-			return nil, huma.Error400BadRequest("failed to fetched github email")
+			return errorRedirect("oauth_email_failed")
 		}
 		defer emailResp.Body.Close()
 
 		if emailResp.StatusCode != http.StatusOK {
-			return nil, huma.Error502BadGateway("github email endpoints return non-200")
+			return errorRedirect("oauth_email_failed")
 		}
 
 		var emails []GitHubEmail
 		if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
-			return nil, huma.Error500InternalServerError("failed to decode github emails")
+			return errorRedirect("oauth_decode_failed")
 		}
 
 		for _, e := range emails {
@@ -231,7 +457,7 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 		}
 
 		if githubUser.Email == "" {
-			return nil, huma.Error400BadRequest("no verified primary email found on github account")
+			return errorRedirect("email_not_verified")
 		}
 	}
 
@@ -245,13 +471,47 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 		Avatar:   githubUser.AvatarURL,
 	}, input.UserAgent, ip, input.UserAgent)
 	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
+		return errorRedirect("login_failed")
 	}
 
-	//2FA required no cookie yet
-	if result.RequiresTwoFactor {
-		return &dto.GitHubCallbackOutput{Body: *result}, nil
+	userObj := &dto.OAuthUser{
+		Email: githubUser.Email,
+		Name:  githubUser.Name,
+		Role:  "individual",
 	}
+	result.User = userObj
+
+	exchangeCode, err := utils.GenerateOAuthState()
+	if err != nil {
+		return errorRedirect("exchange_code_generation_failed")
+	}
+
+	// 2FA required
+	if result.RequiresTwoFactor {
+		c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
+			AccessToken:       "",
+			RefreshToken:      "",
+			Message:           result.Message,
+			RequiresTwoFactor: true,
+			TemporaryToken:    result.TemporaryToken,
+			User:              userObj,
+		})
+		redirectURL := fmt.Sprintf("%s/oauth/github/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
+		return &dto.GitHubCallbackOutput{
+			Status:   http.StatusFound,
+			Location: redirectURL,
+		}, nil
+	}
+
+	c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
+		AccessToken:       result.AccessToken,
+		RefreshToken:      refreshToken,
+		Message:           result.Message,
+		ExpiresIn:         result.ExpiresIn,
+		RequiresTwoFactor: false,
+		TemporaryToken:    "",
+		User:              userObj,
+	})
 
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
@@ -263,8 +523,16 @@ func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) 
 		SameSite: http.SameSiteLaxMode,
 	}
 
+	redirectURL := fmt.Sprintf("%s/oauth/github/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
+
 	return &dto.GitHubCallbackOutput{
+		Status:    http.StatusFound,
+		Location:  redirectURL,
 		SetCookie: cookie.String(),
-		Body:      *result,
 	}, nil
+}
+
+// Package-level fallback
+func GitHubCallbackHandler(ctx context.Context, input *dto.GitHubCallbackInput) (*dto.GitHubCallbackOutput, error) {
+	return defaultOAuthController.GitHubCallbackHandler(ctx, input)
 }
