@@ -27,4 +27,6 @@ type Config struct {
 	SMTPPort     string
 	SMTPEmail    string
 	SMTPPassword string
+
+	RazorpayWebhookSecret string
 }
