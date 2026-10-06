@@ -33,7 +33,9 @@ type ProjectContract struct {
 	Freelancer   User      `gorm:"foreignKey:FreelancerID"`
 
 	// Contract Details
-	ContractAmount float64
+	// ContractAmount — int64 minor units of Currency.
+	// Example: INR 50000.00 => 5000000 (paise).
+	ContractAmount int64  `gorm:"not null;default:0"`
 	Currency       string `gorm:"size:10;default:'INR'"`
 
 	StartDate       *time.Time
@@ -44,9 +46,10 @@ type ProjectContract struct {
 	SignedByClient     bool `gorm:"default:false"`
 	SignedByFreelancer bool `gorm:"default:false"`
 
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 	CompletedAt *time.Time
+
 	Milestones []ProjectMilestone `gorm:"foreignKey:ContractID;constraint:OnDelete:CASCADE"`
 }
 
