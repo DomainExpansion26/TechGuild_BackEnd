@@ -7,6 +7,7 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
+	"techguild-backend/src/utils"
 
 	"github.com/google/uuid"
 )
@@ -23,8 +24,7 @@ func NewMilestoneService() *MilestoneService {
 	}
 }
 
-
-//crete milestone
+// crete milestone
 func (s *MilestoneService) CreateMilestone(
 	clientID string,
 	req dto.CreateMilestoneRequest,
@@ -45,11 +45,11 @@ func (s *MilestoneService) CreateMilestone(
 	}
 
 	milestone := models.ProjectMilestone{
-		ContractID: contract.ID,
-		Title:      req.Title,
-		Description:req.Description,
-		Amount:     req.Amount,
-		Status:     models.MilestonePending,
+		ContractID:  contract.ID,
+		Title:       req.Title,
+		Description: req.Description,
+		Amount:      utils.RupeesToPaise(req.Amount),
+		Status:      models.MilestonePending,
 	}
 
 	if req.DueDate != "" {
@@ -67,8 +67,7 @@ func (s *MilestoneService) CreateMilestone(
 	}, nil
 }
 
-
-//updste milestone
+// updste milestone
 func (s *MilestoneService) UpdateMilestone(
 	clientID string,
 	milestoneID string,
@@ -103,7 +102,7 @@ func (s *MilestoneService) UpdateMilestone(
 	}
 
 	if req.Amount > 0 {
-		milestone.Amount = req.Amount
+		milestone.Amount = utils.RupeesToPaise(req.Amount)
 	}
 
 	if req.DueDate != "" {
@@ -114,8 +113,7 @@ func (s *MilestoneService) UpdateMilestone(
 	return s.milestoneRepo.Update(milestone)
 }
 
-
-//delete milestone
+// delete milestone
 func (s *MilestoneService) DeleteMilestone(
 	clientID string,
 	milestoneID string,
@@ -143,7 +141,7 @@ func (s *MilestoneService) DeleteMilestone(
 	return s.milestoneRepo.Delete(milestone)
 }
 
-//submit milestone
+// submit milestone
 func (s *MilestoneService) SubmitMilestone(
 	freelancerID string,
 	milestoneID string,
@@ -175,8 +173,7 @@ func (s *MilestoneService) SubmitMilestone(
 	return s.milestoneRepo.SubmitMilestone(milestone.ID)
 }
 
-
-//approve milestone
+// approve milestone
 func (s *MilestoneService) ApproveMilestone(
 	clientID string,
 	milestoneID string,
@@ -208,7 +205,7 @@ func (s *MilestoneService) ApproveMilestone(
 	return s.milestoneRepo.ApproveMilestone(milestone.ID)
 }
 
-//reject milestone
+// reject milestone
 func (s *MilestoneService) RejectMilestone(
 	clientID string,
 	milestoneID string,
@@ -320,7 +317,7 @@ func (s *MilestoneService) GetContractMilestones(
 	return &response, nil
 }
 
-// Helper to convert database model into dto response 
+// Helper to convert database model into dto response
 func (s *MilestoneService) convertToMilestoneResponse(
 	milestone *models.ProjectMilestone,
 ) dto.MilestoneResponse {
@@ -330,7 +327,7 @@ func (s *MilestoneService) convertToMilestoneResponse(
 		ContractID:  milestone.ContractID.String(),
 		Title:       milestone.Title,
 		Description: milestone.Description,
-		Amount:      milestone.Amount,
+		Amount:      utils.PaiseToRupees(milestone.Amount),
 		Status:      string(milestone.Status),
 		CreatedAt:   milestone.CreatedAt.Format(time.RFC3339),
 	}

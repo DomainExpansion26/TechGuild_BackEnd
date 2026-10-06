@@ -27,7 +27,9 @@ type ProjectMilestone struct {
 	Title       string `gorm:"size:255;not null"`
 	Description string `gorm:"type:text"`
 
-	Amount float64
+	// Amount — int64 minor units of Contract.Currency.
+	// Example: INR 9500.00 => 950000 (paise).
+	Amount int64 `gorm:"not null;default:0"`
 
 	DueDate *time.Time
 
