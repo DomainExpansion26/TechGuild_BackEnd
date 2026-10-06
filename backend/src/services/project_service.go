@@ -7,6 +7,7 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
+	"techguild-backend/src/utils"
 
 	"github.com/google/uuid"
 )
@@ -21,9 +22,7 @@ func NewProjectService() *ProjectService {
 	}
 }
 
-
 // Helper Functions
-
 
 func parseProjectUUID(id string) (uuid.UUID, error) {
 
@@ -45,9 +44,7 @@ func parseUserUUID(id string) (uuid.UUID, error) {
 	return userID, nil
 }
 
-
 // Project Services
-
 
 func (s *ProjectService) CreateProject(userID string, req dto.CreateProjectRequest) (*dto.CreateProjectResponse, error) {
 
@@ -64,8 +61,8 @@ func (s *ProjectService) CreateProject(userID string, req dto.CreateProjectReque
 		Category:    req.Category,
 
 		BudgetType: models.BudgetType(req.BudgetType),
-		MinBudget:  req.MinBudget,
-		MaxBudget:  req.MaxBudget,
+		MinBudget:  utils.RupeesToPaise(req.MinBudget),
+		MaxBudget:  utils.RupeesToPaise(req.MaxBudget),
 		Currency:   req.Currency,
 
 		ExperienceLevel: req.ExperienceLevel,
@@ -194,11 +191,11 @@ func (s *ProjectService) UpdateProject(
 	}
 
 	if req.MinBudget > 0 {
-		project.MinBudget = req.MinBudget
+		project.MinBudget = utils.RupeesToPaise(req.MinBudget)
 	}
 
 	if req.MaxBudget > 0 {
-		project.MaxBudget = req.MaxBudget
+		project.MaxBudget = utils.RupeesToPaise(req.MaxBudget)
 	}
 
 	if req.Currency != "" {
@@ -322,12 +319,10 @@ func (s *ProjectService) DeleteProject(clientID, projectID string) error {
 		return errors.New("cannot delete a published project")
 	}
 
-	return s.projectRepo.Delete(project.ID) 
+	return s.projectRepo.Delete(project.ID)
 }
 
-
 // Publish Project
-
 
 func (s *ProjectService) PublishProject(clientID, projectID string) error {
 
@@ -401,7 +396,6 @@ func (s *ProjectService) GetProjectByID(projectID string) (*dto.ProjectResponse,
 	return &response, nil
 }
 
-
 // Get My Projects
 
 func (s *ProjectService) GetMyProjects(clientID string) (*dto.ProjectListResponse, error) {
@@ -422,8 +416,8 @@ func (s *ProjectService) GetMyProjects(clientID string) (*dto.ProjectListRespons
 
 	return &response, nil
 }
-// Browse Published Projects
 
+// Browse Published Projects
 
 func (s *ProjectService) BrowseProjects() (*dto.ProjectListResponse, error) {
 
@@ -443,8 +437,8 @@ func (s *ProjectService) BrowseProjects() (*dto.ProjectListResponse, error) {
 
 	return &response, nil
 }
-// Search Projects
 
+// Search Projects
 
 func (s *ProjectService) SearchProjects(
 	req dto.SearchProjectRequest,
@@ -489,26 +483,26 @@ func (s *ProjectService) convertToProjectResponse(
 	}
 
 	response := dto.ProjectResponse{
-		ID:                project.ID.String(),
-		ClientID:          project.ClientID.String(),
-		Title:             project.Title,
-		Description:       project.Description,
-		Category:          project.Category,
-		BudgetType:        string(project.BudgetType),
-		MinBudget:         project.MinBudget,
-		MaxBudget:         project.MaxBudget,
-		Currency:          project.Currency,
-		ExperienceLevel:   project.ExperienceLevel,
-		ProjectType:       project.ProjectType,
-		Duration:          project.Duration,
-		RequiredSkills:    skills,
-		Visibility:        string(project.Visibility),
-		Status:            string(project.Status),
-		MaxApplications:   project.MaxApplications,
-		IsFeatured:        project.IsFeatured,
-		IsUrgent:          project.IsUrgent,
-		CreatedAt:         project.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         project.UpdatedAt.Format(time.RFC3339),
+		ID:              project.ID.String(),
+		ClientID:        project.ClientID.String(),
+		Title:           project.Title,
+		Description:     project.Description,
+		Category:        project.Category,
+		BudgetType:      string(project.BudgetType),
+		MinBudget:       utils.PaiseToRupees(project.MinBudget),
+		MaxBudget:       utils.PaiseToRupees(project.MaxBudget),
+		Currency:        project.Currency,
+		ExperienceLevel: project.ExperienceLevel,
+		ProjectType:     project.ProjectType,
+		Duration:        project.Duration,
+		RequiredSkills:  skills,
+		Visibility:      string(project.Visibility),
+		Status:          string(project.Status),
+		MaxApplications: project.MaxApplications,
+		IsFeatured:      project.IsFeatured,
+		IsUrgent:        project.IsUrgent,
+		CreatedAt:       project.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       project.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if project.ApplicationDeadline != nil {

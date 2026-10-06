@@ -7,6 +7,7 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
+	"techguild-backend/src/utils"
 
 	"github.com/google/uuid"
 )
@@ -59,8 +60,8 @@ func (s *ContractService) CreateContract(
 		ProjectID:      project.ID,
 		ApplicationID:  application.ID,
 		ClientID:       project.ClientID,
-		FreelancerID: application.ApplicantID,
-		ContractAmount: req.ContractAmount,
+		FreelancerID:   application.ApplicantID,
+		ContractAmount: utils.RupeesToPaise(req.ContractAmount),
 		Currency:       req.Currency,
 		Status:         models.ContractPending,
 	}
@@ -233,25 +234,24 @@ func (s *ContractService) GetFreelancerContracts(
 	return &response, nil
 }
 
-
-// Helper to convert 
+// Helper to convert
 func (s *ContractService) convertToContractResponse(
 	contract *models.ProjectContract,
 ) dto.ContractResponse {
 
 	response := dto.ContractResponse{
-		ID:                  contract.ID.String(),
-		ProjectID:           contract.ProjectID.String(),
-		ApplicationID:       contract.ApplicationID.String(),
-		ClientID:            contract.ClientID.String(),
-		FreelancerID:        contract.FreelancerID.String(),
-		ContractAmount:      contract.ContractAmount,
-		Currency:            contract.Currency,
-		Status:              string(contract.Status),
-		SignedByClient:      contract.SignedByClient,
-		SignedByFreelancer:  contract.SignedByFreelancer,
-		CreatedAt:           contract.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:           contract.UpdatedAt.Format(time.RFC3339),
+		ID:                 contract.ID.String(),
+		ProjectID:          contract.ProjectID.String(),
+		ApplicationID:      contract.ApplicationID.String(),
+		ClientID:           contract.ClientID.String(),
+		FreelancerID:       contract.FreelancerID.String(),
+		ContractAmount:     utils.PaiseToRupees(contract.ContractAmount),
+		Currency:           contract.Currency,
+		Status:             string(contract.Status),
+		SignedByClient:     contract.SignedByClient,
+		SignedByFreelancer: contract.SignedByFreelancer,
+		CreatedAt:          contract.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          contract.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if contract.StartDate != nil {
@@ -269,7 +269,7 @@ func (s *ContractService) convertToContractResponse(
 	return response
 }
 
-//cancel the contract 
+// cancel the contract
 func (s *ContractService) CancelContract(
 	clientID string,
 	contractID string,

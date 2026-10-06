@@ -1,6 +1,8 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"github.com/spf13/viper"
+)
 
 func LoadConfig() (*Config, error) {
 
@@ -36,6 +38,8 @@ func LoadConfig() (*Config, error) {
 		SMTPPort:     viper.GetString("SMTP_PORT"),
 		SMTPEmail:    viper.GetString("SMTP_EMAIL"),
 		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
+
+		RazorpayWebhookSecret: viper.GetString("RAZORPAY_WEBHOOK_SECRET"),
 	}
 
 	return cfg, nil

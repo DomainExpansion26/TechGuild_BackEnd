@@ -22,7 +22,18 @@ func ConnectDatabase() {
 	}
 	dsn := os.Getenv("DATABASE_URL")
 
-	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		// Disable prepared statement caching.
+		//
+		// pgx driver reuses prepared statements per connection. When schema
+		// changes (e.g. DROP TABLE + AutoMigrate during development), cached
+		// plans become stale and Postgres rejects them with:
+		//   "cached plan must not change result type" (SQLSTATE 0A000)
+		//   "prepared statement name is already in use" (SQLSTATE 08P01)
+		//
+		// PrepareStmt: false avoids both by not using prepared statement cache.
+		PrepareStmt: false,
+	})
 	if err != nil {
 		log.Fatal("Postgres connection failed:", err)
 	}

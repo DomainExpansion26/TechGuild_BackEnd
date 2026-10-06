@@ -15,7 +15,9 @@ import (
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/jobs"
 	"techguild-backend/src/middleware"
+	"techguild-backend/src/repository"
 	"techguild-backend/src/routes"
+	"techguild-backend/src/services"
 )
 
 func main() {
@@ -75,6 +77,38 @@ func main() {
 
 	api := humagin.New(router, apiConfig)
 
+	// --------------------------------------------------
+	// Payment & Payout (provider-neutral)
+	// --------------------------------------------------
+
+	// Provider — abhi mock, baad me Razorpay/Stripe/Payoneer adapter swap karenge.
+	paymentProvider := services.NewMockPaymentProvider()
+
+	paymentMethodService := services.NewPaymentMethodService(cfg, paymentProvider)
+	payoutMethodService := services.NewPayoutMethodService(cfg, paymentProvider)
+	milestonePaymentService := services.NewMilestonePaymentService(cfg, paymentProvider)
+
+	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
+	payoutMethodController := controllers.NewPayoutMethodController(payoutMethodService)
+	milestonePaymentController := controllers.NewMilestonePaymentController(milestonePaymentService)
+
+	// --------------------------------------------------
+	// Webhook infrastructure
+	// --------------------------------------------------
+
+	webhookEventRepo := repository.NewPaymentWebhookEventRepository()
+	payoutMethodRepoForWebhook := repository.NewPayoutMethodRepository()
+	webhookService := services.NewWebhookService(webhookEventRepo, payoutMethodRepoForWebhook)
+
+	// Register provider verifiers (only if credentials configured)
+	if cfg.RazorpayWebhookSecret != "" {
+		webhookService.RegisterVerifier(
+			services.NewRazorpayWebhookVerifier(cfg.RazorpayWebhookSecret),
+		)
+	}
+
+	webhookController := controllers.NewWebhookController(webhookService)
+
 	// Controllers are injected with cfg (dependency injection, no globals).
 	authController := controllers.NewAuthController(cfg)
 	profileController := controllers.NewProfileController(cfg)
@@ -90,10 +124,13 @@ func main() {
 	routes.RegisterProjectRoutes(api)
 	routes.RegisterProjectApplicationRoutes(api)
 	routes.RegisterSubmissionRoutes(api)
-	routes.RegisterTeamRoutes(api)
 	routes.RegisterVerificationRoutes(api)
 	routes.RegisterTwoFactorRoutes(api)
 	routes.RegisterQuestRoutes(api)
+	routes.RegisterPaymentMethodRoutes(api, paymentMethodController)
+	routes.RegisterPayoutMethodRoutes(api, payoutMethodController)
+	routes.RegisterWebhookRoutes(api, webhookController)
+	routes.RegisterMilestonePaymentRoutes(api, milestonePaymentController)
 
 	log.Println("Server running on :8080")
 
