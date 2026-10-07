@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"techguild-backend/src/dto"
-	"techguild-backend/src/middleware"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -25,7 +25,7 @@ var contractController = NewContractController()
 // ---------- CreateContract ----------
 
 func CreateContractHandler(ctx context.Context, input *dto.CreateContractInput) (*dto.CreateContractOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	res, err := contractController.service.CreateContract(clientID, input.Body)
 	if err != nil {
@@ -38,7 +38,7 @@ func CreateContractHandler(ctx context.Context, input *dto.CreateContractInput) 
 // ---------- SignContract ----------
 
 func SignContractHandler(ctx context.Context, input *dto.SignContractInput) (*dto.SignContractOutput, error) {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+	userID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := contractController.service.SignContract(userID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -52,7 +52,7 @@ func SignContractHandler(ctx context.Context, input *dto.SignContractInput) (*dt
 // ---------- CompleteContract ----------
 
 func CompleteContractHandler(ctx context.Context, input *dto.CompleteContractInput) (*dto.CompleteContractOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := contractController.service.CompleteContract(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -66,7 +66,7 @@ func CompleteContractHandler(ctx context.Context, input *dto.CompleteContractInp
 // ---------- CancelContract ----------
 
 func CancelContractHandler(ctx context.Context, input *dto.CancelContractInput) (*dto.CancelContractOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := contractController.service.CancelContract(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -91,7 +91,7 @@ func GetContractByIDHandler(ctx context.Context, input *dto.GetContractByIDInput
 // ---------- GetClientContracts ----------
 
 func GetClientContractsHandler(ctx context.Context, input *dto.GetClientContractsInput) (*dto.GetClientContractsOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	res, err := contractController.service.GetClientContracts(clientID)
 	if err != nil {
@@ -104,7 +104,7 @@ func GetClientContractsHandler(ctx context.Context, input *dto.GetClientContract
 // ---------- GetFreelancerContracts ----------
 
 func GetFreelancerContractsHandler(ctx context.Context, input *dto.GetFreelancerContractsInput) (*dto.GetFreelancerContractsOutput, error) {
-	freelancerID, _ := ctx.Value(middleware.UserIDKey).(string)
+	freelancerID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	res, err := contractController.service.GetFreelancerContracts(freelancerID)
 	if err != nil {

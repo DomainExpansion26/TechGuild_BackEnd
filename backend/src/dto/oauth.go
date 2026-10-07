@@ -15,12 +15,13 @@ type OAuthUser struct {
 }
 
 type GoogleLoginResponse struct {
-	Message           string     `json:"message" example:"Login successful"`
-	AccessToken       string     `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	RequiresTwoFactor bool       `json:"requires_two_factor" example:"true"`
-	TemporaryToken    string     `json:"temporary_token" example:"temp_token"`
-	ExpiresIn         int        `json:"expires_in" example:"3600"`
-	User              *OAuthUser `json:"user,omitempty"`
+	Message             string     `json:"message" example:"Login successful"`
+	AccessToken         string     `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	RequiresTwoFactor   bool       `json:"requires_two_factor" example:"true"`
+	TemporaryToken      string     `json:"temporary_token" example:"temp_token"`
+	ExpiresIn           int        `json:"expires_in" example:"3600"`
+	User                *OAuthUser `json:"user,omitempty"`
+	RequiresAccountType bool       `json:"requires_account_type,omitempty"`
 }
 
 type GitHubLoginRequest struct {
@@ -31,12 +32,13 @@ type GitHubLoginRequest struct {
 }
 
 type GitHubLoginResponse struct {
-	Message           string     `json:"message" example:"Login successful"`
-	AccessToken       string     `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	ExpiresIn         int        `json:"expires_in" example:"3600"`
-	RequiresTwoFactor bool       `json:"requires_two_factor" example:"true"`
-	TemporaryToken    string     `json:"temporary_token" example:"temp_token"`
-	User              *OAuthUser `json:"user,omitempty"`
+	Message             string     `json:"message" example:"Login successful"`
+	AccessToken         string     `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	ExpiresIn           int        `json:"expires_in" example:"3600"`
+	RequiresTwoFactor   bool       `json:"requires_two_factor" example:"true"`
+	TemporaryToken      string     `json:"temporary_token" example:"temp_token"`
+	User                *OAuthUser `json:"user,omitempty"`
+	RequiresAccountType bool       `json:"requires_account_type,omitempty"`
 }
 
 // ---------- Huma Input/Output wrapper structs ----------
@@ -57,9 +59,9 @@ type GoogleCallbackInput struct {
 	ForwardedFor     string `header:"X-Forwarded-For"`
 }
 type GoogleCallbackOutput struct {
-	Status    int                 `json:"-"`
-	Location  string              `header:"Location"`
-	SetCookie string              `header:"Set-Cookie"`
+	Status    int    `json:"-"`
+	Location  string `header:"Location"`
+	SetCookie string `header:"Set-Cookie"`
 	Body      GoogleLoginResponse
 }
 
@@ -79,8 +81,8 @@ type GitHubCallbackInput struct {
 	ForwardedFor     string `header:"X-Forwarded-For"`
 }
 type GitHubCallbackOutput struct {
-	Status    int                 `json:"-"`
-	Location  string              `header:"Location"`
-	SetCookie string              `header:"Set-Cookie"`
+	Status    int    `json:"-"`
+	Location  string `header:"Location"`
+	SetCookie string `header:"Set-Cookie"`
 	Body      GitHubLoginResponse
 }
