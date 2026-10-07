@@ -8,7 +8,6 @@ import (
 	"techguild-backend/src/config"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
-	"techguild-backend/src/middleware"
 	"techguild-backend/src/models"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
@@ -62,7 +61,7 @@ func (c *AuthController) LoginHandler(ctx context.Context, input *dto.LoginInput
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	return &dto.LoginOutput{
@@ -76,12 +75,34 @@ func (c *AuthController) LoginHandler(ctx context.Context, input *dto.LoginInput
 func (c *AuthController) VerifyEmailHandler(ctx context.Context, input *dto.VerifyEmailInput) (*dto.VerifyEmailOutput, error) {
 	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
-	res, err := authService.VerifyEmail(dto.VerifyEmailRequest{Token: input.Token})
+	ip := utils.GetClientIP(input.ForwardedFor)
+	res, refreshToken, err := authService.VerifyEmail(
+		dto.VerifyEmailRequest{Token: input.Token},
+		input.UserAgent,
+		ip,
+		input.UserAgent,
+	)
 	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	return &dto.VerifyEmailOutput{Body: *res}, nil
+	out := &dto.VerifyEmailOutput{Body: *res}
+
+	// ✅ Cookie set karo (agar refresh token mila)
+	if refreshToken != "" {
+		cookie := &http.Cookie{
+			Name:     "refresh_token",
+			Value:    refreshToken,
+			Path:     "/",
+			MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteNoneMode,
+		}
+		out.SetCookie = cookie.String()
+	}
+
+	return out, nil
 }
 
 // ---------- ResendVerificationEmail ----------
@@ -93,8 +114,11 @@ func (c *AuthController) ResendVerificationEmailHandler(ctx context.Context, inp
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
+	// Generic message — don't reveal whether email exists / is verified.
 	return &dto.ResendVerificationOutput{
-		Body: dto.ResendVerificationResponse{Message: "Verification email sent successfully"},
+		Body: dto.ResendVerificationResponse{
+			Message: "If an account exists with this email and is not verified, a verification link has been sent.",
+		},
 	}, nil
 }
 
@@ -123,7 +147,7 @@ func (c *AuthController) LogoutHandler(ctx context.Context, input *dto.LogoutInp
 		MaxAge:   -1,
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	return &dto.LogoutOutput{
@@ -159,7 +183,7 @@ func (c *AuthController) RefreshTokenHandler(ctx context.Context, input *dto.Ref
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	return &dto.RefreshTokenOutput{
@@ -171,11 +195,10 @@ func (c *AuthController) RefreshTokenHandler(ctx context.Context, input *dto.Ref
 // ---------- ResetPassword ----------
 
 func (c *AuthController) ResetPasswordHandler(ctx context.Context, input *dto.ResetPasswordInput) (*dto.ResetPasswordOutput, error) {
-	input.Body.Token = input.Token
-
 	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
-	if err := authService.ResetPassword(input.Body); err != nil {
+	// Token URL query se, password body se
+	if err := authService.ResetPassword(input.Token, input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
@@ -194,18 +217,21 @@ func (c *AuthController) ForgotPasswordHandler(ctx context.Context, input *dto.F
 	}
 
 	return &dto.ForgotPasswordOutput{
-		Body: dto.ForgotPasswordResponse{Message: "Password reset link sent successfully"},
+		Body: dto.ForgotPasswordResponse{
+			Message: "If an account exists with this email, a password reset link has been sent.",
+		},
 	}, nil
 }
 
 // ---------- ChangePassword (protected) ----------
 
 func (c *AuthController) ChangePasswordHandler(ctx context.Context, input *dto.ChangePasswordInput) (*dto.ChangePasswordOutput, error) {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+	userID, _ := ctx.Value(utils.UserIDKey).(string)
+	sessionID, _ := ctx.Value(utils.SessionIDKey).(string)
 
 	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
-	if err := authService.ChangePassword(userID, input.Body); err != nil {
+	if err := authService.ChangePassword(userID, sessionID, input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
@@ -216,15 +242,22 @@ func (c *AuthController) ChangePasswordHandler(ctx context.Context, input *dto.C
 
 // for oauth
 func (c *AuthController) SetAccountTypeAuthenticatedHandler(ctx context.Context, input *dto.SetAccountTypeAuthInput) (*dto.SetAccountTypeAuthOutput, error) {
-	userID, _ := ctx.Value(middleware.UserIDKey).(string)
+	userID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	authService := services.NewAuthService(postgres.RedisDB, c.cfg)
 
-	if err := authService.SetAccountTypeAuthenticated(userID, models.AccountType(input.Body.AccountType)); err != nil {
+	user, err := authService.SetAccountTypeAuthenticated(userID, models.AccountType(input.Body.AccountType))
+	if err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
 	out := &dto.SetAccountTypeAuthOutput{}
 	out.Body.Message = "Account type set successfully"
+	out.Body.UserID = user.ID.String()
+	out.Body.Email = user.Email
+	if user.AccountType != nil {
+		out.Body.AccountType = string(*user.AccountType)
+	}
+	out.Body.Rank = user.Rank
 	return out, nil
 }

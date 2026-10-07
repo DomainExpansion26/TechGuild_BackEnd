@@ -47,14 +47,15 @@ type GitHubEmail struct {
 const oauthHTTPTimeout = 10 * time.Second
 
 type OAuthExchangeData struct {
-	AccessToken       string         `json:"access_token"`
-	RefreshToken      string         `json:"refresh_token"`
-	Message           string         `json:"message"`
-	ExpiresIn         int            `json:"expires_in"`
-	RequiresTwoFactor bool           `json:"requires_two_factor"`
-	TemporaryToken    string         `json:"temporary_token"`
-	User              *dto.OAuthUser `json:"user,omitempty"`
-	CreatedAt         time.Time      `json:"created_at"`
+	AccessToken         string         `json:"access_token"`
+	RefreshToken        string         `json:"refresh_token"`
+	Message             string         `json:"message"`
+	ExpiresIn           int            `json:"expires_in"`
+	RequiresTwoFactor   bool           `json:"requires_two_factor"`
+	TemporaryToken      string         `json:"temporary_token"`
+	User                *dto.OAuthUser `json:"user,omitempty"`
+	CreatedAt           time.Time      `json:"created_at"`
+	RequiresAccountType bool           `json:"requires_account_type"`
 }
 
 type OAuthController struct {
@@ -170,12 +171,13 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 		output := &dto.GoogleCallbackOutput{
 			Status: http.StatusOK,
 			Body: dto.GoogleLoginResponse{
-				Message:           exchangeData.Message,
-				AccessToken:       exchangeData.AccessToken,
-				ExpiresIn:         exchangeData.ExpiresIn,
-				RequiresTwoFactor: exchangeData.RequiresTwoFactor,
-				TemporaryToken:    exchangeData.TemporaryToken,
-				User:              exchangeData.User,
+				Message:             exchangeData.Message,
+				AccessToken:         exchangeData.AccessToken,
+				ExpiresIn:           exchangeData.ExpiresIn,
+				RequiresTwoFactor:   exchangeData.RequiresTwoFactor,
+				TemporaryToken:      exchangeData.TemporaryToken,
+				User:                exchangeData.User,
+				RequiresAccountType: exchangeData.RequiresAccountType,
 			},
 		}
 		if exchangeData.RefreshToken != "" {
@@ -186,7 +188,7 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 				MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 				Secure:   true,
 				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
+				SameSite: http.SameSiteNoneMode,
 			}
 			output.SetCookie = cookie.String()
 		}
@@ -258,13 +260,6 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 		return errorRedirect("login_failed")
 	}
 
-	userObj := &dto.OAuthUser{
-		Email: googleUser.Email,
-		Name:  googleUser.Name,
-		Role:  "individual",
-	}
-	result.User = userObj
-
 	exchangeCode, err := utils.GenerateOAuthState()
 	if err != nil {
 		return errorRedirect("exchange_code_generation_failed")
@@ -273,12 +268,13 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 	// 2FA required
 	if result.RequiresTwoFactor {
 		c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
-			AccessToken:       "",
-			RefreshToken:      "",
-			Message:           result.Message,
-			RequiresTwoFactor: true,
-			TemporaryToken:    result.TemporaryToken,
-			User:              userObj,
+			AccessToken:         "",
+			RefreshToken:        "",
+			Message:             result.Message,
+			RequiresTwoFactor:   true,
+			TemporaryToken:      result.TemporaryToken,
+			User:                result.User,
+			RequiresAccountType: result.RequiresAccountType,
 		})
 		redirectURL := fmt.Sprintf("%s/oauth/google/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
 		return &dto.GoogleCallbackOutput{
@@ -289,13 +285,14 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 
 	// Normal login: store exchange code with tokens in cache/Redis for 60s
 	c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
-		AccessToken:       result.AccessToken,
-		RefreshToken:      refreshToken,
-		Message:           result.Message,
-		ExpiresIn:         result.ExpiresIn,
-		RequiresTwoFactor: false,
-		TemporaryToken:    "",
-		User:              userObj,
+		AccessToken:         result.AccessToken,
+		RefreshToken:        refreshToken,
+		Message:             result.Message,
+		ExpiresIn:           result.ExpiresIn,
+		RequiresTwoFactor:   false,
+		TemporaryToken:      "",
+		User:                result.User,
+		RequiresAccountType: result.RequiresAccountType,
 	})
 
 	cookie := &http.Cookie{
@@ -305,7 +302,7 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	redirectURL := fmt.Sprintf("%s/oauth/google/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
@@ -364,12 +361,13 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 		output := &dto.GitHubCallbackOutput{
 			Status: http.StatusOK,
 			Body: dto.GitHubLoginResponse{
-				Message:           exchangeData.Message,
-				AccessToken:       exchangeData.AccessToken,
-				ExpiresIn:         exchangeData.ExpiresIn,
-				RequiresTwoFactor: exchangeData.RequiresTwoFactor,
-				TemporaryToken:    exchangeData.TemporaryToken,
-				User:              exchangeData.User,
+				Message:             exchangeData.Message,
+				AccessToken:         exchangeData.AccessToken,
+				ExpiresIn:           exchangeData.ExpiresIn,
+				RequiresTwoFactor:   exchangeData.RequiresTwoFactor,
+				TemporaryToken:      exchangeData.TemporaryToken,
+				User:                exchangeData.User,
+				RequiresAccountType: exchangeData.RequiresAccountType,
 			},
 		}
 		if exchangeData.RefreshToken != "" {
@@ -380,7 +378,7 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 				MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 				Secure:   true,
 				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
+				SameSite: http.SameSiteNoneMode,
 			}
 			output.SetCookie = cookie.String()
 		}
@@ -474,13 +472,6 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 		return errorRedirect("login_failed")
 	}
 
-	userObj := &dto.OAuthUser{
-		Email: githubUser.Email,
-		Name:  githubUser.Name,
-		Role:  "individual",
-	}
-	result.User = userObj
-
 	exchangeCode, err := utils.GenerateOAuthState()
 	if err != nil {
 		return errorRedirect("exchange_code_generation_failed")
@@ -489,12 +480,13 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 	// 2FA required
 	if result.RequiresTwoFactor {
 		c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
-			AccessToken:       "",
-			RefreshToken:      "",
-			Message:           result.Message,
-			RequiresTwoFactor: true,
-			TemporaryToken:    result.TemporaryToken,
-			User:              userObj,
+			AccessToken:         "",
+			RefreshToken:        "",
+			Message:             result.Message,
+			RequiresTwoFactor:   true,
+			TemporaryToken:      result.TemporaryToken,
+			User:                result.User,
+			RequiresAccountType: result.RequiresAccountType,
 		})
 		redirectURL := fmt.Sprintf("%s/oauth/github/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))
 		return &dto.GitHubCallbackOutput{
@@ -504,13 +496,14 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 	}
 
 	c.storeExchangeCode(ctx, exchangeCode, &OAuthExchangeData{
-		AccessToken:       result.AccessToken,
-		RefreshToken:      refreshToken,
-		Message:           result.Message,
-		ExpiresIn:         result.ExpiresIn,
-		RequiresTwoFactor: false,
-		TemporaryToken:    "",
-		User:              userObj,
+		AccessToken:         result.AccessToken,
+		RefreshToken:        refreshToken,
+		Message:             result.Message,
+		ExpiresIn:           result.ExpiresIn,
+		RequiresTwoFactor:   false,
+		TemporaryToken:      "",
+		User:                result.User,
+		RequiresAccountType: result.RequiresAccountType,
 	})
 
 	cookie := &http.Cookie{
@@ -520,7 +513,7 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	redirectURL := fmt.Sprintf("%s/oauth/github/callback?code=%s&state=%s", frontendURL, exchangeCode, url.QueryEscape(input.State))

@@ -1,12 +1,14 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"log"
 	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"techguild-backend/src/config"
@@ -143,73 +145,152 @@ func (s *AuthService) sendWithRetry(email, token, userID string) {
 	// TODO: yaha ek persistent failure record daalo (DB table ya monitoring alert)
 }
 
-func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest) (*dto.VerifyEmailResponse, error) {
-
+func (s *AuthService) VerifyEmail(req dto.VerifyEmailRequest, device, ipAddress, userAgent string) (*dto.VerifyEmailResponse, string, error) {
 	_, err := s.verificationRepo.GoConsumeVerificationToken(req.Token)
 	if err == nil {
-		// Token was already used.
-		// This can happen because of an email security scanner
-		// or because the user clicked the same link again.
 		return &dto.VerifyEmailResponse{
-			Message: "This verification link has already been used. If you haven't verified your email yet, please request a new verification email.",
-		}, nil
+			Message: "This verification link has already been used...",
+		}, "", nil
 	}
 	userID, err := s.verificationRepo.GetVerificationToken(req.Token)
 	if err != nil {
-		return nil, errors.New("invalid or expired verification link")
+		return nil, "", errors.New("invalid or expired verification link")
 	}
 
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
-		return nil, errors.New("user not found")
+		return nil, "", errors.New("user not found")
 	}
 
-	// check email already verified
+	// ✅ EDGE CASE FIX — Already verified user
 	if user.EmailVerified {
 		_ = s.verificationRepo.SaveConsumedVerificationToken(req.Token, userID)
 
+		requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
+		refreshToken, err := utils.GenerateRefreshToken(userID)
+		if err != nil {
+			return &dto.VerifyEmailResponse{
+				Message:             "Email already verified. Please login to continue.",
+				RequiresAccountType: requiresAccountType,
+			}, "", nil
+		}
+
+		session := &models.UserSession{
+			UserID:       user.ID,
+			RefreshToken: refreshToken,
+			Device:       device,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
+			IsRevoked:    false,
+			ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
+		}
+		if err := s.userRepo.CreateSession(session); err != nil {
+			return &dto.VerifyEmailResponse{
+				Message:             "Email already verified. Please login to continue.",
+				RequiresAccountType: requiresAccountType,
+			}, "", nil
+		}
+
+		accessToken, err := utils.GenerateAccessToken(userID, session.ID.String())
+		if err != nil {
+			return &dto.VerifyEmailResponse{
+				Message:             "Email already verified. Please login to continue.",
+				RequiresAccountType: requiresAccountType,
+			}, "", nil
+		}
+
 		return &dto.VerifyEmailResponse{
-			Message: "Email Already Verified.Please Select Your Account type to proceed",
-		}, nil
+			Message:             "Email already verified.",
+			AccessToken:         accessToken,
+			ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+			RequiresAccountType: requiresAccountType,
+		}, refreshToken, nil
 	}
 
+	// Baaki flow same
 	err = s.userRepo.UpdateEmailVerified(userID, true)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if user.Status == models.StatusPendingVerification {
 		if err := s.userRepo.UpdateUserStatus(userID, string(models.StatusActive)); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
-	// 7. Save consumed marker.
-	// DON'T immediately delete the original token.
 	err = s.verificationRepo.SaveConsumedVerificationToken(req.Token, userID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	// _ = s.verificationRepo.DeleteVerificationToken(req.Token)
-
-	// Add +10 points for verifying the email
 	_ = s.userRepo.AddUserPoints(userID, 10)
 
+	requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
+	refreshToken, err := utils.GenerateRefreshToken(userID)
+	if err != nil {
+		return &dto.VerifyEmailResponse{
+			Message:             "Email verified successfully. Please login to continue.",
+			RequiresAccountType: requiresAccountType,
+		}, "", nil
+	}
+
+	session := &models.UserSession{
+		UserID:       user.ID,
+		RefreshToken: refreshToken,
+		Device:       device,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		IsRevoked:    false,
+		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
+	}
+	if err := s.userRepo.CreateSession(session); err != nil {
+		return &dto.VerifyEmailResponse{
+			Message:             "Email verified successfully. Please login to continue.",
+			RequiresAccountType: requiresAccountType,
+		}, "", nil
+	}
+
+	accessToken, err := utils.GenerateAccessToken(userID, session.ID.String())
+	if err != nil {
+		return &dto.VerifyEmailResponse{
+			Message:             "Email verified successfully. Please login to continue.",
+			RequiresAccountType: requiresAccountType,
+		}, "", nil
+	}
+
 	return &dto.VerifyEmailResponse{
-		Message: "Email verified successfully. Please select your account type to proceed.",
-	}, nil
+		Message:             "Email verified successfully. Please select your account type to proceed.",
+		AccessToken:         accessToken,
+		ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+		RequiresAccountType: requiresAccountType,
+	}, refreshToken, nil
 }
 
 func (s *AuthService) ResendVerificationEmail(req dto.ResendVerificationRequest) error {
 	req.Email = utils.NormalizeEmail(req.Email)
+
+	// Rate limit: max 1 resend per 60s per email
+	cooldownKey := "resend_verify_cooldown:" + req.Email
+	ctx := context.Background()
+	exists, err := s.verificationRepo.Redis.Exists(ctx, cooldownKey).Result()
+	if err == nil && exists > 0 {
+		log.Printf("ResendVerification: rate-limited: %s", req.Email)
+		return nil // silent no-op
+	}
+	_ = s.verificationRepo.Redis.Set(ctx, cooldownKey, "1", 60*time.Second).Err()
+
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return errors.New("user not found")
+		log.Printf("ResendVerification: email not found: %s", req.Email)
+		return nil
 	}
 
 	if user.EmailVerified {
-		return errors.New("email already verified")
+		log.Printf("ResendVerification: already verified: %s", req.Email)
+		return nil
 	}
 
 	return s.SendVerificationEmail(user.ID.String(), user.Email)
@@ -235,10 +316,6 @@ func (s *AuthService) Login(req dto.LoginRequest, device, ipAddress, userAgent s
 		return nil, "", errors.New("please verify your email first")
 	}
 
-	if user.AccountType == nil || *user.AccountType == "" {
-		return nil, "", errors.New("please select an account type first")
-	}
-
 	if user.Status == models.StatusPendingDeletion || user.Status == models.StatusDeactivated {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
@@ -251,18 +328,25 @@ func (s *AuthService) Login(req dto.LoginRequest, device, ipAddress, userAgent s
 		return nil, "", errors.New("account is not active")
 	}
 
+	requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
 	// ---------- 2FA CHECK (new) ----------
 	if user.TwoFactorEnabled {
 		record, err := s.tfaRepo.GetByUserID(user.ID)
+
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "", err
+		}
 		if err == nil && record.Status == models.TwoFAStatusEnabled {
 			tempToken, err := utils.GenerateTemporary2FAToken(user.ID.String())
 			if err != nil {
 				return nil, "", err
 			}
 			return &dto.LoginResponse{
-				Message:           "Two-factor authentication required",
-				RequiresTwoFactor: true,
-				TemporaryToken:    tempToken,
+				Message:             "Two-factor authentication required",
+				RequiresTwoFactor:   true,
+				TemporaryToken:      tempToken,
+				RequiresAccountType: requiresAccountType,
 			}, "", nil
 		}
 	}
@@ -293,11 +377,13 @@ func (s *AuthService) Login(req dto.LoginRequest, device, ipAddress, userAgent s
 	}
 
 	return &dto.LoginResponse{
-		Message:     "Login successful",
-		AccessToken: accessToken,
-		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+		Message:             "Login successful",
+		AccessToken:         accessToken,
+		ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+		RequiresAccountType: requiresAccountType,
 	}, refreshToken, nil
 }
+
 func (s *AuthService) Logout(refreshToken string) error {
 
 	if refreshToken == "" {
@@ -337,12 +423,6 @@ func (s *AuthService) RefreshToken(oldToken string, device string, ipAddress str
 		return nil, "", err
 	}
 
-	err = s.userRepo.UpdateRefreshToken(oldToken, newRefreshToken)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// UpdateRefreshToken (overwrite) ki jagah revoke + naya session
 	if err := s.userRepo.RevokeSessionByID(session.ID); err != nil {
 		return nil, "", err
 	}
@@ -372,15 +452,27 @@ func (s *AuthService) RefreshToken(oldToken string, device string, ipAddress str
 }
 
 func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
-
 	req.Email = utils.NormalizeEmail(req.Email)
+
+	// Rate limit: max 1 forgot-password request per 60s per email
+	cooldownKey := "forgot_pwd_cooldown:" + req.Email
+	ctx := context.Background()
+	exists, err := s.verificationRepo.Redis.Exists(ctx, cooldownKey).Result()
+	if err == nil && exists > 0 {
+		log.Printf("ForgotPassword: rate-limited: %s", req.Email)
+		return nil // silent no-op
+	}
+	_ = s.verificationRepo.Redis.Set(ctx, cooldownKey, "1", 60*time.Second).Err()
+
 	user, err := s.userRepo.GetUserByEmail(req.Email)
 	if err != nil {
-		return errors.New("user not found")
+		log.Printf("ForgotPassword: email not found: %s", req.Email)
+		return nil
 	}
 
 	if !user.EmailVerified {
-		return errors.New("email not verified")
+		log.Printf("ForgotPassword: email not verified: %s", req.Email)
+		return nil
 	}
 
 	token, err := utils.GenerateResetPasswordToken(user.ID.String())
@@ -388,42 +480,85 @@ func (s *AuthService) ForgotPassword(req dto.ForgotPasswordRequest) error {
 		return err
 	}
 
+	// ✅ Store token in Redis — single-use enforcement.
+	// TTL must match JWT expiry (30 min).
+	resetKey := "password_reset:" + token
+	if err := s.verificationRepo.Redis.Set(ctx, resetKey, user.ID.String(), 30*time.Minute).Err(); err != nil {
+		log.Printf("ForgotPassword: failed to store reset token for user=%s: %v", user.ID.String(), err)
+		return errors.New("failed to process request, please try again")
+	}
+
 	err = utils.SendResetPasswordEmail(s.cfg, req.Email, token)
 	if err != nil {
+		// Token stored but email failed — clean up to avoid orphan
+		_ = s.verificationRepo.Redis.Del(ctx, resetKey).Err()
 		return err
 	}
 	return nil
 }
 
-func (s *AuthService) ResetPassword(req dto.ResetPasswordRequest) error {
-
-	claims, err := utils.ValidateResetPasswordToken(req.Token)
+func (s *AuthService) ResetPassword(token string, req dto.ResetPasswordRequest) error {
+	// 1. JWT validity check (signature + expiry)
+	claims, err := utils.ValidateResetPasswordToken(token)
 	if err != nil {
 		return errors.New("invalid or expired reset link")
 	}
 
 	userID, ok := claims["user_id"].(string)
 	if !ok || userID == "" {
-		return errors.New("Invalid reset token payload")
+		return errors.New("invalid reset token payload")
 	}
 
+	// 2. Single-use check — token must exist in Redis
+	ctx := context.Background()
+	resetKey := "password_reset:" + token
+	storedUserID, err := s.verificationRepo.Redis.Get(ctx, resetKey).Result()
+	if err != nil {
+		// Token either never issued or already consumed
+		return errors.New("invalid or already used reset link")
+	}
+	if storedUserID != userID {
+		return errors.New("invalid reset link")
+	}
+
+	// 3. User must still exist (avoid silent no-op on deleted users)
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return errors.New("invalid reset link")
+	}
+
+	// 4. New password must differ from current
+	if utils.CheckPassword(req.NewPassword, user.PasswordHash) {
+		return errors.New("new password must be different from current password")
+	}
+
+	// 5. Hash + update
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
 		return err
 	}
 
-	err = s.userRepo.UpdatePassword(userID, hashedPassword)
-	if err != nil {
+	if err := s.userRepo.UpdatePassword(userID, hashedPassword); err != nil {
 		return err
 	}
 
-	err = s.userRepo.RevokeAllSessions(userID)
-	if err != nil {
+	// 6. Consume the token — MUST happen before revoking sessions
+	// (if this fails, user can retry; better than token staying valid)
+	_ = s.verificationRepo.Redis.Del(ctx, resetKey).Err()
+
+	// 7. Revoke all sessions
+	if err := s.userRepo.RevokeAllSessions(userID); err != nil {
 		return err
 	}
+
 	return nil
 }
-func (s *AuthService) ChangePassword(userID string, req dto.ChangePasswordRequest) error {
+
+func (s *AuthService) ChangePassword(userID string, sessionID string, req dto.ChangePasswordRequest) error {
+	// 1. Confirm password must match new password
+	if req.NewPassword != req.ConfirmPassword {
+		return errors.New("new password and confirm password do not match")
+	}
 
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
@@ -434,18 +569,28 @@ func (s *AuthService) ChangePassword(userID string, req dto.ChangePasswordReques
 		return errors.New("old password is incorrect")
 	}
 
+	// New password must differ from old
+	if req.OldPassword == req.NewPassword {
+		return errors.New("new password must be different from old password")
+	}
+
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
 		return err
 	}
 
-	err = s.userRepo.UpdatePassword(user.ID.String(), hashedPassword)
-	if err != nil {
+	if err := s.userRepo.UpdatePassword(user.ID.String(), hashedPassword); err != nil {
 		return err
 	}
 
-	err = s.userRepo.RevokeAllSessions(user.ID.String())
+	// Revoke all OTHER sessions — keep current session alive
+	currentSessionUUID, err := uuid.Parse(sessionID)
 	if err != nil {
+		_ = s.userRepo.RevokeAllSessions(user.ID.String())
+		return nil
+	}
+
+	if err := s.userRepo.RevokeOtherSessions(user.ID.String(), currentSessionUUID); err != nil {
 		return err
 	}
 
@@ -462,16 +607,29 @@ func (s *AuthService) BlacklistAccessToken(accessToken string) error {
 	return s.blacklistRepo.Blacklist(utils.HashToken(accessToken), ttl)
 }
 
-// for oauth
-func (s *AuthService) SetAccountTypeAuthenticated(userID string, accountType models.AccountType) error {
+func (s *AuthService) SetAccountTypeAuthenticated(userID string, accountType models.AccountType) (*models.User, error) {
 	validTypes := map[models.AccountType]bool{
 		models.AccountTypeIndividual:  true,
 		models.AccountTypeAgencyAdmin: true,
 		models.AccountTypeClientAdmin: true,
 	}
 	if !validTypes[accountType] {
-		return errors.New("invalid account type")
+		return nil, errors.New("invalid account type")
 	}
 
-	return s.userRepo.UpdateAccountType(userID, accountType)
+	err := s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+		if err := txRepo.UpdateAccountType(userID, accountType); err != nil {
+			return err
+		}
+		// ✅ +20 points for selecting account type
+		if err := txRepo.AddUserPoints(userID, 20); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.userRepo.GetUserByID(userID)
 }

@@ -130,15 +130,28 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest, device, ipAddress
 		return nil, "", errors.New("user account is not active")
 	}
 
+	requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
+	oauthUser := &dto.OAuthUser{
+		ID:    user.ID.String(),
+		Email: user.Email,
+		Name:  user.FirstName + " " + user.LastName,
+	}
+	if user.AccountType != nil {
+		oauthUser.Role = string(*user.AccountType)
+	}
+
 	tempToken, requires2FA, err := s.checkTwoFactor(user)
 	if err != nil {
 		return nil, "", err
 	}
 	if requires2FA {
 		return &dto.GoogleLoginResponse{
-			Message:           "2FA verification required",
-			RequiresTwoFactor: true,
-			TemporaryToken:    tempToken,
+			Message:             "2FA verification required",
+			RequiresTwoFactor:   true,
+			TemporaryToken:      tempToken,
+			RequiresAccountType: requiresAccountType,
+			User:                oauthUser,
 		}, "", nil
 	}
 
@@ -153,7 +166,7 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest, device, ipAddress
 		Device:       device,
 		IPAddress:    ipAddress,
 		UserAgent:    userAgent,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
+		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 		IsRevoked:    false,
 	}
 	if err := s.userRepo.CreateSession(session); err != nil {
@@ -166,9 +179,11 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest, device, ipAddress
 	}
 
 	return &dto.GoogleLoginResponse{
-		Message:     "Google login successful",
-		AccessToken: accessToken,
-		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+		Message:             "Google login successful",
+		AccessToken:         accessToken,
+		ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+		RequiresAccountType: requiresAccountType,
+		User:                oauthUser,
 	}, refreshToken, nil
 }
 
@@ -233,15 +248,28 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest, device, ipAddress
 		return nil, "", errors.New("user account is not active")
 	}
 
+	requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
+	oauthUser := &dto.OAuthUser{
+		ID:    user.ID.String(),
+		Email: user.Email,
+		Name:  user.FirstName + " " + user.LastName,
+	}
+	if user.AccountType != nil {
+		oauthUser.Role = string(*user.AccountType)
+	}
+
 	tempToken, requires2FA, err := s.checkTwoFactor(user)
 	if err != nil {
 		return nil, "", err
 	}
 	if requires2FA {
 		return &dto.GitHubLoginResponse{
-			Message:           "2FA verification required",
-			RequiresTwoFactor: true,
-			TemporaryToken:    tempToken,
+			Message:             "2FA verification required",
+			RequiresTwoFactor:   true,
+			TemporaryToken:      tempToken,
+			RequiresAccountType: requiresAccountType,
+			User:                oauthUser,
 		}, "", nil
 	}
 
@@ -256,7 +284,7 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest, device, ipAddress
 		Device:       device,
 		IPAddress:    ipAddress,
 		UserAgent:    userAgent,
-		ExpiresAt:    time.Now().Add(15 * 24 * time.Hour),
+		ExpiresAt:    time.Now().Add(utils.RefreshTokenTTL),
 		IsRevoked:    false,
 	}
 	if err := s.userRepo.CreateSession(session); err != nil {
@@ -269,8 +297,10 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest, device, ipAddress
 	}
 
 	return &dto.GitHubLoginResponse{
-		Message:     "GitHub login successful",
-		AccessToken: accessToken,
-		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+		Message:             "GitHub login successful",
+		AccessToken:         accessToken,
+		ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+		RequiresAccountType: requiresAccountType,
+		User:                oauthUser,
 	}, refreshToken, nil
 }

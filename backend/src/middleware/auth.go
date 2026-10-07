@@ -8,6 +8,7 @@ import (
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
+	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -28,13 +29,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// ---------- Huma middleware (Auth ke migrated routes ke liye) ----------
-
-type ctxKey string
-
-const UserIDKey ctxKey = "user_id"
-const SessionIDKey ctxKey = "session_id"
-
 func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		authHeader := ctx.Header("Authorization")
@@ -45,6 +39,19 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// ✅ NEW: Blacklist check — logout kiye hue tokens reject karo
+		if postgres.RedisDB != nil {
+			tokenHash := utils.HashToken(tokenString)
+			blacklisted, err := postgres.RedisDB.Exists(
+				ctx.Context(),
+				"blacklist:"+tokenHash,
+			).Result()
+			if err == nil && blacklisted > 0 {
+				huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token has been revoked")
+				return
+			}
+		}
 
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 			return getJwtSecret(), nil
@@ -57,15 +64,15 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 		}
 
 		claims := token.Claims.(*Claims)
-		newCtx := huma.WithValue(ctx, UserIDKey, claims.UserID)
-		newCtx = huma.WithValue(newCtx, SessionIDKey, claims.SessionID)
+		newCtx := huma.WithValue(ctx, utils.UserIDKey, claims.UserID)
+		newCtx = huma.WithValue(newCtx, utils.SessionIDKey, claims.SessionID)
 		next(newCtx)
 	}
 }
 
 func AdminMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		userID, _ := ctx.Context().Value(UserIDKey).(string)
+		userID, _ := ctx.Context().Value(utils.UserIDKey).(string)
 		if userID == "" {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user ID missing")
 			return
@@ -88,7 +95,7 @@ func AdminMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Con
 
 func ClientMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		userID, _ := ctx.Context().Value(UserIDKey).(string)
+		userID, _ := ctx.Context().Value(utils.UserIDKey).(string)
 		if userID == "" {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Unauthorized: user ID missing")
 			return

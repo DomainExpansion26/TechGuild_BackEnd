@@ -579,41 +579,71 @@ func (s *ProfileService) GetMyProfile(userID string) (*dto.GetMyProfileResponse,
 		return nil, ErrUserNotFound
 	}
 
+	// Base response — user-level info always present, profile_completed=false by default.
+	resp := &dto.GetMyProfileResponse{
+		ProfileCompleted: false,
+		User: dto.UserSummary{
+			ID:            user.ID.String(),
+			Email:         user.Email,
+			FirstName:     user.FirstName,
+			LastName:      user.LastName,
+			EmailVerified: user.EmailVerified,
+			Status:        string(user.Status),
+			Points:        user.Points,
+			Rank:          user.Rank,
+		},
+	}
+
 	if user.AccountType == nil {
 		return nil, ErrAccountTypeNotSet
 	}
 
+	// No account type set yet — return partial (no 400/404).
+	if user.AccountType == nil {
+		return resp, nil
+	}
+
+	// Fetch profile based on account type. Missing profile = partial response, not error.
 	switch *user.AccountType {
 	case models.AccountTypeIndividual:
 		profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return resp, nil // profile not created yet — partial
+			}
 			return nil, err
 		}
-		return &dto.GetMyProfileResponse{
-			AccountType: string(*user.AccountType),
-			Individual:  s.buildMyIndividualProfile(profile),
-		}, nil
+		resp.Individual = s.buildMyIndividualProfile(profile)
+		resp.ProfileCompleted = true
+
 	case models.AccountTypeAgencyAdmin:
 		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return resp, nil
+			}
 			return nil, err
 		}
-		return &dto.GetMyProfileResponse{
-			AccountType: string(*user.AccountType),
-			Agency:      s.buildMyAgencyProfile(profile),
-		}, nil
+		resp.Agency = s.buildMyAgencyProfile(profile)
+		resp.ProfileCompleted = true
+
 	case models.AccountTypeClientAdmin:
 		profile, err := s.userRepo.GetClientProfileByUserID(userID)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return resp, nil
+			}
 			return nil, err
 		}
-		return &dto.GetMyProfileResponse{
-			AccountType: string(*user.AccountType),
-			Client:      s.buildMyClientProfile(profile),
-		}, nil
+		resp.Client = s.buildMyClientProfile(profile)
+		resp.ProfileCompleted = true
+
 	default:
-		return nil, ErrInvalidAccountType
+		// Unknown account type — still return user info, don't blow up.
+		return resp, nil
 	}
+
+	return resp, nil
 }
 
 func (s *ProfileService) buildMyIndividualProfile(profile *models.IndividualProfile) *dto.MyIndividualProfile {
@@ -688,35 +718,6 @@ func formatDate(t *time.Time) string {
 		return ""
 	}
 	return t.Format("2006-01-02")
-}
-
-func (s *ProfileService) SetAccountType(req dto.SetAccountTypeRequest) error {
-	user, err := s.userRepo.GetUserByEmail(req.Email)
-	if err != nil {
-		return ErrInvalidPassword
-	}
-
-	if !utils.CheckPassword(req.Password, user.PasswordHash) {
-		return ErrInvalidPassword
-	}
-
-	if !user.EmailVerified {
-		return fmt.Errorf("%w: please verify your email first", ErrValidation)
-	}
-
-	if user.AccountType != nil && *user.AccountType != "" {
-		return ErrProfileAlreadyExists
-	}
-
-	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
-		if err := txRepo.UpdateAccountType(user.ID.String(), models.AccountType(req.AccountType)); err != nil {
-			return err
-		}
-		if err := txRepo.AddUserPoints(user.ID.String(), 20); err != nil {
-			return err
-		}
-		return txRepo.UpdateUserStatus(user.ID.String(), string(models.StatusActive))
-	})
 }
 
 func (s *ProfileService) DeleteAvatar(userID string) error {
