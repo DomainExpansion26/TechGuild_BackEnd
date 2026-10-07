@@ -18,11 +18,12 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Message           string `json:"message" example:"Login successful"`
-	AccessToken       string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
-	ExpiresIn         int    `json:"expires_in" example:"3600"`
-	RequiresTwoFactor bool   `json:"requires_2fa,omitempty"`
-	TemporaryToken    string `json:"temporary_token,omitempty" `
+	Message             string `json:"message" example:"Login successful"`
+	AccessToken         string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"`
+	ExpiresIn           int    `json:"expires_in" example:"3600"`
+	RequiresTwoFactor   bool   `json:"requires_2fa,omitempty"`
+	TemporaryToken      string `json:"temporary_token,omitempty"`
+	RequiresAccountType bool   `json:"requires_account_type,omitempty"`
 }
 
 type VerifyEmailRequest struct {
@@ -30,7 +31,10 @@ type VerifyEmailRequest struct {
 }
 
 type VerifyEmailResponse struct {
-	Message string `json:"message" example:"Email verified successfully"`
+	Message             string `json:"message" example:"Email verified successfully"`
+	AccessToken         string `json:"access_token,omitempty"`
+	ExpiresIn           int    `json:"expires_in,omitempty"`
+	RequiresAccountType bool   `json:"requires_account_type,omitempty"`
 }
 
 type ResendVerificationRequest struct {
@@ -58,7 +62,6 @@ type ForgotPasswordResponse struct {
 }
 
 type ResetPasswordRequest struct {
-	Token       string `json:"token" example:"abc123def456ghi789"`
 	NewPassword string `json:"new_password" binding:"required,min=8" example:"newpass@123"`
 }
 
@@ -67,8 +70,9 @@ type ResetPasswordResponse struct {
 }
 
 type ChangePasswordRequest struct {
-	OldPassword string `json:"old_password" binding:"required" example:"test@123"`
-	NewPassword string `json:"new_password" binding:"required,min=8" example:"newpass@123"`
+	OldPassword     string `json:"old_password" binding:"required" example:"test@123"`
+	NewPassword     string `json:"new_password" binding:"required,min=8" example:"newpass@123"`
+	ConfirmPassword string `json:"confirm_password" binding:"required,min=8" example:"newpass@123"`
 }
 
 type ChangePasswordResponse struct {
@@ -84,7 +88,11 @@ type SetAccountTypeAuthInput struct {
 }
 type SetAccountTypeAuthOutput struct {
 	Body struct {
-		Message string `json:"message"`
+		Message     string `json:"message"`
+		UserID      string `json:"user_id"`
+		Email       string `json:"email"`
+		AccountType string `json:"account_type"`
+		Rank        string `json:"rank"`
 	}
 }
 
@@ -110,10 +118,14 @@ type LoginOutput struct {
 }
 
 type VerifyEmailInput struct {
-	Token string `query:"token" required:"true" doc:"Email verification token"`
+	Token        string `query:"token" required:"true" doc:"Email verification token"`
+	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For"`
 }
+
 type VerifyEmailOutput struct {
-	Body VerifyEmailResponse
+	SetCookie string `header:"Set-Cookie"`
+	Body      VerifyEmailResponse
 }
 
 type ResendVerificationInput struct {

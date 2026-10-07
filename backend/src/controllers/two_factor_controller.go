@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"techguild-backend/src/dto"
-	"techguild-backend/src/middleware"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
 )
@@ -17,7 +16,7 @@ import (
 // ---------- Setup ----------
 
 func Setup2FAHandler(ctx context.Context, input *dto.Setup2FAInput) (*dto.Setup2FAOutput, error) {
-	userIDStr, _ := ctx.Value(middleware.UserIDKey).(string)
+	userIDStr, _ := ctx.Value(utils.UserIDKey).(string)
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("invalid user")
@@ -33,7 +32,7 @@ func Setup2FAHandler(ctx context.Context, input *dto.Setup2FAInput) (*dto.Setup2
 // ---------- VerifySetup ----------
 
 func VerifySetup2FAHandler(ctx context.Context, input *dto.VerifySetup2FAInput) (*dto.VerifySetup2FAOutput, error) {
-	userIDStr, _ := ctx.Value(middleware.UserIDKey).(string)
+	userIDStr, _ := ctx.Value(utils.UserIDKey).(string)
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("invalid user")
@@ -61,7 +60,7 @@ func VerifyLogin2FAHandler(ctx context.Context, input *dto.VerifyLogin2FAInput) 
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	return &dto.VerifyLogin2FAOutput{
@@ -91,7 +90,7 @@ func VerifyRecoveryCodeHandler(ctx context.Context, input *dto.VerifyRecoveryCod
 		MaxAge:   int(utils.RefreshTokenTTL.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	return &dto.VerifyRecoveryCodeOutput{
@@ -103,7 +102,7 @@ func VerifyRecoveryCodeHandler(ctx context.Context, input *dto.VerifyRecoveryCod
 // ---------- Disable ----------
 
 func Disable2FAHandler(ctx context.Context, input *dto.Disable2FAInput) (*dto.Disable2FAOutput, error) {
-	userIDStr, _ := ctx.Value(middleware.UserIDKey).(string)
+	userIDStr, _ := ctx.Value(utils.UserIDKey).(string)
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("invalid user")
@@ -121,7 +120,7 @@ func Disable2FAHandler(ctx context.Context, input *dto.Disable2FAInput) (*dto.Di
 // ---------- RegenerateRecoveryCodes ----------
 
 func RegenerateRecoveryCodesHandler(ctx context.Context, input *dto.RegenerateRecoveryCodesInput) (*dto.RegenerateRecoveryCodesOutput, error) {
-	userIDStr, _ := ctx.Value(middleware.UserIDKey).(string)
+	userIDStr, _ := ctx.Value(utils.UserIDKey).(string)
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		return nil, huma.Error401Unauthorized("invalid user")

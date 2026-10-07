@@ -13,7 +13,6 @@ import (
 	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
-	"gorm.io/gorm"
 )
 
 type ProfileController struct {
@@ -250,48 +249,10 @@ func (c *ProfileController) GetMyProfileHandler(ctx context.Context, input *dto.
 		if errors.Is(err, services.ErrUserNotFound) {
 			return nil, huma.Error404NotFound(err.Error())
 		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, huma.Error404NotFound("profile not found, create it first")
-		}
-		if errors.Is(err, services.ErrAccountTypeNotSet) || errors.Is(err, services.ErrInvalidAccountType) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return &dto.GetMyProfileOutput{Body: *profile}, nil
-}
-
-// ---------- SetAccountType ----------
-
-func (c *ProfileController) SetAccountTypeHandler(ctx context.Context, input *dto.SetAccountTypeInput) (*dto.SetAccountTypeOutput, error) {
-	profileService := services.NewProfileService(c.cfg)
-
-	if err := profileService.SetAccountType(input.Body); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileAlreadyExists) {
-			return nil, huma.Error409Conflict(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidAccountType) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidPassword) {
-			return nil, huma.Error401Unauthorized(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	return &dto.SetAccountTypeOutput{
-		Body: dto.SetAccountTypeResponse{Message: "account type set successfully"},
-	}, nil
 }
 
 // ---------- UploadResume ----------

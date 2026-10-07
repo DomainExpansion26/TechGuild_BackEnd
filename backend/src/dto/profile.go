@@ -122,12 +122,6 @@ type CreateProfileResponse struct {
 	PublicUrlSlug string `json:"public_url_slug" example:"john-doe"`
 }
 
-type SetAccountTypeRequest struct {
-	Email       string `json:"email" huma:"required,email" example:"test@example.com"`
-	Password    string `json:"password" huma:"required" example:"test@123"`
-	AccountType string `json:"account_type" huma:"required,enum=individual;agency;client" example:"individual"`
-}
-
 // PublicIndividualProfile is the public-facing shape for individual profiles.
 type PublicIndividualProfile struct {
 	FirstName         string   `json:"first_name" example:"John"`
@@ -260,10 +254,28 @@ type GetMyProfileOutput struct {
 // GetMyProfileResponse is a typed union of the three profile shapes.
 // Only the field corresponding to the authenticated user's account type is populated.
 type GetMyProfileResponse struct {
-	AccountType string               `json:"account_type" example:"individual"`
-	Individual  *MyIndividualProfile `json:"individual,omitempty"`
-	Agency      *MyAgencyProfile     `json:"agency,omitempty"`
-	Client      *MyClientProfile     `json:"client,omitempty"`
+	// --- User-level (always present) ---
+	AccountType      string      `json:"account_type,omitempty" example:"individual"`
+	ProfileCompleted bool        `json:"profile_completed" example:"false"`
+	User             UserSummary `json:"user"`
+
+	// --- Profile-level (only when profile exists) ---
+	Individual *MyIndividualProfile `json:"individual,omitempty"`
+	Agency     *MyAgencyProfile     `json:"agency,omitempty"`
+	Client     *MyClientProfile     `json:"client,omitempty"`
+}
+
+// UserSummary carries the basic user info that's useful for frontend rendering
+// before (or without) a full profile existing.
+type UserSummary struct {
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	EmailVerified bool   `json:"email_verified"`
+	Status        string `json:"status" example:"active"`
+	Points        int    `json:"points" example:"30"`
+	Rank          string `json:"rank" example:"F"`
 }
 
 type MyIndividualProfile struct {
@@ -326,10 +338,6 @@ type MyClientProfile struct {
 	TimeZone          string   `json:"timezone,omitempty"`
 	CountryCode       string   `json:"country_code,omitempty"`
 	ProfileVisibility string   `json:"profile_visibility,omitempty" example:"public"`
-}
-
-type SetAccountTypeInput struct {
-	Body SetAccountTypeRequest
 }
 
 // SetAccountTypeResponse mirrors the create-profile message but without an

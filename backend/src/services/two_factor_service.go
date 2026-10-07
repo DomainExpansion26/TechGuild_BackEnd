@@ -288,6 +288,11 @@ func (s *TwoFactorService) RegenerateRecoveryCodes(userID uuid.UUID, password st
 // ---------- helper ----------
 
 func (s *TwoFactorService) issueFinalTokens(userID uuid.UUID, device, ipAddress, userAgent string) (*dto.LoginResponse, string, error) {
+	user, err := s.userRepo.GetUserByID(userID.String())
+	if err != nil {
+		return nil, "", errors.New("user not found")
+	}
+
 	refreshToken, err := utils.GenerateRefreshToken(userID.String())
 	if err != nil {
 		return nil, "", err
@@ -311,9 +316,12 @@ func (s *TwoFactorService) issueFinalTokens(userID uuid.UUID, device, ipAddress,
 		return nil, "", err
 	}
 
+	requiresAccountType := user.AccountType == nil || *user.AccountType == ""
+
 	return &dto.LoginResponse{
-		Message:     "Login successful",
-		AccessToken: accessToken,
-		ExpiresIn:   int(utils.AccessTokenTTL.Seconds()),
+		Message:             "Login successful",
+		AccessToken:         accessToken,
+		ExpiresIn:           int(utils.AccessTokenTTL.Seconds()),
+		RequiresAccountType: requiresAccountType, // ✅ ADD
 	}, refreshToken, nil
 }

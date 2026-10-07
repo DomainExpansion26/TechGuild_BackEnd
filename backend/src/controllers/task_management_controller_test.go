@@ -9,7 +9,7 @@ import (
 
 	"techguild-backend/src/controllers"
 	"techguild-backend/src/dto"
-	"techguild-backend/src/middleware"
+	"techguild-backend/src/utils"
 )
 
 type mockServiceForController struct {
@@ -204,7 +204,7 @@ func TestTaskManagementControllerHandlers(t *testing.T) {
 	controllers.SetTaskManagementServiceForTesting(mockSvc)
 
 	// Create authenticated context with UserIDKey
-	authCtx := context.WithValue(context.Background(), middleware.UserIDKey, clientID.String())
+	authCtx := context.WithValue(context.Background(), utils.UserIDKey, clientID.String())
 	unauthCtx := context.Background()
 
 	// 1. Unauthorized check
