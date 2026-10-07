@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"techguild-backend/src/middleware"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -24,7 +22,7 @@ func GetUserIDFromContext(c *gin.Context) (string, error) {
 }
 
 func GetUserIDFromHumaContext(ctx context.Context) (string, error) {
-	userID, ok := ctx.Value(middleware.UserIDKey).(string)
+	userID, ok := ctx.Value(UserIDKey).(string)
 	if !ok || userID == "" {
 		return "", errors.New("user is not authenticated")
 	}
@@ -32,7 +30,7 @@ func GetUserIDFromHumaContext(ctx context.Context) (string, error) {
 }
 
 func GetSessionIDFromHumaContext(ctx context.Context) (uuid.UUID, error) {
-	sessionIDstr, ok := ctx.Value(middleware.SessionIDKey).(string)
+	sessionIDstr, ok := ctx.Value(SessionIDKey).(string)
 	if !ok || sessionIDstr == "" {
 		return uuid.Nil, errors.New("session id not found in context")
 	}

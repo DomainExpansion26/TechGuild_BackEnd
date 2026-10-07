@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"techguild-backend/src/dto"
-	"techguild-backend/src/middleware"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -25,7 +25,7 @@ var milestoneController = NewMilestoneController()
 // ---------- CreateMilestone ----------
 
 func CreateMilestoneHandler(ctx context.Context, input *dto.CreateMilestoneInput) (*dto.CreateMilestoneOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	res, err := milestoneController.service.CreateMilestone(clientID, input.Body)
 	if err != nil {
@@ -38,7 +38,7 @@ func CreateMilestoneHandler(ctx context.Context, input *dto.CreateMilestoneInput
 // ---------- UpdateMilestone ----------
 
 func UpdateMilestoneHandler(ctx context.Context, input *dto.UpdateMilestoneInput) (*dto.UpdateMilestoneOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.UpdateMilestone(clientID, input.ID, input.Body); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -52,7 +52,7 @@ func UpdateMilestoneHandler(ctx context.Context, input *dto.UpdateMilestoneInput
 // ---------- DeleteMilestone ----------
 
 func DeleteMilestoneHandler(ctx context.Context, input *dto.DeleteMilestoneInput) (*dto.DeleteMilestoneOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.DeleteMilestone(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -66,7 +66,7 @@ func DeleteMilestoneHandler(ctx context.Context, input *dto.DeleteMilestoneInput
 // ---------- SubmitMilestone ----------
 
 func SubmitMilestoneHandler(ctx context.Context, input *dto.SubmitMilestoneInput) (*dto.SubmitMilestoneOutput, error) {
-	freelancerID, _ := ctx.Value(middleware.UserIDKey).(string)
+	freelancerID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.SubmitMilestone(freelancerID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -80,7 +80,7 @@ func SubmitMilestoneHandler(ctx context.Context, input *dto.SubmitMilestoneInput
 // ---------- ApproveMilestone ----------
 
 func ApproveMilestoneHandler(ctx context.Context, input *dto.ApproveMilestoneInput) (*dto.ApproveMilestoneOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.ApproveMilestone(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -94,7 +94,7 @@ func ApproveMilestoneHandler(ctx context.Context, input *dto.ApproveMilestoneInp
 // ---------- RejectMilestone ----------
 
 func RejectMilestoneHandler(ctx context.Context, input *dto.RejectMilestoneInput) (*dto.RejectMilestoneOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.RejectMilestone(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())
@@ -108,7 +108,7 @@ func RejectMilestoneHandler(ctx context.Context, input *dto.RejectMilestoneInput
 // ---------- MarkMilestonePaid ----------
 
 func MarkMilestonePaidHandler(ctx context.Context, input *dto.MarkMilestonePaidInput) (*dto.MarkMilestonePaidOutput, error) {
-	clientID, _ := ctx.Value(middleware.UserIDKey).(string)
+	clientID, _ := ctx.Value(utils.UserIDKey).(string)
 
 	if err := milestoneController.service.MarkMilestonePaid(clientID, input.ID); err != nil {
 		return nil, huma.Error400BadRequest(err.Error())

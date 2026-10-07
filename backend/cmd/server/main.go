@@ -82,7 +82,7 @@ func main() {
 	oauthController := controllers.NewOAuthController(cfg)
 
 	// naye Huma routes register karo
-	routes.RegisterAuthRoutes(api, authController, profileController)
+	routes.RegisterAuthRoutes(api, authController)
 	routes.RegisterContractRoutes(api)
 	routes.RegisterProfileRoutes(api, profileController)
 	routes.RegisterSettingsRoutes(api, settingsController)

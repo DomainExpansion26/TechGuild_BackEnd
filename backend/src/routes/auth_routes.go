@@ -10,7 +10,7 @@ import (
 
 // ---------- Huma routes (naye, migrated handlers) ----------
 
-func RegisterAuthRoutes(api huma.API, c *controllers.AuthController, pc *controllers.ProfileController) {
+func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 
 	// Public routes
 	huma.Register(api, huma.Operation{
@@ -145,7 +145,6 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController, pc *control
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ResetPasswordRequest{
-						Token:       "abc123def456ghi789",
 						NewPassword: "newpass@123",
 					},
 				},
@@ -166,33 +165,34 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController, pc *control
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ChangePasswordRequest{
-						OldPassword: "test@123",
-						NewPassword: "newpass@123",
+						OldPassword:     "test@123",
+						NewPassword:     "newpass@123",
+						ConfirmPassword: "newpass@123",
 					},
 				},
 			},
 		},
 	}, c.ChangePasswordHandler)
 
-	huma.Register(api, huma.Operation{
-		OperationID: "set-account-type",
-		Method:      "POST",
-		Path:        "/auth/register/account-type",
-		Tags:        []string{"Authentication"},
-		Summary:     "Set account type",
-		Security:    []map[string][]string{},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: dto.SetAccountTypeRequest{
-						Email:       "test@example.com",
-						Password:    "test@123",
-						AccountType: "individual",
-					},
-				},
-			},
-		},
-	}, pc.SetAccountTypeHandler)
+	// huma.Register(api, huma.Operation{
+	// 	OperationID: "set-account-type",
+	// 	Method:      "POST",
+	// 	Path:        "/auth/register/account-type",
+	// 	Tags:        []string{"Authentication"},
+	// 	Summary:     "Set account type",
+	// 	Security:    []map[string][]string{},
+	// 	RequestBody: &huma.RequestBody{
+	// 		Content: map[string]*huma.MediaType{
+	// 			"application/json": {
+	// 				Example: dto.SetAccountTypeRequest{
+	// 					Email:       "test@example.com",
+	// 					Password:    "test@123",
+	// 					AccountType: "individual",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }, pc.SetAccountTypeHandler)
 
 	// ---------- for oauth ----------
 	huma.Register(api, huma.Operation{
