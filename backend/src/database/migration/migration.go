@@ -45,6 +45,7 @@ func Migrate() {
 		&models.Quest{},
 		&models.QuestMilestone{},
 		&models.QuestSkill{},
+		&models.QuestChatChannel{},
 
 		// Party Collaboration
 		&models.Party{},
