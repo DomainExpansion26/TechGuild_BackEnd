@@ -415,8 +415,8 @@ func (s *taskManagementService) DeleteMilestone(clientIDStr, milestoneIDStr stri
 		QuestID:    quest.ID,
 		ActorID:    clientUUID,
 		ActionType: models.ActivityMilestoneDeleted,
-		Title:      fmt.Sprintf("Milestone '%s' Deleted", milestone.Title),
-		Description: fmt.Sprintf("Client removed milestone and its tasks"),
+		Title:       fmt.Sprintf("Milestone '%s' Deleted", milestone.Title),
+		Description: "Client removed milestone and its tasks",
 	})
 
 	return &dto.DeleteMilestoneTMDResponse{
