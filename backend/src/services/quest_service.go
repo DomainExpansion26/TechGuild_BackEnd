@@ -347,11 +347,19 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 		}
 	}
 
+	var minBudgetPtr, maxBudgetPtr *float64
+	if req.MinBudget > 0 {
+		minBudgetPtr = &req.MinBudget
+	}
+	if req.MaxBudget > 0 {
+		maxBudgetPtr = &req.MaxBudget
+	}
+
 	filter := repository.QuestFilter{
 		Category:   req.Category,
 		Complexity: req.Complexity,
-		MinBudget:  req.MinBudget,
-		MaxBudget:  req.MaxBudget,
+		MinBudget:  minBudgetPtr,
+		MaxBudget:  maxBudgetPtr,
 		Cursor:     req.Cursor,
 		Limit:      req.Limit,
 	}

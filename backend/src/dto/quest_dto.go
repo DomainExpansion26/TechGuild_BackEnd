@@ -92,13 +92,13 @@ type PublishQuestOutput struct {
 // ---------- List Quests (Tier-Locked) ----------
 
 type ListQuestsInput struct {
-	Cursor     string   `query:"cursor" doc:"Cursor for pagination (UUID or ISO-8601 timestamp)"`
-	Limit      int      `query:"limit" doc:"Number of records to return (default 10, max 50)"`
-	Category   string   `query:"category" doc:"Filter by quest category"`
-	Complexity string   `query:"complexity" doc:"Filter by quest complexity (beginner, intermediate, advanced, enterprise)"`
-	MinBudget  *float64 `query:"min_budget" doc:"Filter by minimum budget INR"`
-	MaxBudget  *float64 `query:"max_budget" doc:"Filter by maximum budget INR"`
-	Status     string   `query:"status" doc:"Filter by status (open, in_progress, completed, etc.)"`
+	Cursor     string  `query:"cursor" doc:"Cursor for pagination (UUID or ISO-8601 timestamp)"`
+	Limit      int     `query:"limit" doc:"Number of records to return (default 10, max 50)"`
+	Category   string  `query:"category" doc:"Filter by quest category"`
+	Complexity string  `query:"complexity" doc:"Filter by quest complexity (beginner, intermediate, advanced, enterprise)"`
+	MinBudget  float64 `query:"min_budget" doc:"Filter by minimum budget INR"`
+	MaxBudget  float64 `query:"max_budget" doc:"Filter by maximum budget INR"`
+	Status     string  `query:"status" doc:"Filter by status (open, in_progress, completed, etc.)"`
 }
 
 type QuestListItem struct {
