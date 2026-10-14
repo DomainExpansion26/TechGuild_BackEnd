@@ -41,6 +41,8 @@ type ClientProfile struct {
 }
 
 func (cp *ClientProfile) BeforeCreate(tx *gorm.DB) error {
-	cp.ID = uuid.New()
+	if cp.ID == uuid.Nil {
+		cp.ID = uuid.New()
+	}
 	return nil
 }

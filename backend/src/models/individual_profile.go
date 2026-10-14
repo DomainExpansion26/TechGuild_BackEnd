@@ -55,6 +55,8 @@ type IndividualProfile struct {
 }
 
 func (ip *IndividualProfile) BeforeCreate(tx *gorm.DB) error {
-	ip.ID = uuid.New()
+	if ip.ID == uuid.Nil {
+		ip.ID = uuid.New()
+	}
 	return nil
 }
