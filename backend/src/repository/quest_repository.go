@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
@@ -102,7 +103,7 @@ func (r *questRepository) FindByID(questID uuid.UUID) (*models.Quest, error) {
 
 // UpdateQuest saves updates to an existing quest.
 func (r *questRepository) UpdateQuest(quest *models.Quest) error {
-	return r.db.Save(quest).Error
+	return r.db.Omit(clause.Associations).Save(quest).Error
 }
 
 // ListQuests queries quests based on asymmetric tier visibility, client filter, and cursor pagination.
@@ -217,7 +218,7 @@ func (r *questRepository) AcceptQuestAtomic(
 ) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		// 1. Update quest status and assigned entities
-		if err := tx.Save(quest).Error; err != nil {
+		if err := tx.Omit(clause.Associations).Save(quest).Error; err != nil {
 			return err
 		}
 

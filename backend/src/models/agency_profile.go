@@ -42,6 +42,8 @@ type AgencyProfile struct {
 }
 
 func (ap *AgencyProfile) BeforeCreate(tx *gorm.DB) error {
-	ap.ID = uuid.New()
+	if ap.ID == uuid.Nil {
+		ap.ID = uuid.New()
+	}
 	return nil
 }
