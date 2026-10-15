@@ -74,16 +74,10 @@ type User struct {
 
 	NotificationPreferences datatypes.JSON `gorm:"type:jsonb"`
 	PrivacySettings         datatypes.JSON `gorm:"type:jsonb"`
-	// Relationships of user with its projects, applications, and other entities
-	Applications []ProjectApplication `gorm:"foreignKey:ApplicantID"`
 
-	//contracts
-	ClientContracts []ProjectContract `gorm:"foreignKey:ClientID"`
+	TwoFactorEnabled bool `gorm:"default:false;not null"`
 
-	FreelancerContracts []ProjectContract `gorm:"foreignKey:FreelancerID"`
-	TwoFactorEnabled    bool              `gorm:"default:false;not null"`
-	CreatedAt           time.Time
-
+	CreatedAt time.Time
 	UpdatedAt time.Time
 
 	ScheduledDeletionDate *time.Time

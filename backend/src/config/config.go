@@ -29,4 +29,8 @@ type Config struct {
 	SMTPPassword string
 
 	RazorpayWebhookSecret string
+
+	// NEW — Fee configuration
+	ClientProcessingFeeBps     int64 // 500 = 5.00%
+	FreelancerProcessingFeeBps int64 // 500 = 5.00%
 }

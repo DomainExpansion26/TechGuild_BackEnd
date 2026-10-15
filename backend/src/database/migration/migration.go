@@ -35,19 +35,20 @@ func Migrate() {
 		&models.AuditLog{},
 
 		// Projects
-		&models.Project{},
-		&models.ProjectSkill{},
-		&models.ProjectAttachment{},
-		&models.ProjectApplication{},
-		&models.ProjectContract{},
-		&models.ProjectMilestone{},
-		&models.ProjectSubmission{},
+		// &models.Project{},
+		// &models.ProjectSkill{},
+		// &models.ProjectAttachment{},
+		// &models.ProjectApplication{},
+		// &models.ProjectContract{},
+		// &models.ProjectMilestone{},
+		// &models.ProjectSubmission{},
 
 		// Quests (Gamified Client Creation)
 		&models.Quest{},
 		&models.QuestMilestone{},
 		&models.QuestSkill{},
 		&models.QuestChatChannel{},
+		&models.MilestoneRevision{},
 
 		// Party Collaboration
 		&models.Party{},
