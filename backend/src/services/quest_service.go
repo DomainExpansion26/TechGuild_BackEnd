@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -52,7 +51,7 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		return nil, ErrInvalidUserID
 	}
 
-	// 1. Client Account & Verification Check
+	// Client Account & Verification Check
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil || user == nil {
 		return nil, ErrUserNotFound
@@ -70,7 +69,7 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		return nil, ErrOnlyClientAllowed
 	}
 
-	// Verification check: status is active OR verification record is approved
+	// Verification check
 	isVerified := false
 	if user.Status == models.StatusActive {
 		isVerified = true
@@ -80,12 +79,11 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 			isVerified = true
 		}
 	}
-
 	if !isVerified {
 		return nil, ErrClientNotVerified
 	}
 
-	// 2. Input Validation
+	// Input Validation
 	title := strings.TrimSpace(req.Title)
 	if len(title) < 3 || len(title) > 100 {
 		return nil, errors.New("quest title must be between 3 and 100 characters")
@@ -101,13 +99,8 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		return nil, errors.New("quest category is required")
 	}
 
-	// Validate budget against client rank: minimum ₹1,000 and maximum allowed for client's rank
-	clientRank := user.Rank
-	if clientRank == "" {
-		clientRank = models.RankF
-	}
-	if err := utils.ValidateBudgetForRank(clientRank, req.BudgetINR); err != nil {
-		return nil, err
+	if req.BudgetMinor < 100000 {
+		return nil, errors.New("quest budget must be at least ₹1,000 (100000 paise)")
 	}
 
 	if req.TimelineDays < 1 {
@@ -118,36 +111,22 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		return nil, errors.New("at least one technical skill is required")
 	}
 
-	if len(req.Milestones) == 0 {
-		return nil, errors.New("at least one milestone deliverable is required")
+	// Budget is reference-only; convert to rupees for rank calculation utils
+	budgetRupees := float64(req.BudgetMinor) / 100.0
+
+	clientRank := user.Rank
+	if clientRank == "" {
+		clientRank = models.RankF
+	}
+	if err := utils.ValidateBudgetForRank(clientRank, budgetRupees); err != nil {
+		return nil, err
 	}
 
-	// 3. Milestone Sum Validation
-	var totalMilestoneSum float64
-	for i, m := range req.Milestones {
-		if strings.TrimSpace(m.Title) == "" {
-			return nil, fmt.Errorf("milestone %d title cannot be empty", i+1)
-		}
-		if m.Amount <= 0 {
-			return nil, fmt.Errorf("milestone %d amount must be greater than 0", i+1)
-		}
-		if m.DueDays < 1 {
-			return nil, fmt.Errorf("milestone %d due days must be at least 1", i+1)
-		}
-		totalMilestoneSum += m.Amount
-	}
-
-	if math.Abs(totalMilestoneSum-req.BudgetINR) >= 0.01 {
-		return nil, fmt.Errorf("milestone amounts sum (%.2f) does not match total budget (%.2f)", totalMilestoneSum, req.BudgetINR)
-	}
-
-	// 4. Auto-compute Required Minimum Rank from Budget
-	requiredMinRank, err := utils.ComputeRequiredMinRank(req.BudgetINR)
+	requiredMinRank, err := utils.ComputeRequiredMinRank(budgetRupees)
 	if err != nil {
 		return nil, err
 	}
 
-	// 5. Build Quest Model
 	complexity := models.QuestComplexity(req.Complexity)
 	if complexity == "" {
 		complexity = models.QuestComplexityIntermediate
@@ -165,7 +144,7 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		Category:        category,
 		Industry:        strings.TrimSpace(req.Industry),
 		Complexity:      complexity,
-		BudgetINR:       req.BudgetINR,
+		BudgetMinor:     req.BudgetMinor,
 		TimelineDays:    req.TimelineDays,
 		QuestType:       questType,
 		RequiredMinRank: requiredMinRank,
@@ -178,23 +157,6 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		langBytes, err := json.Marshal(req.Languages)
 		if err == nil {
 			quest.Languages = datatypes.JSON(langBytes)
-		}
-	}
-
-	// Build Milestones
-	milestones := make([]models.QuestMilestone, len(req.Milestones))
-	for i, m := range req.Milestones {
-		orderIndex := m.OrderIndex
-		if orderIndex <= 0 {
-			orderIndex = i + 1
-		}
-		milestones[i] = models.QuestMilestone{
-			Title:       strings.TrimSpace(m.Title),
-			Description: strings.TrimSpace(m.Description),
-			Amount:      m.Amount,
-			DueDays:     m.DueDays,
-			OrderIndex:  orderIndex,
-			Status:      models.MilestonePending,
 		}
 	}
 
@@ -212,8 +174,9 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		}
 	}
 
-	// 6. Atomically Save Draft
-	if err := s.questRepo.CreateQuestWithMilestonesAndSkills(quest, milestones, skills); err != nil {
+	// Milestones are NO LONGER created here.
+	// Freelancer will create them after quest is accepted.
+	if err := s.questRepo.CreateQuestWithSkills(quest, skills); err != nil {
 		return nil, fmt.Errorf("failed to save quest draft: %w", err)
 	}
 
@@ -221,9 +184,8 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		QuestID:         quest.ID.String(),
 		Title:           quest.Title,
 		Status:          string(quest.Status),
-		BudgetINR:       quest.BudgetINR,
+		BudgetMinor:     quest.BudgetMinor,
 		RequiredMinRank: quest.RequiredMinRank,
-		MilestoneCount:  len(milestones),
 		CreatedAt:       quest.CreatedAt,
 	}, nil
 }

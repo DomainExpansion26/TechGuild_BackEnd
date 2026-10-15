@@ -17,7 +17,7 @@ type TaskManagementRepository interface {
 	GetMilestoneByID(milestoneID uuid.UUID) (*models.QuestMilestone, error)
 	GetMilestoneWithQuest(milestoneID uuid.UUID) (*models.QuestMilestone, *models.Quest, error)
 	CreateMilestone(quest *models.Quest, milestone *models.QuestMilestone) error
-	DeleteMilestone(milestoneID uuid.UUID, questID uuid.UUID, amount float64) error
+	DeleteMilestone(milestoneID uuid.UUID, questID uuid.UUID) error
 	UpdateMilestoneStatus(milestoneID uuid.UUID, status models.MilestoneStatus, approvedAt *time.Time) error
 	LogMilestoneApproval(log *models.MilestoneApprovalLog) error
 	UpdateQuestStatus(questID uuid.UUID, status models.QuestStatus) error
@@ -95,9 +95,6 @@ func (r *taskManagementRepository) GetMilestoneWithQuest(milestoneID uuid.UUID) 
 	}
 
 	var quest models.Quest
-	if err := r.db.Where("id = ?", milestoneID).Error; err != nil {
-		// milestone found, fetch its quest
-	}
 	if err := r.db.Where("id = ?", milestone.QuestID).First(&quest).Error; err != nil {
 		return &milestone, nil, err
 	}
@@ -110,14 +107,13 @@ func (r *taskManagementRepository) CreateMilestone(quest *models.Quest, mileston
 		if err := tx.Create(milestone).Error; err != nil {
 			return err
 		}
-		// update quest total budget
-		newBudget := quest.BudgetINR + milestone.Amount
-		quest.BudgetINR = newBudget
-		return tx.Model(&models.Quest{}).Where("id = ?", quest.ID).Update("budget_inr", newBudget).Error
+		// Quest.BudgetMinor is a CLIENT-SET reference amount.
+		// Freelancer milestones DO NOT modify it.
+		return nil
 	})
 }
 
-func (r *taskManagementRepository) DeleteMilestone(milestoneID uuid.UUID, questID uuid.UUID, amount float64) error {
+func (r *taskManagementRepository) DeleteMilestone(milestoneID uuid.UUID, questID uuid.UUID) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		// 1. Delete associated tasks
 		if err := tx.Where("milestone_id = ?", milestoneID).Delete(&models.Task{}).Error; err != nil {
@@ -127,9 +123,8 @@ func (r *taskManagementRepository) DeleteMilestone(milestoneID uuid.UUID, questI
 		if err := tx.Where("id = ?", milestoneID).Delete(&models.QuestMilestone{}).Error; err != nil {
 			return err
 		}
-		// 3. Deduct milestone amount from quest budget
-		return tx.Model(&models.Quest{}).Where("id = ?", questID).
-			Update("budget_inr", gorm.Expr("GREATEST(0, budget_inr - ?)", amount)).Error
+		// Quest.BudgetMinor stays unchanged — client's reference amount.
+		return nil
 	})
 }
 
@@ -193,7 +188,7 @@ func (r *taskManagementRepository) GetRecentActivities(questID uuid.UUID, limit 
 func (r *taskManagementRepository) GetMetrics(clientID uuid.UUID, questID *uuid.UUID) (dto.TaskManagementMetricsResponse, error) {
 	var metrics dto.TaskManagementMetricsResponse
 
-	// 1. Active Quests (for client)
+	// 1. Active Quests
 	var activeQuestsCount int64
 	if err := r.db.Model(&models.Quest{}).
 		Where("client_id = ? AND status = ?", clientID, models.QuestStatusInProgress).
@@ -211,7 +206,6 @@ func (r *taskManagementRepository) GetMetrics(clientID uuid.UUID, questID *uuid.
 	}
 	metrics.CompletedQuests = int(completedQuestsCount)
 
-	// Base milestone & task queries scoped to client or specific quest
 	milestoneQuery := r.db.Model(&models.QuestMilestone{}).
 		Joins("JOIN quests ON quests.id = quest_milestones.quest_id").
 		Where("quests.client_id = ? AND quests.status IN (?, ?)", clientID, models.QuestStatusInProgress, models.QuestStatusCompleted)
@@ -225,10 +219,10 @@ func (r *taskManagementRepository) GetMetrics(clientID uuid.UUID, questID *uuid.
 		taskQuery = taskQuery.Where("quests.id = ?", *questID)
 	}
 
-	// 3. Pending Reviews (submitted milestones)
+	// 3. Pending Reviews (submitted for release milestones)
 	var pendingReviewsCount int64
 	if err := milestoneQuery.Session(&gorm.Session{}).
-		Where("quest_milestones.status = ?", models.MilestoneSubmitted).
+		Where("quest_milestones.status = ?", models.MilestoneStatusSubmittedForRelease).
 		Count(&pendingReviewsCount).Error; err != nil {
 		return metrics, err
 	}
@@ -243,11 +237,11 @@ func (r *taskManagementRepository) GetMetrics(clientID uuid.UUID, questID *uuid.
 	}
 	metrics.TasksInProgress = int(tasksInProgressCount)
 
-	// 5. Upcoming Deadlines (milestones due in future that are not approved)
+	// 5. Upcoming Deadlines
 	var upcomingDeadlinesCount int64
 	now := time.Now()
 	if err := milestoneQuery.Session(&gorm.Session{}).
-		Where("quest_milestones.due_date >= ? AND quest_milestones.status != ?", now, models.MilestoneApproved).
+		Where("quest_milestones.due_date >= ? AND quest_milestones.status != ?", now, models.MilestoneStatusReleased).
 		Count(&upcomingDeadlinesCount).Error; err != nil {
 		return metrics, err
 	}

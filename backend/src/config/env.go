@@ -40,6 +40,9 @@ func LoadConfig() (*Config, error) {
 		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
 
 		RazorpayWebhookSecret: viper.GetString("RAZORPAY_WEBHOOK_SECRET"),
+
+		ClientProcessingFeeBps:     viper.GetInt64("CLIENT_PROCESSING_FEE_BPS"),
+		FreelancerProcessingFeeBps: viper.GetInt64("FREELANCER_PROCESSING_FEE_BPS"),
 	}
 
 	return cfg, nil

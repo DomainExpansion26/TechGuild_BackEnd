@@ -12,6 +12,7 @@ import (
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
+	"techguild-backend/src/utils"
 )
 
 var (
@@ -79,7 +80,7 @@ func (s *taskManagementService) GetMetrics(clientIDStr, questIDStr string) (*dto
 	return &res, nil
 }
 
-// 2. GetActiveQuests (Switcher / Multi-Quest Banner)
+// 2. GetActiveQuests
 func (s *taskManagementService) GetActiveQuests(clientIDStr string) (*dto.ActiveQuestsListResponse, error) {
 	clientUUID, err := uuid.Parse(clientIDStr)
 	if err != nil {
@@ -108,7 +109,7 @@ func (s *taskManagementService) GetActiveQuests(clientIDStr string) (*dto.Active
 			ID:         q.ID.String(),
 			Title:      q.Title,
 			Category:   q.Category,
-			Budget:     q.BudgetINR,
+			Budget:     utils.PaiseToRupees(q.BudgetMinor),
 			Currency:   "INR",
 			Freelancer: freelancer,
 			Progress:   progress,
@@ -139,7 +140,6 @@ func (s *taskManagementService) GetQuestDashboard(clientIDStr, questIDStr string
 		return nil, ErrTMDQuestNotFound
 	}
 
-	// Calculate stats
 	totalMilestones := len(quest.Milestones)
 	completedMilestones := 0
 	inProgressMilestones := 0
@@ -151,9 +151,9 @@ func (s *taskManagementService) GetQuestDashboard(clientIDStr, questIDStr string
 			hasTasksCreated = true
 		}
 		switch m.Status {
-		case models.MilestoneApproved:
+		case models.MilestoneStatusReleased:
 			completedMilestones++
-		case models.MilestoneInProgress, models.MilestoneSubmitted:
+		case models.MilestoneStatusWorkInProgress, models.MilestoneStatusSubmittedForRelease:
 			inProgressMilestones++
 		default:
 			pendingMilestones++
@@ -189,7 +189,6 @@ func (s *taskManagementService) GetQuestDashboard(clientIDStr, questIDStr string
 		}
 	}
 
-	// Recent activities preview (up to 4 items)
 	activities, _ := s.repo.GetRecentActivities(questUUID, 4)
 	activityItems := make([]dto.RecentActivityItem, 0, len(activities))
 	for _, a := range activities {
@@ -207,7 +206,7 @@ func (s *taskManagementService) GetQuestDashboard(clientIDStr, questIDStr string
 			ID:              quest.ID.String(),
 			Title:           quest.Title,
 			Category:        quest.Category,
-			Budget:          quest.BudgetINR,
+			Budget:          utils.PaiseToRupees(quest.BudgetMinor),
 			Currency:        "INR",
 			Status:          string(quest.Status),
 			Freelancer:      freelancer,
@@ -248,7 +247,7 @@ func (s *taskManagementService) GetQuestMilestones(clientIDStr, questIDStr strin
 	var totalAmount float64
 
 	for i, m := range quest.Milestones {
-		totalAmount += m.Amount
+		totalAmount += utils.PaiseToRupees(m.AmountMinor)
 		progress := calculateMilestoneProgress(m)
 
 		var startDateStr *string
@@ -273,7 +272,7 @@ func (s *taskManagementService) GetQuestMilestones(clientIDStr, questIDStr strin
 			StartDate:   startDateStr,
 			DueDate:     dueDateStr,
 			DueDays:     m.DueDays,
-			Amount:      m.Amount,
+			Amount:      utils.PaiseToRupees(m.AmountMinor),
 			Currency:    "INR",
 			Status:      string(m.Status),
 			OrderIndex:  m.OrderIndex,
@@ -324,28 +323,28 @@ func (s *taskManagementService) AddMilestone(clientIDStr, questIDStr string, req
 
 	milestone := &models.QuestMilestone{
 		QuestID:     quest.ID,
+		CreatedByID: clientUUID, // TODO: change to freelancer in new flow
 		Title:       title,
 		Description: strings.TrimSpace(req.Description),
-		Amount:      req.Amount,
+		AmountMinor: utils.RupeesToPaise(req.Amount),
 		DueDays:     dueDays,
 		StartDate:   req.StartDate,
 		DueDate:     req.DueDate,
 		OrderIndex:  len(quest.Milestones) + 1,
-		Status:      models.MilestonePending,
+		Status:      models.MilestoneStatusDraft,
 	}
 
 	if err := s.repo.CreateMilestone(quest, milestone); err != nil {
 		return nil, fmt.Errorf("failed to create milestone: %w", err)
 	}
 
-	// Log activity
 	_ = s.repo.CreateActivity(&models.QuestActivity{
 		QuestID:     quest.ID,
 		MilestoneID: &milestone.ID,
 		ActorID:     clientUUID,
 		ActionType:  models.ActivityMilestoneCreated,
 		Title:       fmt.Sprintf("Milestone '%s' Added", milestone.Title),
-		Description: fmt.Sprintf("Client added new milestone for ₹%.2f", milestone.Amount),
+		Description: fmt.Sprintf("Client added new milestone for ₹%.2f", utils.PaiseToRupees(milestone.AmountMinor)),
 	})
 
 	var startStr *string
@@ -359,7 +358,7 @@ func (s *taskManagementService) AddMilestone(clientIDStr, questIDStr string, req
 		dueStr = &s
 	}
 
-	newBudget := quest.BudgetINR
+	newBudget := utils.PaiseToRupees(quest.BudgetMinor)
 
 	return &dto.AddMilestoneResponse{
 		Message: "Milestone added successfully",
@@ -373,7 +372,7 @@ func (s *taskManagementService) AddMilestone(clientIDStr, questIDStr string, req
 			StartDate:   startStr,
 			DueDate:     dueStr,
 			DueDays:     milestone.DueDays,
-			Amount:      milestone.Amount,
+			Amount:      utils.PaiseToRupees(milestone.AmountMinor),
 			Currency:    "INR",
 			Status:      string(milestone.Status),
 			OrderIndex:  milestone.OrderIndex,
@@ -403,20 +402,20 @@ func (s *taskManagementService) DeleteMilestone(clientIDStr, milestoneIDStr stri
 		return nil, ErrTMDUnauthorized
 	}
 
-	if milestone.Status == models.MilestoneApproved {
+	if milestone.Status == models.MilestoneStatusReleased {
 		return nil, ErrTMDMilestoneAlreadyDone
 	}
 
-	if err := s.repo.DeleteMilestone(milestone.ID, quest.ID, milestone.Amount); err != nil {
+	if err := s.repo.DeleteMilestone(milestone.ID, quest.ID); err != nil {
 		return nil, fmt.Errorf("failed to delete milestone: %w", err)
 	}
 
 	_ = s.repo.CreateActivity(&models.QuestActivity{
-		QuestID:    quest.ID,
-		ActorID:    clientUUID,
-		ActionType: models.ActivityMilestoneDeleted,
-		Title:      fmt.Sprintf("Milestone '%s' Deleted", milestone.Title),
-		Description: fmt.Sprintf("Client removed milestone and its tasks"),
+		QuestID:     quest.ID,
+		ActorID:     clientUUID,
+		ActionType:  models.ActivityMilestoneDeleted,
+		Title:       fmt.Sprintf("Milestone '%s' Deleted", milestone.Title),
+		Description: "Client removed milestone and its tasks",
 	})
 
 	return &dto.DeleteMilestoneTMDResponse{
@@ -515,11 +514,10 @@ func (s *taskManagementService) ApproveMilestone(clientIDStr, milestoneIDStr str
 	}
 
 	now := time.Now()
-	if err := s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneApproved, &now); err != nil {
+	if err := s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneStatusReleased, &now); err != nil {
 		return nil, fmt.Errorf("failed to approve milestone: %w", err)
 	}
 
-	// Log approval
 	_ = s.repo.LogMilestoneApproval(&models.MilestoneApprovalLog{
 		MilestoneID: milestone.ID,
 		ClientID:    clientUUID,
@@ -536,7 +534,6 @@ func (s *taskManagementService) ApproveMilestone(clientIDStr, milestoneIDStr str
 		Description: fmt.Sprintf("Client approved milestone deliverables. %s", feedback),
 	})
 
-	// Recalculate quest completion
 	updatedQuest, _ := s.repo.GetQuestByIDAndClient(quest.ID, clientUUID)
 	progress := 0
 	canApprove := false
@@ -544,7 +541,7 @@ func (s *taskManagementService) ApproveMilestone(clientIDStr, milestoneIDStr str
 		progress = calculateQuestProgress(updatedQuest.Milestones)
 		allApproved := true
 		for _, m := range updatedQuest.Milestones {
-			if m.Status != models.MilestoneApproved {
+			if m.Status != models.MilestoneStatusReleased {
 				allApproved = false
 				break
 			}
@@ -555,7 +552,7 @@ func (s *taskManagementService) ApproveMilestone(clientIDStr, milestoneIDStr str
 	return &dto.ApproveMilestoneTMDResponse{
 		Message:              "Milestone approved successfully",
 		MilestoneID:          milestone.ID.String(),
-		Status:               string(models.MilestoneApproved),
+		Status:               string(models.MilestoneStatusReleased),
 		OverallQuestProgress: progress,
 		CanApproveQuest:      canApprove,
 	}, nil
@@ -587,11 +584,11 @@ func (s *taskManagementService) CancelMilestoneApproval(clientIDStr, milestoneID
 		return nil, ErrTMDUnauthorized
 	}
 
-	if milestone.Status != models.MilestoneApproved {
+	if milestone.Status != models.MilestoneStatusReleased {
 		return nil, ErrTMDInvalidMilestoneStatus
 	}
 
-	if err := s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneInProgress, nil); err != nil {
+	if err := s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneStatusWorkInProgress, nil); err != nil {
 		return nil, fmt.Errorf("failed to cancel approval: %w", err)
 	}
 
@@ -620,7 +617,7 @@ func (s *taskManagementService) CancelMilestoneApproval(clientIDStr, milestoneID
 	return &dto.CancelMilestoneApprovalTMDResponse{
 		Message:              "Milestone approval cancelled successfully",
 		MilestoneID:          milestone.ID.String(),
-		Status:               string(models.MilestoneInProgress),
+		Status:               string(models.MilestoneStatusWorkInProgress),
 		OverallQuestProgress: progress,
 		CanApproveQuest:      false,
 	}, nil
@@ -657,7 +654,7 @@ func (s *taskManagementService) ApproveQuest(clientIDStr, questIDStr string, req
 	}
 
 	for _, m := range quest.Milestones {
-		if m.Status != models.MilestoneApproved {
+		if m.Status != models.MilestoneStatusReleased {
 			return nil, ErrTMDAllMilestonesNotDone
 		}
 	}
@@ -799,7 +796,6 @@ func (s *taskManagementService) CreateMilestoneTask(clientIDStr, milestoneIDStr 
 		return nil, ErrTMDMilestoneNotFound
 	}
 
-	// Verify either client owns it or assigned freelancer creates it
 	isClient := quest.ClientID == clientUUID
 	isFreelancer := quest.AssignedFreelancerID != nil && *quest.AssignedFreelancerID == clientUUID
 	if !isClient && !isFreelancer {
@@ -844,9 +840,8 @@ func (s *taskManagementService) CreateMilestoneTask(clientIDStr, milestoneIDStr 
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}
 
-	// If milestone was pending, move to in_progress
-	if milestone.Status == models.MilestonePending {
-		_ = s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneInProgress, nil)
+	if milestone.Status == models.MilestoneStatusDraft {
+		_ = s.repo.UpdateMilestoneStatus(milestone.ID, models.MilestoneStatusWorkInProgress, nil)
 	}
 
 	_ = s.repo.CreateActivity(&models.QuestActivity{
@@ -950,7 +945,7 @@ func calculateQuestProgress(milestones []models.QuestMilestone) int {
 	}
 	completed := 0
 	for _, m := range milestones {
-		if m.Status == models.MilestoneApproved {
+		if m.Status == models.MilestoneStatusReleased {
 			completed++
 		}
 	}
@@ -959,7 +954,7 @@ func calculateQuestProgress(milestones []models.QuestMilestone) int {
 
 // Helper: Calculate individual milestone progress
 func calculateMilestoneProgress(m models.QuestMilestone) int {
-	if m.Status == models.MilestoneApproved {
+	if m.Status == models.MilestoneStatusReleased {
 		return 100
 	}
 	if len(m.Tasks) > 0 {
@@ -972,9 +967,9 @@ func calculateMilestoneProgress(m models.QuestMilestone) int {
 		return int(math.Round((float64(done) / float64(len(m.Tasks))) * 100))
 	}
 	switch m.Status {
-	case models.MilestoneSubmitted:
+	case models.MilestoneStatusSubmittedForRelease:
 		return 90
-	case models.MilestoneInProgress:
+	case models.MilestoneStatusWorkInProgress:
 		return 25
 	default:
 		return 0

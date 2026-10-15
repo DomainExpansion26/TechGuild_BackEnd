@@ -9,7 +9,7 @@ import (
 )
 
 type QuestRepository interface {
-	CreateQuestWithMilestonesAndSkills(quest *models.Quest, milestones []models.QuestMilestone, skills []models.QuestSkill) error
+	CreateQuestWithSkills(quest *models.Quest, skills []models.QuestSkill) error
 	FindByID(questID uuid.UUID) (*models.Quest, error)
 }
 
@@ -26,24 +26,13 @@ func NewQuestRepositoryTx(tx *gorm.DB) QuestRepository {
 }
 
 // CreateQuestWithMilestonesAndSkills saves the quest, milestones, and skills atomically in a single transaction.
-func (r *questRepository) CreateQuestWithMilestonesAndSkills(
+func (r *questRepository) CreateQuestWithSkills(
 	quest *models.Quest,
-	milestones []models.QuestMilestone,
 	skills []models.QuestSkill,
 ) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(quest).Error; err != nil {
 			return err
-		}
-
-		if len(milestones) > 0 {
-			for i := range milestones {
-				milestones[i].QuestID = quest.ID
-			}
-			if err := tx.Create(&milestones).Error; err != nil {
-				return err
-			}
-			quest.Milestones = milestones
 		}
 
 		if len(skills) > 0 {
