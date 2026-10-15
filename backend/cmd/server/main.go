@@ -62,7 +62,7 @@ func main() {
 	}
 	apiConfig.Servers = []*huma.Server{{URL: publicURL}}
 
-	// JWT Bearer auth scheme — Zudoku/playground Authorize dialog ke liye.
+	// JWT Bearer auth scheme
 	apiConfig.Components = &huma.Components{
 		SecuritySchemes: map[string]*huma.SecurityScheme{
 			"BearerAuth": {
@@ -72,7 +72,6 @@ func main() {
 			},
 		},
 	}
-	// Default: sab routes ko bearerAuth chahiye (protected). Public routes
 	apiConfig.Security = []map[string][]string{{"BearerAuth": {}}}
 
 	api := humagin.New(router, apiConfig)
@@ -86,11 +85,15 @@ func main() {
 
 	paymentMethodService := services.NewPaymentMethodService(cfg, paymentProvider)
 	payoutMethodService := services.NewPayoutMethodService(cfg, paymentProvider)
-	milestonePaymentService := services.NewMilestonePaymentService(cfg, paymentProvider)
 
 	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
 	payoutMethodController := controllers.NewPayoutMethodController(payoutMethodService)
-	milestonePaymentController := controllers.NewMilestonePaymentController(milestonePaymentService)
+
+	// --------------------------------------------------
+	// Quest Milestone (freelancer creates, client reviews)
+	// --------------------------------------------------
+
+	questMilestoneController := controllers.NewQuestMilestoneController(cfg)
 
 	// --------------------------------------------------
 	// Webhook infrastructure
@@ -109,31 +112,51 @@ func main() {
 
 	webhookController := controllers.NewWebhookController(webhookService)
 
-	// Controllers are injected with cfg (dependency injection, no globals).
+	// --------------------------------------------------
+	// Other controllers
+	// --------------------------------------------------
+
 	authController := controllers.NewAuthController(cfg)
 	profileController := controllers.NewProfileController(cfg)
 	settingsController := controllers.NewSettingsController(cfg)
 	oauthController := controllers.NewOAuthController(cfg)
 
-	// naye Huma routes register karo
+	// --------------------------------------------------
+	// Route registration
+	// --------------------------------------------------
+
+	// Core
 	routes.RegisterAuthRoutes(api, authController)
-	routes.RegisterContractRoutes(api)
 	routes.RegisterProfileRoutes(api, profileController)
 	routes.RegisterSettingsRoutes(api, settingsController)
 	routes.RegisterOAuthRoutes(api, oauthController)
-	routes.RegisterMilestoneRoutes(api)
-	routes.RegisterProjectRoutes(api)
-	routes.RegisterProjectApplicationRoutes(api)
-	routes.RegisterSubmissionRoutes(api)
+
+	// Party, Verification, 2FA
 	routes.RegisterPartyRoutes(api)
 	routes.RegisterVerificationRoutes(api)
 	routes.RegisterTwoFactorRoutes(api)
+
+	// Quest flow
 	routes.RegisterQuestRoutes(api)
 	routes.RegisterTaskManagementRoutes(api)
+
+	// Quest Milestones (freelancer CRUD + client review)
+	routes.RegisterQuestMilestoneRoutes(api, questMilestoneController)
+
+	// Payment & Payout methods (client-side + freelancer payout methods)
 	routes.RegisterPaymentMethodRoutes(api, paymentMethodController)
 	routes.RegisterPayoutMethodRoutes(api, payoutMethodController)
+
+	// Webhooks
 	routes.RegisterWebhookRoutes(api, webhookController)
-	routes.RegisterMilestonePaymentRoutes(api, milestonePaymentController)
+
+	// -------- DISABLED (project-based, will be replaced with Quest-based) --------
+	// routes.RegisterContractRoutes(api)
+	// routes.RegisterMilestoneRoutes(api)
+	// routes.RegisterProjectRoutes(api)
+	// routes.RegisterProjectApplicationRoutes(api)
+	// routes.RegisterSubmissionRoutes(api)
+	// routes.RegisterMilestonePaymentRoutes(api, milestonePaymentController)
 
 	log.Println("Server running on :8080")
 
