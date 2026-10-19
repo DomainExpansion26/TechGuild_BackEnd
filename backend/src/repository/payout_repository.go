@@ -20,6 +20,7 @@ type PayoutRepository interface {
 	ListByUser(userID uuid.UUID) ([]models.Payout, error)
 
 	WithTransaction(fn func(txRepo PayoutRepository) error) error
+	ListWithdrawalsByUser(userID uuid.UUID, limit, offset int) ([]models.Payout, int64, error)
 }
 
 type payoutRepository struct {
@@ -137,4 +138,26 @@ func (r *payoutRepository) ListByUser(userID uuid.UUID) ([]models.Payout, error)
 		Order("created_at DESC").
 		Find(&payouts).Error
 	return payouts, err
+}
+
+func (r *payoutRepository) ListWithdrawalsByUser(
+	userID uuid.UUID,
+	limit, offset int,
+) ([]models.Payout, int64, error) {
+	var payouts []models.Payout
+	var total int64
+
+	query := r.db.Model(&models.Payout{}).
+		Where("user_id = ? AND source = ?", userID, models.PayoutSourceWalletWithdrawal)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&payouts).Error
+	return payouts, total, err
 }

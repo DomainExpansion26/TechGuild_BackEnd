@@ -24,11 +24,13 @@ func NewPaymentLedgerService() *PaymentLedgerService {
 }
 
 // LedgerEntry is the input shape for appending one immutable ledger row.
+//
+// PaymentID and QuestID are POINTERS (nullable) because wallet withdrawals
+// don't reference a specific payment or quest.
 type LedgerEntry struct {
-	PaymentID             uuid.UUID
-	ProjectID             uuid.UUID
-	ContractID            uuid.UUID
-	MilestoneID           *uuid.UUID
+	PaymentID             *uuid.UUID
+	QuestID               *uuid.UUID
+	QuestMilestoneID      *uuid.UUID
 	TransactionType       models.TransactionType
 	Amount                int64 // signed
 	Currency              string
@@ -39,7 +41,6 @@ type LedgerEntry struct {
 }
 
 // Append writes a ledger entry inside an existing transaction.
-// Returns ErrLedgerDuplicate if the idempotency key already exists.
 func (s *PaymentLedgerService) Append(tx *gorm.DB, entry LedgerEntry) error {
 	if entry.IdempotencyKey == "" {
 		return errors.New("ledger entry requires idempotency key")
@@ -60,9 +61,8 @@ func (s *PaymentLedgerService) Append(tx *gorm.DB, entry LedgerEntry) error {
 
 	record := &models.PaymentTransaction{
 		PaymentID:             entry.PaymentID,
-		ProjectID:             entry.ProjectID,
-		ContractID:            entry.ContractID,
-		MilestoneID:           entry.MilestoneID,
+		QuestID:               entry.QuestID,
+		QuestMilestoneID:      entry.QuestMilestoneID,
 		TransactionType:       entry.TransactionType,
 		Amount:                entry.Amount,
 		Currency:              entry.Currency,

@@ -20,27 +20,21 @@ const (
 	EscrowStatusFailed         EscrowStatus = "failed"
 )
 
-// EscrowTransaction tracks the lifecycle of funds held in escrow for a milestone.
+// EscrowTransaction tracks funds held in escrow for a quest milestone.
 //
-// State machine:
-//
-//	pending → held → release_pending → released
-//	             ↓              ↓
-//	        refund_pending → refunded
-//	             ↓
-//	          failed
+// Amount = milestone amount ONLY (client fee is NOT held in escrow;
+// client fee is credited to platform immediately at payment time).
 type EscrowTransaction struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	PaymentID   uuid.UUID `gorm:"type:uuid;not null;index"`
-	ProjectID   uuid.UUID `gorm:"type:uuid;not null;index"`
-	ContractID  uuid.UUID `gorm:"type:uuid;not null;index"`
-	MilestoneID uuid.UUID `gorm:"type:uuid;not null;index"`
+	PaymentID        uuid.UUID `gorm:"type:uuid;not null;index"`
+	QuestID          uuid.UUID `gorm:"type:uuid;not null;index"`
+	QuestMilestoneID uuid.UUID `gorm:"type:uuid;not null;index"`
 
 	Provider         string  `gorm:"type:varchar(50);not null"`
 	ProviderEscrowID *string `gorm:"type:varchar(255);index"`
 
-	// Amounts in minor units
+	// Amount = milestone amount only (not the client charged amount)
 	Amount             int64  `gorm:"not null"`
 	Currency           string `gorm:"type:varchar(10);not null;default:'INR'"`
 	SettlementAmount   int64  `gorm:"not null;default:0"`
@@ -48,7 +42,6 @@ type EscrowTransaction struct {
 
 	Status EscrowStatus `gorm:"type:varchar(30);not null;default:'pending';index"`
 
-	// Idempotency for the release operation
 	ReleaseIdempotencyKey *string `gorm:"type:varchar(255);uniqueIndex:uniq_escrow_release_idem"`
 
 	HeldAt        *time.Time

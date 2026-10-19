@@ -11,43 +11,45 @@ import (
 type TransactionType string
 
 const (
-	TxTypePayment       TransactionType = "payment"
-	TxTypeCapture       TransactionType = "capture"
-	TxTypeEscrowHold    TransactionType = "escrow_hold"
-	TxTypeEscrowRelease TransactionType = "escrow_release"
-	TxTypePlatformFee   TransactionType = "platform_fee"
-	TxTypePayout        TransactionType = "payout"
-	TxTypeRefund        TransactionType = "refund"
-	TxTypeChargeback    TransactionType = "chargeback"
-	TxTypeAdjustment    TransactionType = "adjustment"
-	TxTypeFxConversion  TransactionType = "fx_conversion"
+	TxTypePayment               TransactionType = "payment"
+	TxTypeCapture               TransactionType = "capture"
+	TxTypeEscrowHold            TransactionType = "escrow_hold"
+	TxTypeEscrowRelease         TransactionType = "escrow_release"
+	TxTypeEscrowRefund          TransactionType = "escrow_refund"
+	TxTypePlatformFeeClient     TransactionType = "platform_fee_client"
+	TxTypePlatformFeeFreelancer TransactionType = "platform_fee_freelancer"
+	TxTypePayout                TransactionType = "payout"
+	TxTypeWalletCredit          TransactionType = "wallet_credit"
+	TxTypeWithdrawal            TransactionType = "withdrawal"
+	TxTypeRefund                TransactionType = "refund"
+	TxTypeChargeback            TransactionType = "chargeback"
+	TxTypeAdjustment            TransactionType = "adjustment"
+	TxTypeFxConversion          TransactionType = "fx_conversion"
 )
 
-// PaymentTransaction is an IMMUTABLE ledger entry. Once written, never
-// modify. Corrections are new compensating rows, never edits.
+// PaymentTransaction — immutable ledger.
 //
-// Amount is SIGNED: negative for credits out, positive for debits in.
+// PaymentID and QuestID are NULLABLE because wallet withdrawals don't
+// reference a specific payment or quest (they debit the user's wallet).
 type PaymentTransaction struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	PaymentID   uuid.UUID  `gorm:"type:uuid;not null;index"`
-	ProjectID   uuid.UUID  `gorm:"type:uuid;not null;index"`
-	ContractID  uuid.UUID  `gorm:"type:uuid;not null;index"`
-	MilestoneID *uuid.UUID `gorm:"type:uuid;index"`
+	// Nullable: wallet withdrawals have no payment/quest
+	PaymentID        *uuid.UUID `gorm:"type:uuid;index"`
+	QuestID          *uuid.UUID `gorm:"type:uuid;index"`
+	QuestMilestoneID *uuid.UUID `gorm:"type:uuid;index"`
 
-	TransactionType TransactionType `gorm:"type:varchar(30);not null;index"`
+	TransactionType TransactionType `gorm:"type:varchar(40);not null;index"`
 
-	// Signed amount, minor units of Currency
+	// Signed amount, minor units
 	Amount   int64  `gorm:"not null"`
 	Currency string `gorm:"type:varchar(10);not null;default:'INR'"`
 
 	Provider              string  `gorm:"type:varchar(50)"`
 	ProviderTransactionID *string `gorm:"type:varchar(255);index"`
 
-	// Cross-reference to source entity (payout_id, refund_id, etc.)
 	Reference string `gorm:"type:varchar(255);index"`
 
-	// Idempotency for ledger dedup
 	IdempotencyKey string `gorm:"type:varchar(255);not null;uniqueIndex:uniq_ledger_idem"`
 
 	Metadata datatypes.JSON `gorm:"type:jsonb"`

@@ -69,6 +69,9 @@ const (
 	ActivityMilestoneFunded              ActivityActionType = "milestone_funded"
 	ActivityMilestoneSubmittedForRelease ActivityActionType = "milestone_submitted_for_release"
 	ActivityMilestoneReleased            ActivityActionType = "milestone_released"
+	// Refund flow
+	ActivityMilestoneRefundRequested ActivityActionType = "milestone_refund_requested"
+	ActivityMilestoneRefunded        ActivityActionType = "milestone_refunded"
 )
 
 // QuestActivity records chronological audit events for the TMD activity feed and drawer.

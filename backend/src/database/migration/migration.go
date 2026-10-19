@@ -34,7 +34,7 @@ func Migrate() {
 		// Audit
 		&models.AuditLog{},
 
-		// Projects
+		// Projects (DISABLED — replaced by Quest flow)
 		// &models.Project{},
 		// &models.ProjectSkill{},
 		// &models.ProjectAttachment{},
@@ -43,7 +43,7 @@ func Migrate() {
 		// &models.ProjectMilestone{},
 		// &models.ProjectSubmission{},
 
-		// Quests (Gamified Client Creation)
+		// Quests
 		&models.Quest{},
 		&models.QuestMilestone{},
 		&models.QuestSkill{},
@@ -73,6 +73,7 @@ func Migrate() {
 		&models.PayoutMethod{},
 		&models.PaymentWebhookEvent{},
 
+		// Quest-based payments
 		&models.Payment{},
 		&models.MilestonePayment{},
 		&models.EscrowTransaction{},
@@ -81,6 +82,10 @@ func Migrate() {
 		&models.PlatformFee{},
 		&models.Payout{},
 		&models.Refund{},
+
+		// Wallet
+		&models.Wallet{},
+		&models.WalletTransaction{},
 	)
 
 	if err != nil {
@@ -88,12 +93,10 @@ func Migrate() {
 	}
 
 	// Raw SQL: CHECK constraints + partial unique indexes
-	// (AutoMigrate GORM tags se ye nahi banti)
 	if err := migratePaymentConstraints(postgres.DB); err != nil {
 		log.Fatal("Payment constraints migration failed:", err)
 	}
 
-	// Milestone flow constraints + indexes
 	if err := migrateMilestonePaymentConstraints(postgres.DB); err != nil {
 		log.Fatal("Milestone payment constraints migration failed:", err)
 	}
@@ -101,20 +104,16 @@ func Migrate() {
 	log.Println("Database Migrated Successfully")
 }
 
-// migratePaymentConstraints adds CHECK constraints and partial unique indexes
-// that GORM AutoMigrate cannot express via struct tags.
-//
-// Ye function idempotent hai — dobara chalane par error nahi dega.
-func migratePaymentConstraints(db *gorm.DB) error {
+// ============================================================
+// Payment methods + webhook constraints (unchanged)
+// ============================================================
 
+func migratePaymentConstraints(db *gorm.DB) error {
 	statements := []string{
 
 		// ---------- client_payment_methods ----------
-
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_client_pm_type'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_client_pm_type') THEN
 				ALTER TABLE client_payment_methods
 				ADD CONSTRAINT chk_client_pm_type
 				CHECK (type IN ('card','upi','netbanking'));
@@ -122,26 +121,20 @@ func migratePaymentConstraints(db *gorm.DB) error {
 		END $$;`,
 
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_client_pm_status'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_client_pm_status') THEN
 				ALTER TABLE client_payment_methods
 				ADD CONSTRAINT chk_client_pm_status
 				CHECK (status IN ('active','expired','disabled','failed'));
 			END IF;
 		END $$;`,
 
-		// One primary payment method per (user, type)
 		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_primary_client_pm
     		ON client_payment_methods (user_id, type)
     		WHERE is_primary = TRUE AND deleted_at IS NULL;`,
 
 		// ---------- payout_methods ----------
-
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_type'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_type') THEN
 				ALTER TABLE payout_methods
 				ADD CONSTRAINT chk_payout_method_type
 				CHECK (type IN ('bank','upi','card','wallet'));
@@ -149,9 +142,7 @@ func migratePaymentConstraints(db *gorm.DB) error {
 		END $$;`,
 
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_status'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_status') THEN
 				ALTER TABLE payout_methods
 				ADD CONSTRAINT chk_payout_method_status
 				CHECK (status IN ('pending_verification','verified','failed','disabled'));
@@ -159,25 +150,20 @@ func migratePaymentConstraints(db *gorm.DB) error {
 		END $$;`,
 
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_purpose'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_payout_method_purpose') THEN
 				ALTER TABLE payout_methods
 				ADD CONSTRAINT chk_payout_method_purpose
 				CHECK (purpose IN ('payout'));
 			END IF;
 		END $$;`,
 
-		// One primary payout method per (user, purpose, type)
 		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_primary_payout_method
     		ON payout_methods (user_id, purpose, type)
     		WHERE is_primary = TRUE AND deleted_at IS NULL;`,
 
 		// ---------- payment_webhook_events ----------
 		`DO $$ BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM pg_constraint WHERE conname = 'chk_webhook_event_status'
-			) THEN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_webhook_event_status') THEN
 				ALTER TABLE payment_webhook_events
 				ADD CONSTRAINT chk_webhook_event_status
 				CHECK (status IN ('received','processing','processed','failed'));
@@ -190,15 +176,13 @@ func migratePaymentConstraints(db *gorm.DB) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
-// migrateMilestonePaymentConstraints adds CHECK constraints and extra indexes
-// for the 7 payment-flow tables. Ye v3 spec ke financial invariants enforce
-// karta hai — bina inke data corruption possible hai.
-//
-// Idempotent hai — dobara chalane pe error nahi dega.
+// ============================================================
+// Quest-based payment flow constraints (DUAL-FEE MODEL)
+// ============================================================
+
 func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 	statements := []string{
 
@@ -218,12 +202,16 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 			END IF;
 		END $$;`,
 
-		// ==================== milestone_payments ====================
+		// ==================== milestone_payments (DUAL FEE) ====================
+
+		// Drop old constraints that reference removed fields (gross_amount, platform_fee, freelancer_amount, fee_rate_bps)
+		`ALTER TABLE milestone_payments DROP CONSTRAINT IF EXISTS chk_milestone_amount_split;`,
+		`ALTER TABLE milestone_payments DROP CONSTRAINT IF EXISTS chk_milestone_amounts_nonneg;`,
 
 		`DO $$ BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_payment_status') THEN
 				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_payment_status
-				CHECK (status IN ('pending','funded','awaiting_approval','approved','release_pending','released','refund_pending','refunded','disputed','failed'));
+				CHECK (status IN ('pending','funded','release_pending','released','refund_pending','refunded','disputed','failed'));
 			END IF;
 		END $$;`,
 
@@ -234,18 +222,48 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 			END IF;
 		END $$;`,
 
-		// CRITICAL: gross = platform_fee + freelancer_amount (v3 spec invariant)
+		// CRITICAL: Dual-fee invariants
 		`DO $$ BEGIN
-			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_amount_split') THEN
-				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_amount_split
-				CHECK (gross_amount = platform_fee + freelancer_amount);
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_client_charged') THEN
+				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_client_charged
+				CHECK (client_charged_minor = milestone_amount_minor + client_fee_minor);
+			END IF;
+		END $$;`,
+
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_freelancer_net') THEN
+				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_freelancer_net
+				CHECK (freelancer_net_minor = milestone_amount_minor - freelancer_fee_minor);
+			END IF;
+		END $$;`,
+
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_platform_total') THEN
+				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_platform_total
+				CHECK (platform_total_minor = client_fee_minor + freelancer_fee_minor);
+			END IF;
+		END $$;`,
+
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_balance') THEN
+				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_balance
+				CHECK (client_charged_minor = freelancer_net_minor + platform_total_minor);
 			END IF;
 		END $$;`,
 
 		`DO $$ BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_amounts_nonneg') THEN
 				ALTER TABLE milestone_payments ADD CONSTRAINT chk_milestone_amounts_nonneg
-				CHECK (gross_amount >= 0 AND platform_fee >= 0 AND freelancer_amount >= 0 AND fee_rate_bps >= 0);
+				CHECK (
+					milestone_amount_minor >= 0 AND
+					client_fee_minor >= 0 AND
+					freelancer_fee_minor >= 0 AND
+					client_charged_minor >= 0 AND
+					freelancer_net_minor >= 0 AND
+					platform_total_minor >= 0 AND
+					client_fee_rate_bps >= 0 AND
+					freelancer_fee_rate_bps >= 0
+				);
 			END IF;
 		END $$;`,
 
@@ -268,13 +286,22 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 		// ==================== payment_transactions (ledger) ====================
 
 		`DO $$ BEGIN
-			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tx_type') THEN
-				ALTER TABLE payment_transactions ADD CONSTRAINT chk_tx_type
-				CHECK (transaction_type IN ('payment','capture','escrow_hold','escrow_release','platform_fee','payout','refund','chargeback','adjustment','fx_conversion'));
+			IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_tx_type') THEN
+				ALTER TABLE payment_transactions DROP CONSTRAINT chk_tx_type;
 			END IF;
+			ALTER TABLE payment_transactions ADD CONSTRAINT chk_tx_type
+			CHECK (transaction_type IN (
+				'payment','capture','escrow_hold','escrow_release','escrow_refund',
+				'platform_fee_client','platform_fee_freelancer',
+				'payout','wallet_credit','withdrawal',
+				'refund','chargeback','adjustment','fx_conversion'
+			));
 		END $$;`,
 
 		// ==================== platform_fees ====================
+
+		// Drop old unique index on milestone_payment_id (now 2 rows per mp)
+		`DROP INDEX IF EXISTS idx_platform_fees_milestone_payment_id;`,
 
 		`DO $$ BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_platform_fee_status') THEN
@@ -291,11 +318,22 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 		END $$;`,
 
 		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_platform_fee_side') THEN
+				ALTER TABLE platform_fees ADD CONSTRAINT chk_platform_fee_side
+				CHECK (side IN ('client','freelancer'));
+			END IF;
+		END $$;`,
+
+		`DO $$ BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_platform_fee_amount_nonneg') THEN
 				ALTER TABLE platform_fees ADD CONSTRAINT chk_platform_fee_amount_nonneg
 				CHECK (amount >= 0 AND rate_bps >= 0);
 			END IF;
 		END $$;`,
+
+		// Unique constraint: one row per (milestone_payment, side)
+		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_platform_fee_per_side
+			ON platform_fees (milestone_payment_id, side);`,
 
 		// ==================== payouts ====================
 
@@ -329,13 +367,13 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 			END IF;
 		END $$;`,
 
-		// ==================== extra composite indexes ====================
+		// ==================== indexes ====================
 
 		`CREATE INDEX IF NOT EXISTS idx_payments_user_status
 			ON payments (user_id, status);`,
 
-		`CREATE INDEX IF NOT EXISTS idx_escrow_milestone_status
-			ON escrow_transactions (milestone_id, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_escrow_quest_milestone_status
+			ON escrow_transactions (quest_milestone_id, status);`,
 
 		`CREATE INDEX IF NOT EXISTS idx_payouts_user_status
 			ON payouts (user_id, status);`,
@@ -345,6 +383,39 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 
 		`CREATE INDEX IF NOT EXISTS idx_ledger_payment_created
 			ON payment_transactions (payment_id, created_at DESC);`,
+
+		`CREATE INDEX IF NOT EXISTS idx_milestone_payments_quest
+			ON milestone_payments (quest_id, status);`,
+
+		`CREATE INDEX IF NOT EXISTS idx_payment_transactions_quest_milestone
+			ON payment_transactions (quest_milestone_id, created_at DESC);`,
+
+		// ==================== wallets (Phase 5) ====================
+
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_wallet_balances_nonneg') THEN
+				ALTER TABLE wallets ADD CONSTRAINT chk_wallet_balances_nonneg
+				CHECK (
+					available_balance_minor >= 0 AND
+					pending_balance_minor >= 0 AND
+					total_earned_minor >= 0 AND
+					total_withdrawn_minor >= 0
+				);
+			END IF;
+		END $$;`,
+
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_wallet_tx_type') THEN
+				ALTER TABLE wallet_transactions ADD CONSTRAINT chk_wallet_tx_type
+				CHECK (type IN ('credit','debit','hold','hold_release','withdrawal_failed'));
+			END IF;
+		END $$;`,
+
+		`CREATE INDEX IF NOT EXISTS idx_wallet_tx_user_created
+			ON wallet_transactions (user_id, created_at DESC);`,
+
+		`CREATE INDEX IF NOT EXISTS idx_wallet_tx_reference
+			ON wallet_transactions (reference);`,
 	}
 
 	for _, stmt := range statements {
@@ -352,6 +423,5 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 			return err
 		}
 	}
-
 	return nil
 }

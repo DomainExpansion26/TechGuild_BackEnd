@@ -12,8 +12,8 @@ import (
 type MilestonePaymentRepository interface {
 	Create(mp *models.MilestonePayment) error
 	GetByID(id uuid.UUID) (*models.MilestonePayment, error)
-	GetByMilestoneID(milestoneID uuid.UUID) (*models.MilestonePayment, error)
-	GetByMilestoneIDForUpdate(milestoneID uuid.UUID) (*models.MilestonePayment, error)
+	GetByQuestMilestoneID(questMilestoneID uuid.UUID) (*models.MilestonePayment, error)
+	GetByQuestMilestoneIDForUpdate(questMilestoneID uuid.UUID) (*models.MilestonePayment, error)
 	Save(mp *models.MilestonePayment) error
 	UpdateStatus(id uuid.UUID, status models.MilestonePaymentStatus) error
 	UpdateEscrowRef(id uuid.UUID, escrowID uuid.UUID) error
@@ -52,29 +52,29 @@ func (r *milestonePaymentRepository) GetByID(id uuid.UUID) (*models.MilestonePay
 	return &mp, nil
 }
 
-func (r *milestonePaymentRepository) GetByMilestoneID(milestoneID uuid.UUID) (*models.MilestonePayment, error) {
+func (r *milestonePaymentRepository) GetByQuestMilestoneID(questMilestoneID uuid.UUID) (*models.MilestonePayment, error) {
 	var mp models.MilestonePayment
-	err := r.db.Where("milestone_id = ?", milestoneID).First(&mp).Error
+	err := r.db.Where("quest_milestone_id = ?", questMilestoneID).First(&mp).Error
 	if err != nil {
 		return nil, err
 	}
 	return &mp, nil
 }
 
-// GetByMilestoneIDForUpdate is meant to be called inside an existing
-// transaction, with a row-level lock (SELECT ... FOR UPDATE) — required
-// for the "two simultaneous approvals" correctness rule.
-func (r *milestonePaymentRepository) GetByMilestoneIDForUpdate(milestoneID uuid.UUID) (*models.MilestonePayment, error) {
+// GetByQuestMilestoneIDForUpdate — row-level lock (SELECT ... FOR UPDATE)
+// inside an existing transaction. Used for concurrent fund/release safety.
+func (r *milestonePaymentRepository) GetByQuestMilestoneIDForUpdate(questMilestoneID uuid.UUID) (*models.MilestonePayment, error) {
 	var mp models.MilestonePayment
 	err := r.db.
 		Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("milestone_id = ?", milestoneID).
+		Where("quest_milestone_id = ?", questMilestoneID).
 		First(&mp).Error
 	if err != nil {
 		return nil, err
 	}
 	return &mp, nil
 }
+
 func (r *milestonePaymentRepository) Save(mp *models.MilestonePayment) error {
 	return r.db.Save(mp).Error
 }

@@ -19,9 +19,10 @@ type PaymentRepository interface {
 	MarkCaptured(id uuid.UUID, providerPaymentID string) error
 	MarkFailed(id uuid.UUID, reason string) error
 	ListByUser(userID uuid.UUID) ([]models.Payment, error)
-	ListByMilestone(milestoneID uuid.UUID) ([]models.Payment, error)
+	ListByQuestMilestone(questMilestoneID uuid.UUID) ([]models.Payment, error)
 
 	WithTransaction(fn func(txRepo PaymentRepository) error) error
+	GetByProviderOrderID(provider, orderID string) (*models.Payment, error)
 }
 
 type paymentRepository struct {
@@ -134,14 +135,24 @@ func (r *paymentRepository) ListByUser(userID uuid.UUID) ([]models.Payment, erro
 	return payments, err
 }
 
-func (r *paymentRepository) ListByMilestone(milestoneID uuid.UUID) ([]models.Payment, error) {
+func (r *paymentRepository) ListByQuestMilestone(questMilestoneID uuid.UUID) ([]models.Payment, error) {
 	var payments []models.Payment
 	err := r.db.
-		Where("milestone_id = ?", milestoneID).
+		Where("quest_milestone_id = ?", questMilestoneID).
 		Order("created_at DESC").
 		Find(&payments).Error
 	return payments, err
 }
 
-// Silence unused import if errors package not used elsewhere
 var _ = errors.Is
+
+func (r *paymentRepository) GetByProviderOrderID(provider, orderID string) (*models.Payment, error) {
+	var p models.Payment
+	err := r.db.
+		Where("provider = ? AND provider_order_id = ?", provider, orderID).
+		First(&p).Error
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
