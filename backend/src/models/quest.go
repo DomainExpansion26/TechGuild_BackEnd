@@ -13,10 +13,12 @@ type QuestStatus string
 
 const (
 	QuestStatusDraft      QuestStatus = "draft"
+	QuestStatusOpen       QuestStatus = "open"
 	QuestStatusPublished  QuestStatus = "published"
 	QuestStatusInProgress QuestStatus = "in_progress"
 	QuestStatusCompleted  QuestStatus = "completed"
 	QuestStatusCancelled  QuestStatus = "cancelled"
+	QuestStatusRejected   QuestStatus = "rejected"
 )
 
 type QuestComplexity string
@@ -63,11 +65,21 @@ type Quest struct {
 	Languages       datatypes.JSON `gorm:"type:jsonb"`
 
 	// Status & Lifecycle
-	Status QuestStatus `gorm:"type:varchar(30);default:'draft'"`
+	Status      QuestStatus `gorm:"type:varchar(30);default:'draft'"`
+	PublishedAt *time.Time
+
+	// Escrow & Funding
+	IsEscrowFunded   bool       `gorm:"default:false"`
+	EscrowFundedAt   *time.Time
+	EscrowRefundedAt *time.Time
 
 	// Assigned Freelancer / Agency
 	AssignedFreelancerID *uuid.UUID `gorm:"type:uuid;index"`
 	AssignedFreelancer   *User      `gorm:"foreignKey:AssignedFreelancerID"`
+
+	// Accepted Party (Party Collaboration)
+	AcceptedPartyID *uuid.UUID `gorm:"type:uuid;index"`
+	AcceptedParty   *Party     `gorm:"foreignKey:AcceptedPartyID"`
 
 	// Associations
 	Milestones []QuestMilestone `gorm:"foreignKey:QuestID;constraint:OnDelete:CASCADE"`
@@ -133,3 +145,23 @@ func (s *QuestSkill) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+type QuestChatChannel struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	QuestID   uuid.UUID  `gorm:"type:uuid;uniqueIndex;not null" json:"questId"`
+	Quest     Quest      `gorm:"foreignKey:QuestID;constraint:OnDelete:CASCADE" json:"-"`
+	PartyID   *uuid.UUID `gorm:"type:uuid;index" json:"partyId,omitempty"`
+	Party     *Party     `gorm:"foreignKey:PartyID" json:"party,omitempty"`
+	Name      string     `gorm:"type:varchar(255);not null" json:"name"`
+	Type      string     `gorm:"type:varchar(50);default:'party_client'" json:"type"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+}
+
+func (c *QuestChatChannel) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	return nil
+}
+

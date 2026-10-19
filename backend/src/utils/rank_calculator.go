@@ -98,3 +98,48 @@ func ComputeRequiredMinRank(budgetINR float64) (string, error) {
 		return models.RankSSS, nil
 	}
 }
+
+// RankWeights maps rank letters to ascending numerical weight for hierarchical comparison.
+var RankWeights = map[string]int{
+	models.RankF:   1,
+	models.RankE:   2,
+	models.RankD:   3,
+	models.RankC:   4,
+	models.RankB:   5,
+	models.RankA:   6,
+	models.RankS:   7,
+	models.RankSS:  8,
+	models.RankSSS: 9,
+}
+
+// GetRankWeight returns the numeric weight for a given rank string.
+func GetRankWeight(rank string) int {
+	if w, ok := RankWeights[rank]; ok {
+		return w
+	}
+	return 1
+}
+
+// CompareRanks compares two ranks. Returns >0 if rankA > rankB, 0 if equal, and <0 if rankA < rankB.
+func CompareRanks(rankA, rankB string) int {
+	return GetRankWeight(rankA) - GetRankWeight(rankB)
+}
+
+// IsRankSufficient checks if user or party rank meets or exceeds the required rank.
+func IsRankSufficient(userRank, requiredRank string) bool {
+	return GetRankWeight(userRank) >= GetRankWeight(requiredRank)
+}
+
+// GetVisibleRanks returns all rank codes that are visible under asymmetric tier visibility
+// (requester can see their own tier and all lower tiers: required_min_rank <= user_rank).
+func GetVisibleRanks(userRank string) []string {
+	userWeight := GetRankWeight(userRank)
+	visible := make([]string, 0, len(RankTiers))
+	for _, tier := range RankTiers {
+		if GetRankWeight(tier.Rank) <= userWeight {
+			visible = append(visible, tier.Rank)
+		}
+	}
+	return visible
+}
+
