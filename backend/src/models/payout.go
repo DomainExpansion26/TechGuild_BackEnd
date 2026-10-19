@@ -19,17 +19,31 @@ const (
 	PayoutStatusReversed   PayoutStatus = "reversed"
 )
 
-// Payout records money going OUT to a freelancer/agency.
+type PayoutSource string
+
+const (
+	PayoutSourceMilestone        PayoutSource = "milestone"         // auto-created at milestone release
+	PayoutSourceWalletWithdrawal PayoutSource = "wallet_withdrawal" // manual from wallet
+)
+
+// Payout records money going OUT to a freelancer.
 //
-// Rule: a payout must NOT be created before the milestone is released.
+// Two sources:
+//   - Source=milestone: auto-payout at milestone release (legacy flow)
+//   - Source=wallet_withdrawal: manual withdrawal from wallet
+//
+// For wallet_withdrawal, MilestonePaymentID and QuestID are NULL.
 type Payout struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	UserID uuid.UUID `gorm:"type:uuid;not null;index"` // freelancer/agency receiving
+	UserID uuid.UUID `gorm:"type:uuid;not null;index"` // freelancer receiving
 
-	MilestonePaymentID uuid.UUID `gorm:"type:uuid;not null;index"`
-	ProjectID          uuid.UUID `gorm:"type:uuid;not null;index"`
-	ContractID         uuid.UUID `gorm:"type:uuid;not null;index"`
+	// Which flow created this payout
+	Source PayoutSource `gorm:"type:varchar(30);not null;default:'milestone';index"`
+
+	// Nullable — wallet withdrawals don't reference a specific milestone/quest
+	MilestonePaymentID *uuid.UUID `gorm:"type:uuid;index"`
+	QuestID            *uuid.UUID `gorm:"type:uuid;index"`
 
 	PayoutMethodID uuid.UUID `gorm:"type:uuid;not null;index"`
 

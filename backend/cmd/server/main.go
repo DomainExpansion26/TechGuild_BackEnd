@@ -35,10 +35,8 @@ func main() {
 
 	router := gin.Default()
 
-	// Allowed origins are env-driven (FRONTEND_URL + ZUDOKU_URL, comma-separated).
 	router.Use(middleware.CORS(cfg))
 
-	// ---- public / unversioned routes ----
 	router.Static("/uploads", "./uploads")
 
 	router.HEAD("/", func(c *gin.Context) {
@@ -62,7 +60,6 @@ func main() {
 	}
 	apiConfig.Servers = []*huma.Server{{URL: publicURL}}
 
-	// JWT Bearer auth scheme
 	apiConfig.Components = &huma.Components{
 		SecuritySchemes: map[string]*huma.SecurityScheme{
 			"BearerAuth": {
@@ -77,11 +74,14 @@ func main() {
 	api := humagin.New(router, apiConfig)
 
 	// --------------------------------------------------
-	// Payment & Payout (provider-neutral)
+	// Payment Provider (selected via PAYMENT_PROVIDER env)
 	// --------------------------------------------------
 
-	// Provider — abhi mock, baad me Razorpay/Stripe/Payoneer adapter swap karenge.
-	paymentProvider := services.NewMockPaymentProvider()
+	paymentProvider := buildPaymentProvider(cfg)
+
+	// --------------------------------------------------
+	// Payment & Payout services
+	// --------------------------------------------------
 
 	paymentMethodService := services.NewPaymentMethodService(cfg, paymentProvider)
 	payoutMethodService := services.NewPayoutMethodService(cfg, paymentProvider)
@@ -90,10 +90,21 @@ func main() {
 	payoutMethodController := controllers.NewPayoutMethodController(payoutMethodService)
 
 	// --------------------------------------------------
-	// Quest Milestone (freelancer creates, client reviews)
+	// Quest Milestone flow
 	// --------------------------------------------------
 
 	questMilestoneController := controllers.NewQuestMilestoneController(cfg)
+	milestoneFundingService := services.NewMilestoneFundingService(cfg, paymentProvider)
+	milestoneFundingController := controllers.NewMilestoneFundingControllerFromService(milestoneFundingService)
+	milestoneReleaseController := controllers.NewMilestoneReleaseController(cfg, paymentProvider)
+
+	// --------------------------------------------------
+	// Wallet + Withdrawal + Refund
+	// --------------------------------------------------
+
+	walletController := controllers.NewWalletController(cfg)
+	walletWithdrawalController := controllers.NewWalletWithdrawalController(cfg, paymentProvider)
+	refundController := controllers.NewRefundController(cfg, paymentProvider)
 
 	// --------------------------------------------------
 	// Webhook infrastructure
@@ -101,9 +112,12 @@ func main() {
 
 	webhookEventRepo := repository.NewPaymentWebhookEventRepository()
 	payoutMethodRepoForWebhook := repository.NewPayoutMethodRepository()
-	webhookService := services.NewWebhookService(webhookEventRepo, payoutMethodRepoForWebhook)
+	webhookService := services.NewWebhookService(
+		webhookEventRepo,
+		payoutMethodRepoForWebhook,
+		milestoneFundingService,
+	)
 
-	// Register provider verifiers (only if credentials configured)
 	if cfg.RazorpayWebhookSecret != "" {
 		webhookService.RegisterVerifier(
 			services.NewRazorpayWebhookVerifier(cfg.RazorpayWebhookSecret),
@@ -125,38 +139,36 @@ func main() {
 	// Route registration
 	// --------------------------------------------------
 
-	// Core
 	routes.RegisterAuthRoutes(api, authController)
 	routes.RegisterProfileRoutes(api, profileController)
 	routes.RegisterSettingsRoutes(api, settingsController)
 	routes.RegisterOAuthRoutes(api, oauthController)
 
-	// Party, Verification, 2FA
 	routes.RegisterPartyRoutes(api)
 	routes.RegisterVerificationRoutes(api)
 	routes.RegisterTwoFactorRoutes(api)
 
-	// Quest flow
 	routes.RegisterQuestRoutes(api)
 	routes.RegisterTaskManagementRoutes(api)
 
-	// Quest Milestones (freelancer CRUD + client review)
 	routes.RegisterQuestMilestoneRoutes(api, questMilestoneController)
+	routes.RegisterMilestoneFundingRoutes(api, milestoneFundingController)
+	routes.RegisterMilestoneReleaseRoutes(api, milestoneReleaseController)
+	routes.RegisterWalletRoutes(api, walletController)
+	routes.RegisterWalletWithdrawalRoutes(api, walletWithdrawalController)
+	routes.RegisterRefundRoutes(api, refundController)
 
-	// Payment & Payout methods (client-side + freelancer payout methods)
 	routes.RegisterPaymentMethodRoutes(api, paymentMethodController)
 	routes.RegisterPayoutMethodRoutes(api, payoutMethodController)
 
-	// Webhooks
 	routes.RegisterWebhookRoutes(api, webhookController)
 
-	// -------- DISABLED (project-based, will be replaced with Quest-based) --------
+	// -------- DISABLED (project-based, replaced by Quest flow) --------
 	// routes.RegisterContractRoutes(api)
 	// routes.RegisterMilestoneRoutes(api)
 	// routes.RegisterProjectRoutes(api)
 	// routes.RegisterProjectApplicationRoutes(api)
 	// routes.RegisterSubmissionRoutes(api)
-	// routes.RegisterMilestonePaymentRoutes(api, milestonePaymentController)
 
 	log.Println("Server running on :8080")
 

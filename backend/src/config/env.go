@@ -39,7 +39,14 @@ func LoadConfig() (*Config, error) {
 		SMTPEmail:    viper.GetString("SMTP_EMAIL"),
 		SMTPPassword: viper.GetString("SMTP_PASSWORD"),
 
+		PaymentProvider:       viper.GetString("PAYMENT_PROVIDER"),
+		RazorpayKeyID:         viper.GetString("RAZORPAY_KEY_ID"),
+		RazorpayKeySecret:     viper.GetString("RAZORPAY_KEY_SECRET"),
 		RazorpayWebhookSecret: viper.GetString("RAZORPAY_WEBHOOK_SECRET"),
+
+		RazorpayXKeyID:         viper.GetString("RAZORPAYX_KEY_ID"),
+		RazorpayXKeySecret:     viper.GetString("RAZORPAYX_KEY_SECRET"),
+		RazorpayXAccountNumber: viper.GetString("RAZORPAYX_ACCOUNT_NUMBER"),
 
 		ClientProcessingFeeBps:     viper.GetInt64("CLIENT_PROCESSING_FEE_BPS"),
 		FreelancerProcessingFeeBps: viper.GetInt64("FREELANCER_PROCESSING_FEE_BPS"),

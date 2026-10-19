@@ -23,29 +23,30 @@ type WebhookService struct {
 	verifiers  map[string]WebhookVerifier
 	eventRepo  repository.PaymentWebhookEventRepository
 	payoutRepo repository.PayoutMethodRepository
+
+	// For async payment events
+	fundingSvc *MilestoneFundingService
 }
 
 func NewWebhookService(
 	eventRepo repository.PaymentWebhookEventRepository,
 	payoutRepo repository.PayoutMethodRepository,
+	fundingSvc *MilestoneFundingService,
 ) *WebhookService {
 	return &WebhookService{
 		verifiers:  make(map[string]WebhookVerifier),
 		eventRepo:  eventRepo,
 		payoutRepo: payoutRepo,
+		fundingSvc: fundingSvc,
 	}
 }
 
-// RegisterVerifier adds a provider verifier. Call this during startup for
-// each provider you have credentials for.
 func (s *WebhookService) RegisterVerifier(v WebhookVerifier) {
 	s.verifiers[v.Provider()] = v
 }
 
-// ProcessWebhook handles a webhook delivery. It is idempotent:
-// duplicate deliveries with the same (provider, event_id) have exactly one effect.
+// ProcessWebhook — idempotent
 func (s *WebhookService) ProcessWebhook(provider string, payload []byte, signature string) error {
-	// 1. Verify signature BEFORE any DB write
 	verifier, ok := s.verifiers[provider]
 	if !ok {
 		return ErrWebhookUnknownProvider
@@ -54,13 +55,11 @@ func (s *WebhookService) ProcessWebhook(provider string, payload []byte, signatu
 		return fmt.Errorf("%w: %v", ErrWebhookInvalidSig, err)
 	}
 
-	// 2. Parse into provider-neutral event
 	event, err := verifier.ParseEvent(payload)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWebhookMalformed, err)
 	}
 
-	// 3. Idempotency check — has this event been delivered before?
 	exists, err := s.eventRepo.ExistsByProviderAndEventID(event.Provider, event.ProviderEventID)
 	if err != nil {
 		return fmt.Errorf("idempotency check failed: %w", err)
@@ -71,7 +70,6 @@ func (s *WebhookService) ProcessWebhook(provider string, payload []byte, signatu
 		return nil
 	}
 
-	// 4. Persist raw event before processing
 	rawBytes, _ := json.Marshal(event.Raw)
 	record := &models.PaymentWebhookEvent{
 		Provider:        event.Provider,
@@ -82,27 +80,21 @@ func (s *WebhookService) ProcessWebhook(provider string, payload []byte, signatu
 		Status:          models.WebhookEventStatusReceived,
 	}
 	if err := s.eventRepo.Create(record); err != nil {
-		// Unique constraint race — another delivery won. Treat as duplicate.
 		if isUniqueConstraint(err) {
-			log.Printf("webhook race: provider=%s event_id=%s — duplicate insert",
-				event.Provider, event.ProviderEventID)
+			log.Printf("webhook race: provider=%s event_id=%s", event.Provider, event.ProviderEventID)
 			return nil
 		}
 		return fmt.Errorf("failed to persist webhook: %w", err)
 	}
 
-	// 5. Dispatch to handler
 	if err := s.dispatch(event); err != nil {
 		_ = s.eventRepo.MarkFailed(record.ID, err.Error())
 		return err
 	}
 
-	// 6. Mark processed
 	return s.eventRepo.MarkProcessed(record.ID)
 }
 
-// dispatch routes the event to the correct handler based on type.
-// Add more cases as you wire more providers/events.
 func (s *WebhookService) dispatch(event *WebhookEvent) error {
 	switch event.Provider {
 	case "razorpay":
@@ -112,58 +104,122 @@ func (s *WebhookService) dispatch(event *WebhookEvent) error {
 	default:
 		log.Printf("webhook: no dispatcher for provider=%s event=%s",
 			event.Provider, event.EventType)
-		return nil // don't fail — just ignore
+		return nil
 	}
 }
 
-// handleRazorpayEvent routes Razorpay events to specific handlers.
+// ============================================================
+// Razorpay event routing
+// ============================================================
+
 func (s *WebhookService) handleRazorpayEvent(event *WebhookEvent) error {
 	switch event.EventType {
+	// Payment lifecycle
+	case "payment.captured":
+		return s.handlePaymentCaptured(event)
+	case "payment.failed":
+		return s.handlePaymentFailed(event)
+
+	// Fund account validation (RazorpayX)
 	case "fund_account.validation.completed":
 		return s.handleFundAccountVerified(event)
 	case "fund_account.validation.failed":
 		return s.handleFundAccountFailed(event)
+
+	// Payout lifecycle (RazorpayX)
+	case "payout.processed":
+		return s.handlePayoutProcessed(event)
+	case "payout.failed":
+		return s.handlePayoutFailed(event)
+	case "payout.reversed":
+		return s.handlePayoutReversed(event)
+
+	// Refund lifecycle
+	case "refund.processed":
+		return s.handleRefundProcessed(event)
+	case "refund.failed":
+		return s.handleRefundFailed(event)
+
 	default:
 		log.Printf("razorpay webhook: unhandled event type=%s", event.EventType)
 		return nil
 	}
 }
 
-func (s *WebhookService) handleFundAccountVerified(event *WebhookEvent) error {
-	log.Printf("razorpay: fund_account.validation.completed received event_id=%s", event.ProviderEventID)
+// ============================================================
+// Payment handlers
+// ============================================================
 
+func (s *WebhookService) handlePaymentCaptured(event *WebhookEvent) error {
+	orderID, paymentID := extractPaymentIDs(event.Raw)
+	if orderID == "" || paymentID == "" {
+		log.Printf("razorpay: payment.captured missing order/payment id")
+		return nil
+	}
+
+	if s.fundingSvc == nil {
+		log.Printf("razorpay: funding service not wired — skipping payment.captured")
+		return nil
+	}
+
+	log.Printf("razorpay: payment.captured order=%s payment=%s", orderID, paymentID)
+
+	_, err := s.fundingSvc.MarkPaymentCaptured(orderID, paymentID)
+	if err != nil {
+		return fmt.Errorf("mark captured: %w", err)
+	}
+	return nil
+}
+
+func (s *WebhookService) handlePaymentFailed(event *WebhookEvent) error {
+	orderID, _ := extractPaymentIDs(event.Raw)
+	if orderID == "" {
+		return nil
+	}
+	reason := extractPaymentFailureReason(event.Raw)
+	if reason == "" {
+		reason = "razorpay payment failed"
+	}
+
+	if s.fundingSvc == nil {
+		return nil
+	}
+
+	log.Printf("razorpay: payment.failed order=%s reason=%s", orderID, reason)
+	return s.fundingSvc.MarkPaymentFailed(orderID, reason)
+}
+
+// ============================================================
+// Fund account handlers (RazorpayX)
+// ============================================================
+
+func (s *WebhookService) handleFundAccountVerified(event *WebhookEvent) error {
 	fundAccountID := extractFundAccountID(event.Raw)
 	if fundAccountID == "" {
-		log.Printf("razorpay: webhook missing fund_account id, event_id=%s", event.ProviderEventID)
-		return nil // not fatal, just log
+		return nil
 	}
 
 	method, err := s.payoutRepo.GetByProviderMethodID("razorpay", fundAccountID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("razorpay: no payout method found for fund_account_id=%s (orphan webhook)", fundAccountID)
-			return nil // orphan account — probably from another source
+			log.Printf("razorpay: no payout method for fund_account_id=%s", fundAccountID)
+			return nil
 		}
-		return fmt.Errorf("failed to lookup payout method: %w", err)
+		return err
 	}
 
-	// Already verified? Skip.
 	if method.Status == models.PayoutMethodStatusVerified {
-		log.Printf("razorpay: payout method %s already verified, skipping", method.ID)
 		return nil
 	}
 
 	if err := s.payoutRepo.UpdateStatus(method.ID, models.PayoutMethodStatusVerified); err != nil {
-		return fmt.Errorf("failed to update payout method status: %w", err)
+		return err
 	}
-
-	log.Printf("razorpay: payout method %s marked verified (fund_account=%s)", method.ID, fundAccountID)
+	log.Printf("razorpay: payout method %s verified", method.ID)
 	return nil
 }
 
 func (s *WebhookService) handleFundAccountFailed(event *WebhookEvent) error {
-	log.Printf("razorpay: fund_account.validation.failed received event_id=%s", event.ProviderEventID)
-
 	fundAccountID := extractFundAccountID(event.Raw)
 	if fundAccountID == "" {
 		return nil
@@ -172,7 +228,6 @@ func (s *WebhookService) handleFundAccountFailed(event *WebhookEvent) error {
 	method, err := s.payoutRepo.GetByProviderMethodID("razorpay", fundAccountID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("razorpay: no payout method found for fund_account_id=%s", fundAccountID)
 			return nil
 		}
 		return err
@@ -181,8 +236,64 @@ func (s *WebhookService) handleFundAccountFailed(event *WebhookEvent) error {
 	if err := s.payoutRepo.UpdateStatus(method.ID, models.PayoutMethodStatusFailed); err != nil {
 		return err
 	}
+	log.Printf("razorpay: payout method %s failed", method.ID)
+	return nil
+}
 
-	log.Printf("razorpay: payout method %s marked failed (fund_account=%s)", method.ID, fundAccountID)
+// ============================================================
+// Payout handlers (RazorpayX)
+// ============================================================
+
+func (s *WebhookService) handlePayoutProcessed(event *WebhookEvent) error {
+	payoutID := extractPayoutID(event.Raw)
+	if payoutID == "" {
+		return nil
+	}
+	log.Printf("razorpay: payout.processed id=%s (handler TODO)", payoutID)
+	// TODO: find Payout row by provider_payout_id, mark paid
+	return nil
+}
+
+func (s *WebhookService) handlePayoutFailed(event *WebhookEvent) error {
+	payoutID := extractPayoutID(event.Raw)
+	reason := extractPayoutFailureReason(event.Raw)
+	if payoutID == "" {
+		return nil
+	}
+	log.Printf("razorpay: payout.failed id=%s reason=%s (handler TODO)", payoutID, reason)
+	// TODO: reverse wallet debit, mark payout failed
+	return nil
+}
+
+func (s *WebhookService) handlePayoutReversed(event *WebhookEvent) error {
+	payoutID := extractPayoutID(event.Raw)
+	if payoutID == "" {
+		return nil
+	}
+	log.Printf("razorpay: payout.reversed id=%s (handler TODO)", payoutID)
+	return nil
+}
+
+// ============================================================
+// Refund handlers
+// ============================================================
+
+func (s *WebhookService) handleRefundProcessed(event *WebhookEvent) error {
+	refundID := extractRefundID(event.Raw)
+	if refundID == "" {
+		return nil
+	}
+	log.Printf("razorpay: refund.processed id=%s (handler TODO)", refundID)
+	// Our refund flow already marks completed synchronously; this is a safety net.
+	return nil
+}
+
+func (s *WebhookService) handleRefundFailed(event *WebhookEvent) error {
+	refundID := extractRefundID(event.Raw)
+	if refundID == "" {
+		return nil
+	}
+	log.Printf("razorpay: refund.failed id=%s (handler TODO)", refundID)
 	return nil
 }
 
@@ -191,21 +302,17 @@ func (s *WebhookService) handleMockEvent(event *WebhookEvent) error {
 	return nil
 }
 
-// isUniqueConstraint detects Postgres unique-violation (SQLSTATE 23505).
+// ============================================================
+// Helpers
+// ============================================================
+
 func isUniqueConstraint(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return true
-	}
-	return false
+	return errors.Is(err, gorm.ErrDuplicatedKey)
 }
 
-// extractFundAccountID pulls fund_account.id from Razorpay's webhook payload.
-// Expected shape:
-//
-//	{ "payload": { "fund_account": { "entity": { "id": "fa_xxx" } } } }
 func extractFundAccountID(raw map[string]any) string {
 	payload, ok := raw["payload"].(map[string]any)
 	if !ok {
@@ -216,6 +323,103 @@ func extractFundAccountID(raw map[string]any) string {
 		return ""
 	}
 	entity, ok := fa["entity"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	id, _ := entity["id"].(string)
+	return id
+}
+
+// extractPaymentIDs returns (order_id, payment_id) from payment event payload.
+//
+// Expected shape:
+//
+//	{ "payload": { "payment": { "entity": { "id": "pay_xxx", "order_id": "order_xxx" } } } }
+func extractPaymentIDs(raw map[string]any) (string, string) {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	payment, ok := payload["payment"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	entity, ok := payment["entity"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	orderID, _ := entity["order_id"].(string)
+	paymentID, _ := entity["id"].(string)
+	return orderID, paymentID
+}
+
+func extractPaymentFailureReason(raw map[string]any) string {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	payment, ok := payload["payment"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entity, ok := payment["entity"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if errObj, ok := entity["error"].(map[string]any); ok {
+		if desc, ok := errObj["description"].(string); ok {
+			return desc
+		}
+	}
+	return ""
+}
+
+func extractPayoutID(raw map[string]any) string {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	payout, ok := payload["payout"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entity, ok := payout["entity"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	id, _ := entity["id"].(string)
+	return id
+}
+
+func extractPayoutFailureReason(raw map[string]any) string {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	payout, ok := payload["payout"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entity, ok := payout["entity"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if reason, ok := entity["failure_reason"].(string); ok {
+		return reason
+	}
+	return ""
+}
+
+func extractRefundID(raw map[string]any) string {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	refund, ok := payload["refund"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entity, ok := refund["entity"].(map[string]any)
 	if !ok {
 		return ""
 	}

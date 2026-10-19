@@ -12,14 +12,14 @@ import (
 type EscrowTransactionRepository interface {
 	Create(escrow *models.EscrowTransaction) error
 	GetByID(id uuid.UUID) (*models.EscrowTransaction, error)
-	GetByMilestoneID(milestoneID uuid.UUID) (*models.EscrowTransaction, error)
+	GetByQuestMilestoneID(questMilestoneID uuid.UUID) (*models.EscrowTransaction, error)
 	GetByReleaseIdempotencyKey(key string) (*models.EscrowTransaction, error)
 	UpdateStatus(id uuid.UUID, status models.EscrowStatus) error
 	MarkHeld(id uuid.UUID, providerEscrowID string) error
 	MarkReleased(id uuid.UUID) error
 	MarkRefunded(id uuid.UUID) error
 	MarkFailed(id uuid.UUID, reason string) error
-	GetByMilestoneIDForUpdate(milestoneID uuid.UUID) (*models.EscrowTransaction, error)
+	GetByQuestMilestoneIDForUpdate(questMilestoneID uuid.UUID) (*models.EscrowTransaction, error)
 	Save(escrow *models.EscrowTransaction) error
 
 	WithTransaction(fn func(txRepo EscrowTransactionRepository) error) error
@@ -56,9 +56,9 @@ func (r *escrowTransactionRepository) GetByID(id uuid.UUID) (*models.EscrowTrans
 	return &e, nil
 }
 
-func (r *escrowTransactionRepository) GetByMilestoneID(milestoneID uuid.UUID) (*models.EscrowTransaction, error) {
+func (r *escrowTransactionRepository) GetByQuestMilestoneID(questMilestoneID uuid.UUID) (*models.EscrowTransaction, error) {
 	var e models.EscrowTransaction
-	err := r.db.Where("milestone_id = ?", milestoneID).First(&e).Error
+	err := r.db.Where("quest_milestone_id = ?", questMilestoneID).First(&e).Error
 	if err != nil {
 		return nil, err
 	}
@@ -74,11 +74,11 @@ func (r *escrowTransactionRepository) GetByReleaseIdempotencyKey(key string) (*m
 	return &e, nil
 }
 
-func (r *escrowTransactionRepository) GetByMilestoneIDForUpdate(milestoneID uuid.UUID) (*models.EscrowTransaction, error) {
+func (r *escrowTransactionRepository) GetByQuestMilestoneIDForUpdate(questMilestoneID uuid.UUID) (*models.EscrowTransaction, error) {
 	var e models.EscrowTransaction
 	err := r.db.
 		Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("milestone_id = ?", milestoneID).
+		Where("quest_milestone_id = ?", questMilestoneID).
 		First(&e).Error
 	if err != nil {
 		return nil, err

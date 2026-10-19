@@ -16,55 +16,80 @@ var (
 
 const basisPointsDenominator int64 = 10000
 
+// FeeSplit represents the complete breakdown for one milestone payment.
+type FeeSplit struct {
+	MilestoneAmountMinor int64
+
+	ClientFeeMinor   int64
+	ClientFeeRateBps int64
+
+	FreelancerFeeMinor   int64
+	FreelancerFeeRateBps int64
+
+	ClientChargedMinor int64 // milestone + client_fee
+	FreelancerNetMinor int64 // milestone - freelancer_fee
+	PlatformTotalMinor int64 // client_fee + freelancer_fee
+}
+
 type PlatformFeeService struct{}
 
 func NewPlatformFeeService() *PlatformFeeService {
 	return &PlatformFeeService{}
 }
 
-// CalculateFee returns (platformFee, freelancerAmount, error).
+// CalculateDualFee computes the full dual-sided fee split.
 //
-// Rules:
-//   - Percentage fee: fee = (gross * rateBps) / 10000, half-up rounding.
-//   - Fixed fee: fee = fixedAmount (must be <= gross).
-//   - freelancerAmount = gross - fee
+// Given milestone ₹10,000, client 5%, freelancer 5%:
 //
-// Overflow-safe for int64.
-func (s *PlatformFeeService) CalculateFee(
-	grossAmount int64,
-	feeType models.FeeType,
-	rateBps int64,
-	fixedAmount int64,
-) (int64, int64, error) {
-	if grossAmount <= 0 {
-		return 0, 0, ErrFeeCalculationInvalid
+//	ClientFee       = ₹500
+//	ClientCharged   = ₹10,500
+//	FreelancerFee   = ₹500
+//	FreelancerNet   = ₹9,500
+//	PlatformTotal   = ₹1,000
+//
+// Overflow-safe. Half-up rounding on each fee.
+func (s *PlatformFeeService) CalculateDualFee(
+	milestoneAmountMinor int64,
+	clientFeeRateBps int64,
+	freelancerFeeRateBps int64,
+) (*FeeSplit, error) {
+	if milestoneAmountMinor <= 0 {
+		return nil, ErrFeeCalculationInvalid
+	}
+	if clientFeeRateBps < 0 || clientFeeRateBps > basisPointsDenominator {
+		return nil, ErrFeeCalculationInvalid
+	}
+	if freelancerFeeRateBps < 0 || freelancerFeeRateBps > basisPointsDenominator {
+		return nil, ErrFeeCalculationInvalid
 	}
 
-	var fee int64
-	switch feeType {
-	case models.FeeTypePercentage:
-		if rateBps < 0 || rateBps > basisPointsDenominator {
-			return 0, 0, ErrFeeCalculationInvalid
-		}
-		calculated, err := percentageHalfUp(grossAmount, rateBps)
-		if err != nil {
-			return 0, 0, err
-		}
-		fee = calculated
-	case models.FeeTypeFixed:
-		if fixedAmount < 0 || fixedAmount > grossAmount {
-			return 0, 0, ErrFeeCalculationInvalid
-		}
-		fee = fixedAmount
-	default:
-		return 0, 0, ErrFeeCalculationInvalid
+	clientFee, err := percentageHalfUp(milestoneAmountMinor, clientFeeRateBps)
+	if err != nil {
+		return nil, err
+	}
+	freelancerFee, err := percentageHalfUp(milestoneAmountMinor, freelancerFeeRateBps)
+	if err != nil {
+		return nil, err
 	}
 
-	freelancerAmount := grossAmount - fee
-	if freelancerAmount < 0 {
-		return 0, 0, ErrFeeCalculationInvalid
+	clientCharged := milestoneAmountMinor + clientFee
+	freelancerNet := milestoneAmountMinor - freelancerFee
+	platformTotal := clientFee + freelancerFee
+
+	if freelancerNet < 0 {
+		return nil, ErrFeeCalculationInvalid
 	}
-	return fee, freelancerAmount, nil
+
+	return &FeeSplit{
+		MilestoneAmountMinor: milestoneAmountMinor,
+		ClientFeeMinor:       clientFee,
+		ClientFeeRateBps:     clientFeeRateBps,
+		FreelancerFeeMinor:   freelancerFee,
+		FreelancerFeeRateBps: freelancerFeeRateBps,
+		ClientChargedMinor:   clientCharged,
+		FreelancerNetMinor:   freelancerNet,
+		PlatformTotalMinor:   platformTotal,
+	}, nil
 }
 
 // percentageHalfUp computes round-half-up of (amount * rateBps) / 10000.
@@ -85,13 +110,13 @@ func percentageHalfUp(amount, rateBps int64) (int64, error) {
 	return quotient, nil
 }
 
-// RecordFee creates a PlatformFee row (status=pending). Called inside the
-// funding TX after MilestonePayment is created.
+// RecordFee creates a PlatformFee row. Two rows per milestone (client + freelancer).
 func (s *PlatformFeeService) RecordFee(tx *gorm.DB, fee *models.PlatformFee) error {
 	return tx.Create(fee).Error
 }
 
-// SettleFee marks a platform fee as settled. Called inside the release TX.
+// SettleFee marks ALL platform fee rows for a milestone_payment as settled.
+// (Dual-fee model = 2 rows per milestone_payment.)
 func (s *PlatformFeeService) SettleFee(tx *gorm.DB, milestonePaymentID uuid.UUID) error {
 	res := tx.
 		Model(&models.PlatformFee{}).

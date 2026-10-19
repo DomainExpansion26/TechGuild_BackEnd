@@ -134,10 +134,11 @@ func (m *MockPaymentProvider) CreatePayment(req CreatePaymentRequest) (*PaymentR
 		return nil, errors.New("mock: amount must be positive")
 	}
 	return &PaymentResult{
-		ProviderPaymentID: "mock_pay_" + shortID(),
-		Status:            "captured", // mock me direct capture
-		Amount:            req.Amount,
-		Currency:          req.Currency,
+		ProviderPaymentID:    "mock_pay_" + shortID(),
+		Status:               "captured",
+		Amount:               req.Amount,
+		Currency:             req.Currency,
+		RequiresConfirmation: false, // mock is synchronous
 	}, nil
 }
 

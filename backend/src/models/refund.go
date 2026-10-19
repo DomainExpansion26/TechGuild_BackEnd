@@ -17,22 +17,20 @@ const (
 	RefundStatusCancelled  RefundStatus = "cancelled"
 )
 
-// Refund records a full or partial refund to the client.
+// Refund records a refund to the client.
 //
-// Rules:
-//   - Refund amount must NOT exceed refundable amount.
-//   - Refund creation must be idempotent.
+// For now (per discussion): only milestone amount is refunded.
+// Client fee is non-refundable.
 type Refund struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
 	PaymentID          uuid.UUID  `gorm:"type:uuid;not null;index"`
 	MilestonePaymentID *uuid.UUID `gorm:"type:uuid;index"`
-	ProjectID          uuid.UUID  `gorm:"type:uuid;not null;index"`
+	QuestID            uuid.UUID  `gorm:"type:uuid;not null;index"`
 
 	Provider         string  `gorm:"type:varchar(50);not null"`
 	ProviderRefundID *string `gorm:"type:varchar(255);index"`
 
-	// Amount, minor units
 	Amount   int64  `gorm:"not null"`
 	Currency string `gorm:"type:varchar(10);not null;default:'INR'"`
 

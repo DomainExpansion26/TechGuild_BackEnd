@@ -2,12 +2,6 @@ package services
 
 import "errors"
 
-// PaymentProvider is the provider-neutral interface that all payment
-// adapters (Razorpay, Stripe, Payoneer) must implement.
-//
-// Core services (PaymentMethodService, PayoutMethodService) depend only
-// on this interface, never on provider SDKs directly.
-
 // ErrNotSupported — return by adapters for capabilities they don't have.
 var (
 	ErrProviderUnsupported = errors.New("operation not supported by provider")
@@ -42,17 +36,19 @@ type PaymentProvider interface {
 	RefundPayment(req RefundRequest) (*RefundResult, error)
 }
 
-// ---------- Request/result types for milestone flow ----------
+// ============================================================
+// Request/result types — Quest-based
+// ============================================================
 
+// CreatePaymentRequest — amount = TOTAL client charged (milestone + client fee)
 type CreatePaymentRequest struct {
-	UserID         string
-	ProjectID      string
-	ContractID     string
-	MilestoneID    string
-	Amount         int64 // minor units
-	Currency       string
-	Description    string
-	IdempotencyKey string
+	UserID           string
+	QuestID          string
+	QuestMilestoneID string
+	Amount           int64 // minor units (milestone + client fee)
+	Currency         string
+	Description      string
+	IdempotencyKey   string
 }
 
 type PaymentResult struct {
@@ -60,11 +56,20 @@ type PaymentResult struct {
 	Status            string // pending / authorized / captured / failed
 	Amount            int64
 	Currency          string
+
+	// RequiresConfirmation — if true, the client must complete a checkout
+	// flow (e.g. Razorpay Checkout) and call back with payment confirmation.
+	// Mock returns false (already captured).
+	// Razorpay returns true (order created, awaiting payment).
+	RequiresConfirmation bool
+
+	// ClientKeyID — provider public key for frontend checkout (optional).
+	ClientKeyID string
 }
 
 type EscrowHoldRequest struct {
 	ProviderPaymentID string
-	Amount            int64
+	Amount            int64 // milestone amount only
 	Currency          string
 	IdempotencyKey    string
 }

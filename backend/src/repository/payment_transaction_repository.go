@@ -13,7 +13,7 @@ type PaymentTransactionRepository interface {
 	Create(tx *models.PaymentTransaction) error
 	ExistsByIdempotencyKey(key string) (bool, error)
 	ListByPayment(paymentID uuid.UUID) ([]models.PaymentTransaction, error)
-	ListByMilestone(milestoneID uuid.UUID) ([]models.PaymentTransaction, error)
+	ListByQuestMilestone(questMilestoneID uuid.UUID) ([]models.PaymentTransaction, error)
 
 	WithTransaction(fn func(txRepo PaymentTransactionRepository) error) error
 }
@@ -61,10 +61,10 @@ func (r *paymentTransactionRepository) ListByPayment(paymentID uuid.UUID) ([]mod
 	return txs, err
 }
 
-func (r *paymentTransactionRepository) ListByMilestone(milestoneID uuid.UUID) ([]models.PaymentTransaction, error) {
+func (r *paymentTransactionRepository) ListByQuestMilestone(questMilestoneID uuid.UUID) ([]models.PaymentTransaction, error) {
 	var txs []models.PaymentTransaction
 	err := r.db.
-		Where("milestone_id = ?", milestoneID).
+		Where("quest_milestone_id = ?", questMilestoneID).
 		Order("created_at ASC").
 		Find(&txs).Error
 	return txs, err

@@ -73,6 +73,9 @@ const (
 	// Both parties agreed, ready to fund
 	MilestoneStatusAgreed MilestoneStatus = "agreed"
 
+	// Funding initiated but provider awaiting confirmation (Razorpay checkout)
+	MilestoneStatusFundingPending MilestoneStatus = "funding_pending"
+
 	// Client funded, escrow holds money
 	MilestoneStatusFunded MilestoneStatus = "funded"
 
@@ -90,6 +93,10 @@ const (
 
 	// Cancelled
 	MilestoneStatusCancelled MilestoneStatus = "cancelled"
+
+	// Refund flow
+	MilestoneStatusRefundPending MilestoneStatus = "refund_pending"
+	MilestoneStatusRefunded      MilestoneStatus = "refunded"
 )
 
 // ============================================================
