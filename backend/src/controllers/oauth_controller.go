@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"errors"
+	"log"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +21,7 @@ import (
 	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
+	"golang.org/x/oauth2"
 )
 
 type GoogleUser struct {
@@ -223,6 +226,16 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 
 	token, err := config.GoogleOAuthConfig.Exchange(reqCtx, input.Code)
 	if err != nil {
+		var rErr *oauth2.RetrieveError
+		if errors.As(err, &rErr) {
+			status := 0
+			if rErr.Response != nil {
+				status = rErr.Response.StatusCode
+			}
+			log.Printf("[OAuth Google] Token exchange failed with status %d: %s", status, string(rErr.Body))
+		} else {
+			log.Printf("[OAuth Google] Token exchange failed: %v", err)
+		}
 		return errorRedirect("oauth_exchange_failed")
 	}
 
@@ -411,6 +424,16 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 
 	token, err := config.GitHubOAuthConfig.Exchange(reqCtx, input.Code)
 	if err != nil {
+		var rErr *oauth2.RetrieveError
+		if errors.As(err, &rErr) {
+			status := 0
+			if rErr.Response != nil {
+				status = rErr.Response.StatusCode
+			}
+			log.Printf("[OAuth GitHub] Token exchange failed with status %d: %s", status, string(rErr.Body))
+		} else {
+			log.Printf("[OAuth GitHub] Token exchange failed: %v", err)
+		}
 		return errorRedirect("oauth_exchange_failed")
 	}
 
