@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
@@ -23,6 +24,7 @@ type PaymentRepository interface {
 
 	WithTransaction(fn func(txRepo PaymentRepository) error) error
 	GetByProviderOrderID(provider, orderID string) (*models.Payment, error)
+	ListPendingOlderThan(minutes int) ([]models.Payment, error)
 }
 
 type paymentRepository struct {
@@ -155,4 +157,13 @@ func (r *paymentRepository) GetByProviderOrderID(provider, orderID string) (*mod
 		return nil, err
 	}
 	return &p, nil
+}
+
+func (r *paymentRepository) ListPendingOlderThan(minutes int) ([]models.Payment, error) {
+	var payments []models.Payment
+	threshold := time.Now().Add(-time.Duration(minutes) * time.Minute)
+	err := r.db.
+		Where("status = ? AND created_at < ?", models.PaymentStatusPending, threshold).
+		Find(&payments).Error
+	return payments, err
 }

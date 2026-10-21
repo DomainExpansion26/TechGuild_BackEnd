@@ -4,4 +4,5 @@
 tmp/
 seed_data.json
 PARTY_MANAGEMENT_SUGGESTIONS.md
-test_remaining.go
+test_remaining.gosrc/script/
+script/

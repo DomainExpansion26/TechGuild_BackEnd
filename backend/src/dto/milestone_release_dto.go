@@ -11,7 +11,7 @@ type SubmitForReleaseBody struct {
 }
 
 type SubmitForReleaseInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        SubmitForReleaseBody
 }
@@ -30,7 +30,7 @@ type ReleaseMilestoneBody struct {
 }
 
 type ReleaseMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        ReleaseMilestoneBody
 }
