@@ -9,6 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// ============================================================
+// Quest Status
+// ============================================================
+
 type QuestStatus string
 
 const (
@@ -21,6 +25,10 @@ const (
 	QuestStatusRejected   QuestStatus = "rejected"
 )
 
+// ============================================================
+// Quest Complexity
+// ============================================================
+
 type QuestComplexity string
 
 const (
@@ -30,6 +38,10 @@ const (
 	QuestComplexityEnterprise   QuestComplexity = "enterprise"
 )
 
+// ============================================================
+// Quest Type
+// ============================================================
+
 type QuestType string
 
 const (
@@ -38,6 +50,58 @@ const (
 	QuestTypeLongTerm   QuestType = "long_term"
 	QuestTypeMultiSkill QuestType = "multi_skill"
 )
+
+// ============================================================
+// Milestone Status — Freelancer creates, Client reviews
+// ============================================================
+
+type MilestoneStatus string
+
+const (
+	// Freelancer is creating/editing
+	MilestoneStatusDraft MilestoneStatus = "draft"
+
+	// Freelancer sent to client, awaiting review
+	MilestoneStatusAwaitingClientReview MilestoneStatus = "awaiting_client_review"
+
+	// Client requested changes, freelancer needs to respond
+	MilestoneStatusRevisionRequested MilestoneStatus = "revision_requested"
+
+	// Freelancer is applying requested changes
+	MilestoneStatusRevisionInProgress MilestoneStatus = "revision_in_progress"
+
+	// Both parties agreed, ready to fund
+	MilestoneStatusAgreed MilestoneStatus = "agreed"
+
+	// Funding initiated but provider awaiting confirmation (Razorpay checkout)
+	MilestoneStatusFundingPending MilestoneStatus = "funding_pending"
+
+	// Client funded, escrow holds money
+	MilestoneStatusFunded MilestoneStatus = "funded"
+
+	// Freelancer is working on tasks
+	MilestoneStatusWorkInProgress MilestoneStatus = "work_in_progress"
+
+	// Freelancer submitted for release, awaiting client
+	MilestoneStatusSubmittedForRelease MilestoneStatus = "submitted_for_release"
+
+	// Client released, money in freelancer wallet
+	MilestoneStatusReleased MilestoneStatus = "released"
+
+	// Dispute raised
+	MilestoneStatusDisputed MilestoneStatus = "disputed"
+
+	// Cancelled
+	MilestoneStatusCancelled MilestoneStatus = "cancelled"
+
+	// Refund flow
+	MilestoneStatusRefundPending MilestoneStatus = "refund_pending"
+	MilestoneStatusRefunded      MilestoneStatus = "refunded"
+)
+
+// ============================================================
+// Quest Model — created by CLIENT
+// ============================================================
 
 type Quest struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
@@ -54,7 +118,9 @@ type Quest struct {
 	Complexity  QuestComplexity `gorm:"type:varchar(50);default:'intermediate'"`
 
 	// Budget & Timeline (Step 3)
-	BudgetINR       float64   `gorm:"not null"`
+	// BudgetMinor is a CLIENT-SET reference amount in minor units (paise).
+	// It does NOT automatically change when freelancer adds milestones.
+	BudgetMinor     int64     `gorm:"not null;default:0"`
 	TimelineDays    int       `gorm:"not null"`
 	QuestType       QuestType `gorm:"type:varchar(50);default:'standard'"`
 	RequiredMinRank string    `gorm:"type:varchar(10);not null"`
@@ -73,7 +139,7 @@ type Quest struct {
 	EscrowFundedAt   *time.Time
 	EscrowRefundedAt *time.Time
 
-	// Assigned Freelancer / Agency
+	// Assigned Freelancer (after quest is accepted)
 	AssignedFreelancerID *uuid.UUID `gorm:"type:uuid;index"`
 	AssignedFreelancer   *User      `gorm:"foreignKey:AssignedFreelancerID"`
 
@@ -96,18 +162,35 @@ func (q *Quest) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ============================================================
+// Quest Milestone — created by FREELANCER (after quest accept)
+// ============================================================
+
 type QuestMilestone struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
 	QuestID uuid.UUID `gorm:"type:uuid;index;not null"`
 
+	// Freelancer who created this milestone
+	CreatedByID uuid.UUID `gorm:"type:uuid;index;not null"`
+	CreatedBy   User      `gorm:"foreignKey:CreatedByID"`
+
 	Title       string          `gorm:"type:varchar(255);not null"`
 	Description string          `gorm:"type:text"`
-	Amount      float64         `gorm:"not null"`
+	AmountMinor int64           `gorm:"not null;default:0"`
 	DueDays     int             `gorm:"not null"`
 	OrderIndex  int             `gorm:"not null"`
-	Status      MilestoneStatus `gorm:"type:varchar(30);default:'pending'"`
+	Status      MilestoneStatus `gorm:"type:varchar(40);default:'draft'"`
 
+	// Revision tracking
+	RevisionCount  int `gorm:"default:0"`
+	LastRevisionAt *time.Time
+	ClientFeedback string `gorm:"type:text"`
+
+	// Lifecycle timestamps
+	AgreedAt    *time.Time
+	FundedAt    *time.Time
+	ReleasedAt  *time.Time
 	StartDate   *time.Time
 	DueDate     *time.Time
 	CompletedAt *time.Time
@@ -125,6 +208,10 @@ func (m *QuestMilestone) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// ============================================================
+// Quest Skill — created by CLIENT
+// ============================================================
 
 type QuestSkill struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
