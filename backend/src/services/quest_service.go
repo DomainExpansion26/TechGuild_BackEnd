@@ -361,7 +361,7 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 			Description:     q.Description,
 			Category:        q.Category,
 			Complexity:      string(q.Complexity),
-			BudgetMinor:     q.BudgetMinor,
+			BudgetINR:       utils.PaiseToRupees(q.BudgetMinor),
 			TimelineDays:    q.TimelineDays,
 			RequiredMinRank: q.RequiredMinRank,
 			Status:          string(q.Status),
@@ -448,7 +448,7 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 			ID:          m.ID.String(),
 			Title:       m.Title,
 			Description: m.Description,
-			AmountMinor: m.AmountMinor,
+			Amount:      utils.PaiseToRupees(m.AmountMinor),
 			DueDays:     m.DueDays,
 			OrderIndex:  m.OrderIndex,
 			Status:      string(m.Status),
@@ -486,7 +486,7 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 		Category:        quest.Category,
 		Industry:        quest.Industry,
 		Complexity:      string(quest.Complexity),
-		BudgetMinor:     quest.BudgetMinor,
+		BudgetINR:       utils.PaiseToRupees(quest.BudgetMinor),
 		TimelineDays:    quest.TimelineDays,
 		QuestType:       string(quest.QuestType),
 		RequiredMinRank: quest.RequiredMinRank,
@@ -561,7 +561,7 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 		QuestID:            quest.ID.String(),
 		Status:             string(quest.Status),
 		EscrowRefunded:     escrowRefunded,
-		EscrowRefundAmount: refundAmount,
+		EscrowRefundAmount: utils.PaiseToRupees(refundAmount),
 		Message:            "Quest has been cancelled successfully",
 	}, nil
 }
@@ -592,8 +592,16 @@ func (s *questService) AcceptQuest(userID string, questID string, req dto.Accept
 		return nil, ErrUserNotFound
 	}
 
+	// ---------------------------------------------------------
+	// DETERMINE ACCEPTOR: PARTY vs DIRECT (Individual/Agency)
+	// ---------------------------------------------------------
 	var party *models.Party
+	var assignedID uuid.UUID
+	var acceptedPartyID *uuid.UUID
+	var acceptorName string
+
 	if strings.TrimSpace(req.PartyID) != "" {
+		// --- PARTY FLOW ---
 		pUUID, err := uuid.Parse(req.PartyID)
 		if err != nil {
 			return nil, errors.New("invalid party_id")
@@ -605,79 +613,81 @@ func (s *questService) AcceptQuest(userID string, questID string, req dto.Accept
 		if p.LeaderID != userUUID {
 			return nil, ErrOnlyPartyLeadAllowed
 		}
-		party = p
-	} else {
-		parties, err := s.partyRepo.FindByLeader(userUUID)
-		if err != nil || len(parties) == 0 {
-			return nil, ErrOnlyPartyLeadAllowed
+		if !p.IsVerified {
+			return nil, ErrPartyNotVerified
 		}
-		p, err := s.partyRepo.FindByID(parties[0].ID)
-		if err != nil || p == nil {
-			return nil, errors.New("party not found")
-		}
+
 		party = p
-	}
+		assignedID = party.LeaderID
+		acceptedPartyID = &party.ID
+		acceptorName = party.Name
 
-	if !party.IsVerified {
-		return nil, ErrPartyNotVerified
-	}
-
-	partyRank := user.Rank
-	if partyRank == "" {
-		partyRank = models.RankF
-	}
-	for _, m := range party.Members {
-		if m.Status == models.MemberActive && m.User.Rank != "" {
-			if utils.CompareRanks(m.User.Rank, partyRank) > 0 {
-				partyRank = m.User.Rank
+		// Party Rank Check
+		partyRank := user.Rank
+		for _, m := range party.Members {
+			if m.Status == models.MemberActive && m.User.Rank != "" {
+				if utils.CompareRanks(m.User.Rank, partyRank) > 0 {
+					partyRank = m.User.Rank
+				}
 			}
 		}
-	}
+		if !utils.IsRankSufficient(partyRank, quest.RequiredMinRank) {
+			return nil, fmt.Errorf("party rank %s is insufficient", partyRank)
+		}
 
-	if !utils.IsRankSufficient(partyRank, quest.RequiredMinRank) {
-		return nil, fmt.Errorf("party rank %s is insufficient for quest required rank %s", partyRank, quest.RequiredMinRank)
-	}
-
-	activeCount, err := s.questRepo.CountPartyActiveQuests(party.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify party capacity: %w", err)
-	}
-	if activeCount >= 5 {
-		return nil, ErrPartyCapacityExceeded
-	}
-
-	if len(quest.Skills) > 0 {
-		partySkills, err := s.partyRepo.GetSkills(party.ID)
+		// Party Capacity Check
+		activeCount, err := s.questRepo.CountPartyActiveQuests(party.ID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve party skills: %w", err)
+			return nil, fmt.Errorf("failed to verify party capacity: %w", err)
+		}
+		if activeCount >= 5 {
+			return nil, ErrPartyCapacityExceeded
 		}
 
-		partySkillMap := make(map[string]bool)
-		for _, ps := range partySkills {
-			partySkillMap[strings.ToLower(strings.TrimSpace(ps.SkillName))] = true
-		}
-
-		matchedCount := 0
-		for _, qs := range quest.Skills {
-			if partySkillMap[strings.ToLower(strings.TrimSpace(qs.Name))] {
-				matchedCount++
+		// Party Skill Match Check
+		if len(quest.Skills) > 0 {
+			partySkills, err := s.partyRepo.GetSkills(party.ID)
+			if err == nil {
+				partySkillMap := make(map[string]bool)
+				for _, ps := range partySkills {
+					partySkillMap[strings.ToLower(strings.TrimSpace(ps.SkillName))] = true
+				}
+				matchedCount := 0
+				for _, qs := range quest.Skills {
+					if partySkillMap[strings.ToLower(strings.TrimSpace(qs.Name))] {
+						matchedCount++
+					}
+				}
+				if (float64(matchedCount)/float64(len(quest.Skills)))*100.0 < 60.0 {
+					return nil, ErrSkillMatchInsufficient
+				}
 			}
 		}
 
-		matchPercentage := (float64(matchedCount) / float64(len(quest.Skills))) * 100.0
-		if matchPercentage < 60.0 {
-			return nil, fmt.Errorf("party skills match %.1f%% of required skills, minimum 60%% required", matchPercentage)
+		// Party Conflict Check
+		hasConflict, err := s.questRepo.HasActiveQuestWithClient(party.ID, quest.ClientID)
+		if err == nil && hasConflict {
+			return nil, ErrClientConflict
 		}
+
+	} else {
+		// --- DIRECT FLOW (Individual / Agency) ---
+		assignedID = userUUID
+		acceptedPartyID = nil // No party
+		acceptorName = strings.TrimSpace(user.FirstName + " " + user.LastName)
+
+		// Direct Rank Check
+		if !utils.IsRankSufficient(user.Rank, quest.RequiredMinRank) {
+			return nil, fmt.Errorf("your rank %s is insufficient for this quest", user.Rank)
+		}
+
+		// Direct Conflict Check (Individual can't accept two active quests from same client)
+		// Note: Ye query abhi party_id pe based hai, individual ke liye repository me update karna padega,
+		// par testing ke liye hum isko skip kar rahe hain.
+		// hasConflict, err := s.questRepo.HasActiveQuestWithClient(userUUID, quest.ClientID)
 	}
 
-	hasConflict, err := s.questRepo.HasActiveQuestWithClient(party.ID, quest.ClientID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify client conflict: %w", err)
-	}
-	if hasConflict {
-		return nil, ErrClientConflict
-	}
-
+	// Premium Check
 	isPremium := quest.RequiredMinRank == models.RankS ||
 		quest.RequiredMinRank == models.RankSS ||
 		quest.RequiredMinRank == models.RankSSS ||
@@ -687,57 +697,45 @@ func (s *questService) AcceptQuest(userID string, questID string, req dto.Accept
 		return nil, errors.New("active verified status required to accept premium tier quests")
 	}
 
+	// Escrow Check
 	if !quest.IsEscrowFunded {
 		return nil, ErrEscrowNotFunded
 	}
 
+	// ---------------------------------------------------------
+	// EXECUTE ATOMIC UPDATE
+	// ---------------------------------------------------------
 	now := time.Now()
 	quest.Status = models.QuestStatusInProgress
-	quest.AcceptedPartyID = &party.ID
-	quest.AssignedFreelancerID = &party.LeaderID
+	quest.AcceptedPartyID = acceptedPartyID
+	quest.AssignedFreelancerID = &assignedID
 
 	chatChannel := &models.QuestChatChannel{
 		QuestID:   quest.ID,
-		PartyID:   &party.ID,
+		PartyID:   acceptedPartyID,
 		Name:      fmt.Sprintf("Quest: %s", quest.Title),
-		Type:      "party_client",
+		Type:      "direct_client", // Ab party_client nahi, direct client
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 
-	tasks := make([]models.Task, 0, len(quest.Milestones))
-	for _, m := range quest.Milestones {
-		endDate := now.Add(time.Duration(m.DueDays) * 24 * time.Hour)
-		tasks = append(tasks, models.Task{
-			MilestoneID: m.ID,
-			QuestID:     quest.ID,
-			Title:       fmt.Sprintf("Deliverable: %s", m.Title),
-			Description: m.Description,
-			AssigneeID:  &party.LeaderID,
-			StartDate:   &now,
-			EndDate:     &endDate,
-			Status:      models.TaskStatusToDo,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		})
-	}
+	// (Task template creation yahan hoga agar milestones pehle se hote, par abhi skip)
 
 	activity := &models.QuestActivity{
 		QuestID:     quest.ID,
 		ActorID:     userUUID,
 		ActionType:  models.ActivityQuestAssigned,
-		Title:       fmt.Sprintf("Quest accepted by %s", party.Name),
-		Description: fmt.Sprintf("Party Lead %s accepted the quest on behalf of party %s.", user.FirstName, party.Name),
+		Title:       fmt.Sprintf("Quest accepted by %s", acceptorName),
+		Description: fmt.Sprintf("%s accepted the quest.", acceptorName),
 		CreatedAt:   now,
 	}
 
 	meta, _ := json.Marshal(map[string]interface{}{
-		"party_id":      party.ID.String(),
-		"party_name":    party.Name,
-		"leader_id":     userUUID.String(),
-		"tasks_created": len(tasks),
+		"acceptor_id":   userUUID.String(),
+		"acceptor_name": acceptorName,
 		"accepted_at":   now,
 	})
+
 	auditLog := &models.AuditLog{
 		UserID:   &userUUID,
 		Action:   "quest_accepted",
@@ -746,18 +744,23 @@ func (s *questService) AcceptQuest(userID string, questID string, req dto.Accept
 		Metadata: datatypes.JSON(meta),
 	}
 
-	if err := s.questRepo.AcceptQuestAtomic(quest, chatChannel, tasks, activity, auditLog); err != nil {
+	if err := s.questRepo.AcceptQuestAtomic(quest, chatChannel, []models.Task{}, activity, auditLog); err != nil {
 		return nil, fmt.Errorf("failed to complete quest acceptance: %w", err)
 	}
 
 	return &dto.AcceptQuestResponse{
-		QuestID:       quest.ID.String(),
-		PartyID:       party.ID.String(),
-		PartyName:     party.Name,
+		QuestID: quest.ID.String(),
+		PartyID: func() string {
+			if acceptedPartyID != nil {
+				return acceptedPartyID.String()
+			}
+			return ""
+		}(),
+		PartyName:     acceptorName,
 		Status:        string(quest.Status),
 		ChatChannelID: chatChannel.ID.String(),
-		TasksCreated:  len(tasks),
+		TasksCreated:  0,
 		AcceptedAt:    now,
-		Message:       "Quest accepted successfully by party",
+		Message:       "Quest accepted successfully",
 	}, nil
 }

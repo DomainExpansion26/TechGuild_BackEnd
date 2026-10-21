@@ -489,3 +489,25 @@ func (a *Adapter) RefundPayment(req services.RefundRequest) (*services.RefundRes
 		Currency:         "INR",
 	}, nil
 }
+
+func (a *Adapter) GetPayment(providerPaymentID string) (*services.PaymentResult, error) {
+	body, err := a.client.SDK().Payment.Fetch(providerPaymentID, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("razorpay fetch payment failed: %w", err)
+	}
+
+	status := toStr(body["status"])
+	amt := toInt64(body["amount"])
+	currency := toStr(body["currency"])
+
+	if status == "captured" {
+		return &services.PaymentResult{
+			ProviderPaymentID: providerPaymentID,
+			Status:            "captured",
+			Amount:            amt,
+			Currency:          currency,
+		}, nil
+	}
+
+	return nil, errors.New("payment not captured yet")
+}

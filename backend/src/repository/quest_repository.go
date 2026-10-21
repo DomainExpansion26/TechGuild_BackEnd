@@ -8,6 +8,7 @@ import (
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
+	"techguild-backend/src/utils"
 )
 
 type QuestFilter struct {
@@ -89,9 +90,9 @@ func (r *questRepository) FindByID(questID uuid.UUID) (*models.Quest, error) {
 	return &quest, nil
 }
 
-// UpdateQuest saves updates to an existing quest.
+// UpdateQuest saves updates to an existing quest (ignoring associations).
 func (r *questRepository) UpdateQuest(quest *models.Quest) error {
-	return r.db.Save(quest).Error
+	return r.db.Omit("Client", "AssignedFreelancer", "AcceptedParty", "Milestones", "Skills").Save(quest).Error
 }
 
 // ListQuests queries quests based on asymmetric tier visibility, client filter, and cursor pagination.
@@ -122,11 +123,11 @@ func (r *questRepository) ListQuests(filter QuestFilter) ([]models.Quest, string
 	}
 
 	if filter.MinBudget != nil {
-		query = query.Where("budget_inr >= ?", *filter.MinBudget)
+		query = query.Where("budget_minor >= ?", utils.RupeesToPaise(*filter.MinBudget))
 	}
 
 	if filter.MaxBudget != nil {
-		query = query.Where("budget_inr <= ?", *filter.MaxBudget)
+		query = query.Where("budget_minor <= ?", utils.RupeesToPaise(*filter.MaxBudget))
 	}
 
 	// Count total matching records before cursor pagination
@@ -206,7 +207,7 @@ func (r *questRepository) AcceptQuestAtomic(
 ) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		// 1. Update quest status and assigned entities
-		if err := tx.Save(quest).Error; err != nil {
+		if err := tx.Omit("Client", "AssignedFreelancer", "AcceptedParty", "Milestones", "Skills").Save(quest).Error; err != nil {
 			return err
 		}
 

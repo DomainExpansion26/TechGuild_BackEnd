@@ -15,7 +15,7 @@ type FundMilestoneBody struct {
 }
 
 type FundMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        FundMilestoneBody
 }
@@ -78,7 +78,7 @@ type ConfirmFundingBody struct {
 }
 
 type ConfirmFundingInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        ConfirmFundingBody
 }
@@ -92,7 +92,7 @@ type ConfirmFundingOutput struct {
 // ============================================================
 
 type GetMilestonePaymentInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 }
 

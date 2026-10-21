@@ -24,7 +24,7 @@ type CreateQuestMilestoneBody struct {
 }
 
 type CreateMilestoneInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"id" doc:"Quest ID"`
 	Body    CreateQuestMilestoneBody
 }
 
@@ -47,7 +47,7 @@ type UpdateQuestMilestoneBody struct {
 }
 
 type UpdateQuestMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        UpdateQuestMilestoneBody
 }
@@ -61,7 +61,7 @@ type UpdateQuestMilestoneOutput struct {
 // ============================================================
 
 type DeleteQuestMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 }
 
@@ -83,7 +83,7 @@ type SendForReviewBody struct {
 }
 
 type SendForReviewInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        SendForReviewBody
 }
@@ -101,7 +101,7 @@ type ApproveMilestoneBody struct {
 }
 
 type ApproveMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        ApproveMilestoneBody
 }
@@ -116,7 +116,7 @@ type RequestMilestoneRevisionBody struct {
 }
 
 type RequestMilestoneRevisionInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        RequestMilestoneRevisionBody
 }
@@ -130,7 +130,7 @@ type RequestMilestoneRevisionOutput struct {
 // ============================================================
 
 type GetQuestMilestoneInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 }
 
@@ -139,7 +139,7 @@ type GetQuestMilestoneOutput struct {
 }
 
 type ListQuestMilestonesInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"id" doc:"Quest ID"`
 }
 
 type ListQuestMilestonesResponse struct {
@@ -157,7 +157,7 @@ type ListQuestMilestonesOutput struct {
 // ============================================================
 
 type GetMilestoneRevisionsInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 }
 

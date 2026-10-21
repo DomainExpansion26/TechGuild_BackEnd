@@ -12,7 +12,7 @@ type RequestRefundBody struct {
 }
 
 type RequestRefundInput struct {
-	QuestID     string `path:"quest_id" doc:"Quest ID"`
+	QuestID     string `path:"id" doc:"Quest ID"`
 	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
 	Body        RequestRefundBody
 }
@@ -55,7 +55,7 @@ type RequestRefundOutput struct {
 // ============================================================
 
 type GetRefundInput struct {
-	QuestID     string `path:"quest_id"`
+	QuestID     string `path:"id"`
 	MilestoneID string `path:"milestone_id"`
 }
 
