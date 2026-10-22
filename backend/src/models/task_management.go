@@ -59,6 +59,19 @@ const (
 	ActivityMilestoneApprovalCancelled ActivityActionType = "milestone_approval_cancelled"
 	ActivityQuestApproved              ActivityActionType = "quest_approved"
 	ActivityQuestApprovalCancelled     ActivityActionType = "quest_approval_cancelled"
+
+	// NEW — Milestone negotiation flow (freelancer ↔ client)
+	ActivityMilestoneSentForReview       ActivityActionType = "milestone_sent_for_review"
+	ActivityMilestoneRevisionRequested   ActivityActionType = "milestone_revision_requested"
+	ActivityMilestoneRevisionInProgress  ActivityActionType = "milestone_revision_in_progress"
+	ActivityMilestoneResubmitted         ActivityActionType = "milestone_resubmitted"
+	ActivityMilestoneAgreed              ActivityActionType = "milestone_agreed"
+	ActivityMilestoneFunded              ActivityActionType = "milestone_funded"
+	ActivityMilestoneSubmittedForRelease ActivityActionType = "milestone_submitted_for_release"
+	ActivityMilestoneReleased            ActivityActionType = "milestone_released"
+	// Refund flow
+	ActivityMilestoneRefundRequested ActivityActionType = "milestone_refund_requested"
+	ActivityMilestoneRefunded        ActivityActionType = "milestone_refunded"
 )
 
 // QuestActivity records chronological audit events for the TMD activity feed and drawer.

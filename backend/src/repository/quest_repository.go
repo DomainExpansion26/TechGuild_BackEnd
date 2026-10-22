@@ -8,6 +8,7 @@ import (
 
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
+	"techguild-backend/src/utils"
 )
 
 type QuestFilter struct {
@@ -24,7 +25,7 @@ type QuestFilter struct {
 }
 
 type QuestRepository interface {
-	CreateQuestWithMilestonesAndSkills(quest *models.Quest, milestones []models.QuestMilestone, skills []models.QuestSkill) error
+	CreateQuestWithSkills(quest *models.Quest, skills []models.QuestSkill) error
 	FindByID(questID uuid.UUID) (*models.Quest, error)
 	UpdateQuest(quest *models.Quest) error
 	ListQuests(filter QuestFilter) ([]models.Quest, string, bool, int64, error)
@@ -33,6 +34,7 @@ type QuestRepository interface {
 	AcceptQuestAtomic(quest *models.Quest, chatChannel *models.QuestChatChannel, tasks []models.Task, activity *models.QuestActivity, auditLog *models.AuditLog) error
 	CreateAuditLog(auditLog *models.AuditLog) error
 	GetClientProfile(userID uuid.UUID) (*models.ClientProfile, error)
+	ListAssignedQuests(userID uuid.UUID, status string) ([]models.Quest, error)
 }
 
 type questRepository struct {
@@ -48,24 +50,13 @@ func NewQuestRepositoryTx(tx *gorm.DB) QuestRepository {
 }
 
 // CreateQuestWithMilestonesAndSkills saves the quest, milestones, and skills atomically in a single transaction.
-func (r *questRepository) CreateQuestWithMilestonesAndSkills(
+func (r *questRepository) CreateQuestWithSkills(
 	quest *models.Quest,
-	milestones []models.QuestMilestone,
 	skills []models.QuestSkill,
 ) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(quest).Error; err != nil {
 			return err
-		}
-
-		if len(milestones) > 0 {
-			for i := range milestones {
-				milestones[i].QuestID = quest.ID
-			}
-			if err := tx.Create(&milestones).Error; err != nil {
-				return err
-			}
-			quest.Milestones = milestones
 		}
 
 		if len(skills) > 0 {
@@ -100,9 +91,9 @@ func (r *questRepository) FindByID(questID uuid.UUID) (*models.Quest, error) {
 	return &quest, nil
 }
 
-// UpdateQuest saves updates to an existing quest.
+// UpdateQuest saves updates to an existing quest (ignoring associations).
 func (r *questRepository) UpdateQuest(quest *models.Quest) error {
-	return r.db.Save(quest).Error
+	return r.db.Omit("Client", "AssignedFreelancer", "AcceptedParty", "Milestones", "Skills").Save(quest).Error
 }
 
 // ListQuests queries quests based on asymmetric tier visibility, client filter, and cursor pagination.
@@ -133,11 +124,11 @@ func (r *questRepository) ListQuests(filter QuestFilter) ([]models.Quest, string
 	}
 
 	if filter.MinBudget != nil {
-		query = query.Where("budget_inr >= ?", *filter.MinBudget)
+		query = query.Where("budget_minor >= ?", utils.RupeesToPaise(*filter.MinBudget))
 	}
 
 	if filter.MaxBudget != nil {
-		query = query.Where("budget_inr <= ?", *filter.MaxBudget)
+		query = query.Where("budget_minor <= ?", utils.RupeesToPaise(*filter.MaxBudget))
 	}
 
 	// Count total matching records before cursor pagination
@@ -217,7 +208,7 @@ func (r *questRepository) AcceptQuestAtomic(
 ) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		// 1. Update quest status and assigned entities
-		if err := tx.Save(quest).Error; err != nil {
+		if err := tx.Omit("Client", "AssignedFreelancer", "AcceptedParty", "Milestones", "Skills").Save(quest).Error; err != nil {
 			return err
 		}
 
@@ -266,4 +257,27 @@ func (r *questRepository) GetClientProfile(userID uuid.UUID) (*models.ClientProf
 		return nil, err
 	}
 	return &profile, nil
+}
+
+// ListAssignedQuests returns quests assigned to a freelancer directly OR
+// to a party that the freelancer is an active member of.
+func (r *questRepository) ListAssignedQuests(userID uuid.UUID, status string) ([]models.Quest, error) {
+	// Subquery: active party IDs the user belongs to
+	partyIDsQuery := r.db.Model(&models.PartyMember{}).
+		Select("party_id").
+		Where("user_id = ? AND status = ?", userID, models.MemberActive)
+
+	var quests []models.Quest
+	err := r.db.Model(&models.Quest{}).
+		Where("status = ?", status).
+		Where("(assigned_freelancer_id = ? OR accepted_party_id IN (?))", userID, partyIDsQuery).
+		Preload("Client").
+		Preload("Milestones", func(db *gorm.DB) *gorm.DB {
+			return db.Order("order_index ASC")
+		}).
+		Preload("Skills").
+		Order("updated_at DESC").
+		Find(&quests).Error
+
+	return quests, err
 }

@@ -25,3 +25,6 @@ server
 *.njsproj
 *.sln
 *.sw?
+
+.jcode/
+.serena/
