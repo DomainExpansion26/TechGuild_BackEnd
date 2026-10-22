@@ -161,9 +161,9 @@ func (r *paymentRepository) GetByProviderOrderID(provider, orderID string) (*mod
 
 func (r *paymentRepository) ListPendingOlderThan(minutes int) ([]models.Payment, error) {
 	var payments []models.Payment
-	threshold := time.Now().Add(-time.Duration(minutes) * time.Minute)
-	err := r.db.
-		Where("status = ? AND created_at < ?", models.PaymentStatusPending, threshold).
-		Find(&payments).Error
+	cutoff := time.Now().Add(-time.Duration(minutes) * time.Minute)
+
+	// 'pending' ya 'failed' status wale payments jo purane ho chuke hain
+	err := r.db.Where("status IN ('pending', 'failed') AND created_at < ?", cutoff).Find(&payments).Error
 	return payments, err
 }

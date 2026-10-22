@@ -40,7 +40,7 @@ func RegisterQuestRoutes(api huma.API) {
 						Category:        "UI/UX Design",
 						Industry:        "FinTech",
 						Complexity:      "intermediate",
-						BudgetMinor:     75000,
+						BudgetMinor:     7500000, // ₹75,000.00
 						TimelineDays:    20,
 						QuestType:       "standard",
 						ExperienceLevel: "senior",
@@ -124,7 +124,6 @@ func RegisterQuestRoutes(api huma.API) {
 			},
 		},
 	}, controllers.RejectQuestHandler)
-
 
 	// 6.Quest Acceptance API (Party Lead)
 	huma.Register(api, huma.Operation{

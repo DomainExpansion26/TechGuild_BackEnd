@@ -42,6 +42,8 @@ type QuestMilestoneRepository interface {
 
 	// Tx support
 	WithTransaction(fn func(txRepo QuestMilestoneRepository) error) error
+
+	BulkUpdateMilestoneStatus(questID uuid.UUID, fromStatus models.MilestoneStatus, toStatus models.MilestoneStatus) (int64, error)
 }
 
 type questMilestoneRepository struct {
@@ -278,4 +280,15 @@ func (r *questMilestoneRepository) GetMaxRevisionRound(milestoneID uuid.UUID) (i
 		return 0, nil
 	}
 	return *maxRound, nil
+}
+
+func (r *questMilestoneRepository) BulkUpdateMilestoneStatus(questID uuid.UUID, fromStatus models.MilestoneStatus, toStatus models.MilestoneStatus) (int64, error) {
+	result := r.db.Model(&models.QuestMilestone{}).
+		Where("quest_id = ? AND status = ?", questID, fromStatus).
+		Update("status", toStatus)
+
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
 }

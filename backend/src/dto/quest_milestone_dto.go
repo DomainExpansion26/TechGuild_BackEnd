@@ -245,3 +245,36 @@ type MilestoneDetailResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// ---------- Roadmap Bulk Actions ----------
+
+type SubmitRoadmapBody struct {
+	Note string `json:"note,omitempty" example:"Here is the complete project roadmap. Please review."`
+}
+
+type SubmitRoadmapInput struct {
+	ID   string            `path:"id" doc:"Quest UUID"`
+	Body SubmitRoadmapBody `json:"body,omitempty"`
+}
+
+type ApproveRoadmapBody struct {
+	Feedback string `json:"feedback,omitempty" example:"Roadmap looks perfect. Let's start with Milestone 1."`
+}
+
+type ApproveRoadmapInput struct {
+	ID   string             `path:"id" doc:"Quest UUID"`
+	Body ApproveRoadmapBody `json:"body,omitempty"`
+}
+
+type RoadmapActionResponse struct {
+	Message                string `json:"message"`
+	UpdatedMilestonesCount int    `json:"updated_milestones_count"`
+}
+
+type SubmitRoadmapOutput struct {
+	Body RoadmapActionResponse
+}
+
+type ApproveRoadmapOutput struct {
+	Body RoadmapActionResponse
+}

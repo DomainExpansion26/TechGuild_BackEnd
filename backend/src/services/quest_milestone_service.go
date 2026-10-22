@@ -55,6 +55,9 @@ type QuestMilestoneService interface {
 	GetMilestone(userID, questIDStr, milestoneIDStr string) (*dto.MilestoneDetailResponse, error)
 	ListMilestones(userID, questIDStr string) (*dto.ListQuestMilestonesResponse, error)
 	GetRevisions(userID, questIDStr, milestoneIDStr string) (*dto.GetMilestoneRevisionsResponse, error)
+
+	SubmitRoadmap(userID, questIDStr string, req dto.SubmitRoadmapBody) (int64, error)
+	ApproveRoadmap(userID, questIDStr string, req dto.ApproveRoadmapBody) (int64, error)
 }
 
 type questMilestoneService struct {
@@ -860,6 +863,101 @@ func (s *questMilestoneService) toDetailResponse(
 	}
 
 	return resp
+}
+
+// ============================================================
+// 11. SUBMIT ROADMAP (Freelancer)
+// ============================================================
+func (s *questMilestoneService) SubmitRoadmap(userID, questIDStr string, req dto.SubmitRoadmapBody) (int64, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return 0, ErrInvalidUserID
+	}
+	questUUID, err := uuid.Parse(questIDStr)
+	if err != nil {
+		return 0, ErrQMSQuestNotFound
+	}
+
+	quest, err := s.questRepo.FindByID(questUUID)
+	if err != nil {
+		return 0, ErrQMSQuestNotFound
+	}
+
+	if quest.AssignedFreelancerID == nil || *quest.AssignedFreelancerID != userUUID {
+		return 0, ErrQMSNotAssignedFreelancer
+	}
+	if quest.Status != models.QuestStatusInProgress {
+		return 0, ErrQMSQuestNotInProgress
+	}
+
+	// Bulk update all 'draft' milestones to 'awaiting_client_review'
+	count, err := s.milestoneRepo.BulkUpdateMilestoneStatus(
+		questUUID,
+		models.MilestoneStatusDraft,
+		models.MilestoneStatusAwaitingClientReview,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		return 0, errors.New("no draft milestones found to submit")
+	}
+
+	_ = s.activityRepo.CreateActivity(&models.QuestActivity{
+		QuestID:     questUUID,
+		ActorID:     userUUID,
+		ActionType:  models.ActivityMilestoneSentForReview,
+		Title:       "Roadmap Submitted",
+		Description: req.Note,
+	})
+
+	return count, nil
+}
+
+// ============================================================
+// 12. APPROVE ROADMAP (Client)
+// ============================================================
+func (s *questMilestoneService) ApproveRoadmap(userID, questIDStr string, req dto.ApproveRoadmapBody) (int64, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return 0, ErrInvalidUserID
+	}
+	questUUID, err := uuid.Parse(questIDStr)
+	if err != nil {
+		return 0, ErrQMSQuestNotFound
+	}
+
+	quest, err := s.questRepo.FindByID(questUUID)
+	if err != nil {
+		return 0, ErrQMSQuestNotFound
+	}
+
+	if quest.ClientID != userUUID {
+		return 0, ErrQMSNotQuestClient
+	}
+
+	// Bulk update all 'awaiting_client_review' to 'agreed'
+	count, err := s.milestoneRepo.BulkUpdateMilestoneStatus(
+		questUUID,
+		models.MilestoneStatusAwaitingClientReview,
+		models.MilestoneStatusAgreed,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		return 0, errors.New("no milestones pending review")
+	}
+
+	_ = s.activityRepo.CreateActivity(&models.QuestActivity{
+		QuestID:     questUUID,
+		ActorID:     userUUID,
+		ActionType:  models.ActivityMilestoneAgreed,
+		Title:       "Roadmap Approved",
+		Description: req.Feedback,
+	})
+
+	return count, nil
 }
 
 // Silence unused import warning if needed

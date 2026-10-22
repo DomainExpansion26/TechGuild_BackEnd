@@ -34,6 +34,7 @@ type QuestRepository interface {
 	AcceptQuestAtomic(quest *models.Quest, chatChannel *models.QuestChatChannel, tasks []models.Task, activity *models.QuestActivity, auditLog *models.AuditLog) error
 	CreateAuditLog(auditLog *models.AuditLog) error
 	GetClientProfile(userID uuid.UUID) (*models.ClientProfile, error)
+	ListAssignedQuests(userID uuid.UUID, status string) ([]models.Quest, error)
 }
 
 type questRepository struct {
@@ -256,4 +257,27 @@ func (r *questRepository) GetClientProfile(userID uuid.UUID) (*models.ClientProf
 		return nil, err
 	}
 	return &profile, nil
+}
+
+// ListAssignedQuests returns quests assigned to a freelancer directly OR
+// to a party that the freelancer is an active member of.
+func (r *questRepository) ListAssignedQuests(userID uuid.UUID, status string) ([]models.Quest, error) {
+	// Subquery: active party IDs the user belongs to
+	partyIDsQuery := r.db.Model(&models.PartyMember{}).
+		Select("party_id").
+		Where("user_id = ? AND status = ?", userID, models.MemberActive)
+
+	var quests []models.Quest
+	err := r.db.Model(&models.Quest{}).
+		Where("status = ?", status).
+		Where("(assigned_freelancer_id = ? OR accepted_party_id IN (?))", userID, partyIDsQuery).
+		Preload("Client").
+		Preload("Milestones", func(db *gorm.DB) *gorm.DB {
+			return db.Order("order_index ASC")
+		}).
+		Preload("Skills").
+		Order("updated_at DESC").
+		Find(&quests).Error
+
+	return quests, err
 }
