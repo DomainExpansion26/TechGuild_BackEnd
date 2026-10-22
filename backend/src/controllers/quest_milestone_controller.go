@@ -270,3 +270,53 @@ func mapQuestMilestoneError(err error) error {
 		return huma.Error500InternalServerError(err.Error())
 	}
 }
+
+// ============================================================
+// 11. SUBMIT ROADMAP (freelancer)
+// ============================================================
+func (c *QuestMilestoneController) SubmitRoadmapHandler(
+	ctx context.Context,
+	input *dto.SubmitRoadmapInput,
+) (*dto.SubmitRoadmapOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	count, err := c.svc.SubmitRoadmap(userID, input.ID, input.Body)
+	if err != nil {
+		return nil, mapQuestMilestoneError(err)
+	}
+
+	return &dto.SubmitRoadmapOutput{
+		Body: dto.RoadmapActionResponse{
+			Message:                "Roadmap submitted for review successfully",
+			UpdatedMilestonesCount: int(count),
+		},
+	}, nil
+}
+
+// ============================================================
+// 12. APPROVE ROADMAP (client)
+// ============================================================
+func (c *QuestMilestoneController) ApproveRoadmapHandler(
+	ctx context.Context,
+	input *dto.ApproveRoadmapInput,
+) (*dto.ApproveRoadmapOutput, error) {
+	userID, err := utils.GetUserIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
+	count, err := c.svc.ApproveRoadmap(userID, input.ID, input.Body)
+	if err != nil {
+		return nil, mapQuestMilestoneError(err)
+	}
+
+	return &dto.ApproveRoadmapOutput{
+		Body: dto.RoadmapActionResponse{
+			Message:                "Roadmap approved successfully",
+			UpdatedMilestonesCount: int(count),
+		},
+	}, nil
+}

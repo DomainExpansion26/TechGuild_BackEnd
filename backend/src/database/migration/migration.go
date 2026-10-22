@@ -46,6 +46,7 @@ func Migrate() {
 		// Quests
 		&models.Quest{},
 		&models.QuestMilestone{},
+		&models.QuestApplication{},
 		&models.QuestSkill{},
 		&models.QuestChatChannel{},
 		&models.MilestoneRevision{},

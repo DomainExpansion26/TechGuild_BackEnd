@@ -10,8 +10,8 @@ import (
 func StartReconciliationJob(fundingSvc *services.MilestoneFundingService) {
 	reconSvc := services.NewReconciliationService(fundingSvc)
 
-	// Run every 10 minutes
-	ticker := time.NewTicker(10 * time.Minute)
+	// Production me 10 * time.Minute karna
+	ticker := time.NewTicker(10 * time.Second)
 
 	go func() {
 		for range ticker.C {
@@ -19,5 +19,5 @@ func StartReconciliationJob(fundingSvc *services.MilestoneFundingService) {
 		}
 	}()
 
-	log.Println("[Job] Reconciliation job started (Interval: 10 mins)")
+	log.Println("[Job] Reconciliation job started")
 }
