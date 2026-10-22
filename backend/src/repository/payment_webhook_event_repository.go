@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause" // 👈 Ye naya import add karna hai
 )
 
 type PaymentWebhookEventRepository interface {
@@ -33,7 +34,23 @@ func NewPaymentWebhookEventRepositoryTx(tx *gorm.DB) PaymentWebhookEventReposito
 }
 
 func (r *paymentWebhookEventRepository) Create(event *models.PaymentWebhookEvent) error {
-	return r.db.Create(event).Error
+	// 👇 Yahan humne OnConflict lagaya hai taaki race condition me 500 error na aaye
+	result := r.db.Clauses(clause.OnConflict{
+		DoNothing: true, // Duplicate insert hone par DB error nahi dega
+	}).Create(event)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// Agar RowsAffected 0 hai, matlab event pehle se database me maujood tha
+	if result.RowsAffected == 0 {
+		// Service layer ko signal dene ke liye hum ek custom error return kar sakte hain,
+		// par abhi ke liye hum nil return kar rahe hain taaki service isko gracefully handle kar sake.
+		return errors.New("duplicate webhook event skipped")
+	}
+
+	return nil
 }
 
 func (r *paymentWebhookEventRepository) GetByProviderAndEventID(provider, eventID string) (*models.PaymentWebhookEvent, error) {

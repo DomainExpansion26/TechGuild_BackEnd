@@ -98,6 +98,8 @@ func main() {
 	milestoneFundingController := controllers.NewMilestoneFundingControllerFromService(milestoneFundingService)
 	milestoneReleaseController := controllers.NewMilestoneReleaseController(cfg, paymentProvider)
 
+	jobs.StartReconciliationJob(milestoneFundingService)
+
 	// --------------------------------------------------
 	// Wallet + Withdrawal + Refund
 	// --------------------------------------------------
@@ -149,6 +151,7 @@ func main() {
 	routes.RegisterTwoFactorRoutes(api)
 
 	routes.RegisterQuestRoutes(api)
+	routes.RegisterQuestApplicationRoutes(api)
 	routes.RegisterTaskManagementRoutes(api)
 
 	routes.RegisterQuestMilestoneRoutes(api, questMilestoneController)

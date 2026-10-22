@@ -126,4 +126,28 @@ func RegisterQuestMilestoneRoutes(
 		Summary:     "Get revision history for a milestone",
 		Middlewares: authMw,
 	}, c.GetRevisionsHandler)
+
+	// ============================================================
+	// ROADMAP ACTIONS (Bulk)
+	// ============================================================
+
+	huma.Register(api, huma.Operation{
+		Security:    bearer,
+		OperationID: "submit-milestone-roadmap",
+		Method:      "POST",
+		Path:        "/v1/quests/{id}/milestones/submit-roadmap",
+		Tags:        tags,
+		Summary:     "Submit all draft milestones for client review at once (freelancer)",
+		Middlewares: authMw,
+	}, c.SubmitRoadmapHandler)
+
+	huma.Register(api, huma.Operation{
+		Security:    bearer,
+		OperationID: "approve-milestone-roadmap",
+		Method:      "POST",
+		Path:        "/v1/quests/{id}/milestones/approve-roadmap",
+		Tags:        tags,
+		Summary:     "Approve the entire milestone roadmap (client)",
+		Middlewares: authMw,
+	}, c.ApproveRoadmapHandler)
 }

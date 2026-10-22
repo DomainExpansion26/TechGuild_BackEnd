@@ -35,6 +35,14 @@ var (
 	ErrQuestNotOpen           = errors.New("quest is not open for acceptance")
 	ErrOnlyClientCanCancel    = errors.New("only the client owner can cancel/reject this quest")
 	ErrQuestAlreadyFinished   = errors.New("quest is already completed or cancelled")
+
+	// NEW: Direct acceptance has been deprecated in favour of the
+	// Upwork-style "Apply → Client Accepts" bidding flow.
+	ErrDirectAcceptDeprecated = errors.New(
+		"direct quest acceptance is deprecated. " +
+			"Apply via POST /v1/quests/{id}/apply, then wait for the client " +
+			"to accept your application via POST /v1/quests/{id}/applications/{application_id}/accept",
+	)
 )
 
 type QuestService interface {
@@ -43,6 +51,10 @@ type QuestService interface {
 	ListQuests(userID string, req dto.ListQuestsInput) (*dto.ListQuestsResponse, error)
 	GetQuestDetails(userID string, questID string) (*dto.QuestDetailsResponse, error)
 	RejectQuest(userID string, questID string, req dto.RejectQuestBody) (*dto.RejectQuestResponse, error)
+
+	// Deprecated: AcceptQuest is retained for backward compatibility but
+	// always returns ErrDirectAcceptDeprecated. Hiring now happens via
+	// quest applications (see QuestApplicationService.AcceptApplication).
 	AcceptQuest(userID string, questID string, req dto.AcceptQuestBody) (*dto.AcceptQuestResponse, error)
 }
 
@@ -72,7 +84,11 @@ func NewQuestServiceWithRepos(
 	}
 }
 
-// 1. CreateQuestDraft creates a draft quest (NO milestones — freelancer creates them later)
+// ============================================================
+// 1. CreateQuestDraft — creates a draft quest (NO milestones)
+// ============================================================
+// Freelancer will create milestones AFTER being accepted via the
+// application flow. Quest has NO milestones at creation time.
 func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) (*dto.CreateQuestResponse, error) {
 	clientUUID, err := uuid.Parse(userID)
 	if err != nil {
@@ -136,7 +152,7 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		return nil, errors.New("at least one technical skill is required")
 	}
 
-	// Budget is reference-only
+	// Budget is reference-only at draft time
 	budgetRupees := float64(req.BudgetMinor) / 100.0
 
 	clientRank := user.Rank
@@ -199,8 +215,8 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 		}
 	}
 
-	// Milestones are NO LONGER created here.
-	// Freelancer will create them after quest is accepted.
+	// Milestones are NOT created here.
+	// Freelancer creates them AFTER being accepted via the application flow.
 	if err := s.questRepo.CreateQuestWithSkills(quest, skills); err != nil {
 		return nil, fmt.Errorf("failed to save quest draft: %w", err)
 	}
@@ -215,7 +231,9 @@ func (s *questService) CreateQuestDraft(userID string, req dto.CreateQuestBody) 
 	}, nil
 }
 
-// 2. PublishQuest publishes a draft quest
+// ============================================================
+// 2. PublishQuest — draft → open (escrow deposit)
+// ============================================================
 func (s *questService) PublishQuest(userID string, questID string, req dto.PublishQuestBody) (*dto.PublishQuestResponse, error) {
 	clientUUID, err := uuid.Parse(userID)
 	if err != nil {
@@ -288,11 +306,13 @@ func (s *questService) PublishQuest(userID string, questID string, req dto.Publi
 		Status:         string(quest.Status),
 		PublishedAt:    now,
 		IsEscrowFunded: quest.IsEscrowFunded,
-		Message:        "Quest published successfully and open for acceptance",
+		Message:        "Quest published successfully and open for applications",
 	}, nil
 }
 
-// 3. ListQuests
+// ============================================================
+// 3. ListQuests — tier-locked asymmetric visibility
+// ============================================================
 func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.ListQuestsResponse, error) {
 	requesterRank := models.RankF
 
@@ -323,18 +343,34 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 		Limit:      req.Limit,
 	}
 
-	if user != nil && user.AccountType != nil &&
-		(string(*user.AccountType) == string(models.AccountTypeClientAdmin) || string(*user.AccountType) == string(models.AccountTypeClient)) &&
-		req.Status == string(models.QuestStatusDraft) {
+	// Client → see own quests (draft + open + in_progress + completed)
+	// Freelancer → see marketplace (rank-filtered, open only)
+	isClient := false
+	if user != nil && user.AccountType != nil {
+		at := string(*user.AccountType)
+		// "client", "client_admin", "client_member", "admin" sabko handle karega
+		if strings.HasPrefix(at, "client") || at == string(models.AccountTypeAdmin) {
+			isClient = true
+		}
+	}
+
+	if isClient {
+		// Client is seeing their own quests (all statuses)
 		clientUUID := user.ID
 		filter.ClientID = &clientUUID
-		filter.Status = req.Status
+		if req.Status != "" {
+			filter.Status = req.Status
+		}
 	} else {
+		// Freelancer is seeing the marketplace
 		filter.AllowedRanks = utils.GetVisibleRanks(requesterRank)
 		if req.Status != "" {
 			filter.Status = req.Status
 		} else {
-			filter.StatusIn = []string{string(models.QuestStatusOpen), string(models.QuestStatusPublished)}
+			filter.StatusIn = []string{
+				string(models.QuestStatusOpen),
+				string(models.QuestStatusPublished),
+			}
 		}
 	}
 
@@ -382,7 +418,19 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 	}, nil
 }
 
-// 4. GetQuestDetails
+// ============================================================
+// 4. GetQuestDetails — FULL FIX for visibility bug
+// ============================================================
+// Previous bug: AcceptedPartyID != nil condition meant direct-flow
+// (individual) accepted quests were NOT visible to the assigned freelancer.
+//
+// Fix:
+//   - Owner/Admin → always visible
+//   - Open/Published → rank sufficient → visible
+//   - InProgress/Completed/Cancelled → visible to:
+//   - assigned freelancer (AssignedFreelancerID == requester)
+//   - active party member (if AcceptedPartyID != nil)
+//   - Anything else → 403
 func (s *questService) GetQuestDetails(userID string, questID string) (*dto.QuestDetailsResponse, error) {
 	qUUID, err := uuid.Parse(questID)
 	if err != nil {
@@ -411,17 +459,32 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 	}
 
 	isOwner := quest.ClientID == requesterUUID
-	isAdmin := user != nil && user.AccountType != nil && string(*user.AccountType) == string(models.AccountTypeAdmin)
+	isAdmin := user != nil && user.AccountType != nil &&
+		string(*user.AccountType) == string(models.AccountTypeAdmin)
 
 	if !isOwner && !isAdmin {
-		if quest.Status != models.QuestStatusOpen && quest.Status != models.QuestStatusPublished {
-			if quest.Status == models.QuestStatusInProgress && quest.AcceptedPartyID != nil {
-				if user == nil {
-					return nil, ErrQuestNotVisible
-				}
-				members, err := s.partyRepo.GetMembers(*quest.AcceptedPartyID)
-				isMember := false
-				if err == nil {
+		isOpenish := quest.Status == models.QuestStatusOpen ||
+			quest.Status == models.QuestStatusPublished
+
+		if isOpenish {
+			// Marketplace visibility — rank gate
+			if !utils.IsRankSufficient(requesterRank, quest.RequiredMinRank) {
+				return nil, fmt.Errorf(
+					"quest requires rank %s which is higher than your rank %s",
+					quest.RequiredMinRank, requesterRank,
+				)
+			}
+		} else if quest.Status == models.QuestStatusInProgress ||
+			quest.Status == models.QuestStatusCompleted ||
+			quest.Status == models.QuestStatusCancelled {
+
+			// Post-acceptance visibility — only assigned entities can see
+			isAssigned := quest.AssignedFreelancerID != nil &&
+				*quest.AssignedFreelancerID == requesterUUID
+
+			isMember := false
+			if quest.AcceptedPartyID != nil {
+				if members, err := s.partyRepo.GetMembers(*quest.AcceptedPartyID); err == nil {
 					for _, m := range members {
 						if m.UserID == requesterUUID && m.Status == models.MemberActive {
 							isMember = true
@@ -429,18 +492,18 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 						}
 					}
 				}
-				if !isMember && (quest.AssignedFreelancerID == nil || *quest.AssignedFreelancerID != requesterUUID) {
-					return nil, ErrQuestNotVisible
-				}
-			} else {
+			}
+
+			if !isAssigned && !isMember {
 				return nil, ErrQuestNotVisible
 			}
 		} else {
-			if !utils.IsRankSufficient(requesterRank, quest.RequiredMinRank) {
-				return nil, fmt.Errorf("quest requires rank %s which is higher than your rank %s", quest.RequiredMinRank, requesterRank)
-			}
+			// Draft or unknown status — only owner/admin (already handled above)
+			return nil, ErrQuestNotVisible
 		}
 	}
+
+	// --- Build response ---
 
 	milestones := make([]dto.QuestDetailMilestone, len(quest.Milestones))
 	for i, m := range quest.Milestones {
@@ -503,7 +566,13 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 	}, nil
 }
 
-// 5. RejectQuest
+// ============================================================
+// 5. RejectQuest — client cancels/rejects (with escrow refund)
+// ============================================================
+// Allowed on: open, published, in_progress
+// Not allowed on: cancelled, completed
+// Escrow refunded if IsEscrowFunded == true (milestone-level holds
+// are handled separately by milestone refund flows).
 func (s *questService) RejectQuest(userID string, questID string, req dto.RejectQuestBody) (*dto.RejectQuestResponse, error) {
 	clientUUID, err := uuid.Parse(userID)
 	if err != nil {
@@ -524,7 +593,8 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 		return nil, ErrOnlyClientCanCancel
 	}
 
-	if quest.Status == models.QuestStatusCancelled || quest.Status == models.QuestStatusCompleted {
+	if quest.Status == models.QuestStatusCancelled ||
+		quest.Status == models.QuestStatusCompleted {
 		return nil, ErrQuestAlreadyFinished
 	}
 
@@ -566,201 +636,18 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 	}, nil
 }
 
-// 6. AcceptQuest
+// ============================================================
+// 6. AcceptQuest — DISABLED (Upwork flow)
+// ============================================================
+// Freelancers MUST go through the application flow:
+//
+//  1. POST /v1/quests/{id}/apply          (freelancer or party lead bids)
+//  2. GET  /v1/quests/{id}/applications   (client reviews)
+//  3. POST /v1/quests/{id}/applications/{app_id}/accept  (client picks winner)
+//
+// If you need to restore the legacy direct-accept behavior (e.g. for a
+// private/internal feature flag), replace the early return below with the
+// original implementation from git history.
 func (s *questService) AcceptQuest(userID string, questID string, req dto.AcceptQuestBody) (*dto.AcceptQuestResponse, error) {
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return nil, ErrInvalidUserID
-	}
-
-	qUUID, err := uuid.Parse(questID)
-	if err != nil {
-		return nil, ErrInvalidQuestID
-	}
-
-	quest, err := s.questRepo.FindByID(qUUID)
-	if err != nil || quest == nil {
-		return nil, ErrQuestNotFound
-	}
-
-	if quest.Status != models.QuestStatusOpen && quest.Status != models.QuestStatusPublished {
-		return nil, ErrQuestNotOpen
-	}
-
-	user, err := s.userRepo.GetUserByID(userID)
-	if err != nil || user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	// ---------------------------------------------------------
-	// DETERMINE ACCEPTOR: PARTY vs DIRECT (Individual/Agency)
-	// ---------------------------------------------------------
-	var party *models.Party
-	var assignedID uuid.UUID
-	var acceptedPartyID *uuid.UUID
-	var acceptorName string
-
-	if strings.TrimSpace(req.PartyID) != "" {
-		// --- PARTY FLOW ---
-		pUUID, err := uuid.Parse(req.PartyID)
-		if err != nil {
-			return nil, errors.New("invalid party_id")
-		}
-		p, err := s.partyRepo.FindByID(pUUID)
-		if err != nil || p == nil {
-			return nil, errors.New("party not found")
-		}
-		if p.LeaderID != userUUID {
-			return nil, ErrOnlyPartyLeadAllowed
-		}
-		if !p.IsVerified {
-			return nil, ErrPartyNotVerified
-		}
-
-		party = p
-		assignedID = party.LeaderID
-		acceptedPartyID = &party.ID
-		acceptorName = party.Name
-
-		// Party Rank Check
-		partyRank := user.Rank
-		for _, m := range party.Members {
-			if m.Status == models.MemberActive && m.User.Rank != "" {
-				if utils.CompareRanks(m.User.Rank, partyRank) > 0 {
-					partyRank = m.User.Rank
-				}
-			}
-		}
-		if !utils.IsRankSufficient(partyRank, quest.RequiredMinRank) {
-			return nil, fmt.Errorf("party rank %s is insufficient", partyRank)
-		}
-
-		// Party Capacity Check
-		activeCount, err := s.questRepo.CountPartyActiveQuests(party.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to verify party capacity: %w", err)
-		}
-		if activeCount >= 5 {
-			return nil, ErrPartyCapacityExceeded
-		}
-
-		// Party Skill Match Check
-		if len(quest.Skills) > 0 {
-			partySkills, err := s.partyRepo.GetSkills(party.ID)
-			if err == nil {
-				partySkillMap := make(map[string]bool)
-				for _, ps := range partySkills {
-					partySkillMap[strings.ToLower(strings.TrimSpace(ps.SkillName))] = true
-				}
-				matchedCount := 0
-				for _, qs := range quest.Skills {
-					if partySkillMap[strings.ToLower(strings.TrimSpace(qs.Name))] {
-						matchedCount++
-					}
-				}
-				if (float64(matchedCount)/float64(len(quest.Skills)))*100.0 < 60.0 {
-					return nil, ErrSkillMatchInsufficient
-				}
-			}
-		}
-
-		// Party Conflict Check
-		hasConflict, err := s.questRepo.HasActiveQuestWithClient(party.ID, quest.ClientID)
-		if err == nil && hasConflict {
-			return nil, ErrClientConflict
-		}
-
-	} else {
-		// --- DIRECT FLOW (Individual / Agency) ---
-		assignedID = userUUID
-		acceptedPartyID = nil // No party
-		acceptorName = strings.TrimSpace(user.FirstName + " " + user.LastName)
-
-		// Direct Rank Check
-		if !utils.IsRankSufficient(user.Rank, quest.RequiredMinRank) {
-			return nil, fmt.Errorf("your rank %s is insufficient for this quest", user.Rank)
-		}
-
-		// Direct Conflict Check (Individual can't accept two active quests from same client)
-		// Note: Ye query abhi party_id pe based hai, individual ke liye repository me update karna padega,
-		// par testing ke liye hum isko skip kar rahe hain.
-		// hasConflict, err := s.questRepo.HasActiveQuestWithClient(userUUID, quest.ClientID)
-	}
-
-	// Premium Check
-	isPremium := quest.RequiredMinRank == models.RankS ||
-		quest.RequiredMinRank == models.RankSS ||
-		quest.RequiredMinRank == models.RankSSS ||
-		quest.Complexity == models.QuestComplexityEnterprise
-
-	if isPremium && user.Status != models.StatusActive {
-		return nil, errors.New("active verified status required to accept premium tier quests")
-	}
-
-	// Escrow Check
-	if !quest.IsEscrowFunded {
-		return nil, ErrEscrowNotFunded
-	}
-
-	// ---------------------------------------------------------
-	// EXECUTE ATOMIC UPDATE
-	// ---------------------------------------------------------
-	now := time.Now()
-	quest.Status = models.QuestStatusInProgress
-	quest.AcceptedPartyID = acceptedPartyID
-	quest.AssignedFreelancerID = &assignedID
-
-	chatChannel := &models.QuestChatChannel{
-		QuestID:   quest.ID,
-		PartyID:   acceptedPartyID,
-		Name:      fmt.Sprintf("Quest: %s", quest.Title),
-		Type:      "direct_client", // Ab party_client nahi, direct client
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	// (Task template creation yahan hoga agar milestones pehle se hote, par abhi skip)
-
-	activity := &models.QuestActivity{
-		QuestID:     quest.ID,
-		ActorID:     userUUID,
-		ActionType:  models.ActivityQuestAssigned,
-		Title:       fmt.Sprintf("Quest accepted by %s", acceptorName),
-		Description: fmt.Sprintf("%s accepted the quest.", acceptorName),
-		CreatedAt:   now,
-	}
-
-	meta, _ := json.Marshal(map[string]interface{}{
-		"acceptor_id":   userUUID.String(),
-		"acceptor_name": acceptorName,
-		"accepted_at":   now,
-	})
-
-	auditLog := &models.AuditLog{
-		UserID:   &userUUID,
-		Action:   "quest_accepted",
-		Entity:   "quest",
-		EntityID: quest.ID.String(),
-		Metadata: datatypes.JSON(meta),
-	}
-
-	if err := s.questRepo.AcceptQuestAtomic(quest, chatChannel, []models.Task{}, activity, auditLog); err != nil {
-		return nil, fmt.Errorf("failed to complete quest acceptance: %w", err)
-	}
-
-	return &dto.AcceptQuestResponse{
-		QuestID: quest.ID.String(),
-		PartyID: func() string {
-			if acceptedPartyID != nil {
-				return acceptedPartyID.String()
-			}
-			return ""
-		}(),
-		PartyName:     acceptorName,
-		Status:        string(quest.Status),
-		ChatChannelID: chatChannel.ID.String(),
-		TasksCreated:  0,
-		AcceptedAt:    now,
-		Message:       "Quest accepted successfully",
-	}, nil
+	return nil, ErrDirectAcceptDeprecated
 }
