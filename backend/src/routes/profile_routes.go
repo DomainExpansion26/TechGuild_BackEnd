@@ -40,69 +40,24 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 		Method:      "POST",
 		Path:        "/v1/profile/upload-resume",
 		Tags:        []string{"Profile"},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"multipart/form-data": {
-					Schema: &huma.Schema{
-						Type: "object",
-						Properties: map[string]*huma.Schema{
-							"file": {
-								Type:   "string",
-								Format: "binary",
-							},
-						},
-						Required: []string{"file"},
-					},
-				},
-			},
-		},
 		Middlewares: authMw}, c.UploadResumeHandler)
+
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "upload-avatar",
 		Method:      "POST",
 		Path:        "/v1/profile/avatar",
 		Tags:        []string{"Profile"},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"multipart/form-data": {
-					Schema: &huma.Schema{
-						Type: "object",
-						Properties: map[string]*huma.Schema{
-							"file": {
-								Type:   "string",
-								Format: "binary",
-							},
-						},
-						Required: []string{"file"},
-					},
-				},
-			},
-		},
 		Middlewares: authMw}, c.UploadAvatarHandler)
+
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "upload-logo",
 		Method:      "POST",
 		Path:        "/v1/profile/logo",
 		Tags:        []string{"Profile"},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"multipart/form-data": {
-					Schema: &huma.Schema{
-						Type: "object",
-						Properties: map[string]*huma.Schema{
-							"file": {
-								Type:   "string",
-								Format: "binary",
-							},
-						},
-						Required: []string{"file"},
-					},
-				},
-			},
-		},
 		Middlewares: authMw}, c.UploadLogoHandler)
+
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "delete-avatar",

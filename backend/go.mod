@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/cloudinary/cloudinary-go/v2 v2.16.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -36,7 +37,6 @@ require (
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/creasty/defaults v1.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
