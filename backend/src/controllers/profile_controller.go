@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"techguild-backend/src/config"
@@ -256,7 +257,6 @@ func (c *ProfileController) GetMyProfileHandler(ctx context.Context, input *dto.
 }
 
 // ---------- UploadResume ----------
-
 func (c *ProfileController) UploadResumeHandler(ctx context.Context, input *dto.UploadResumeInput) (*dto.UploadResumeOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
@@ -266,20 +266,20 @@ func (c *ProfileController) UploadResumeHandler(ctx context.Context, input *dto.
 	form := input.RawBody.Data()
 	file := form.Resume
 
-	if filepath.Ext(file.Filename) != ".pdf" {
+	if strings.ToLower(filepath.Ext(file.Filename)) != ".pdf" {
 		return nil, huma.Error400BadRequest("only PDF files are allowed")
 	}
 
-	const maxResumeSize = 5 * 1024 * 1024
-	if file.Size > maxResumeSize {
-		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
+	if file.Size > utils.MaxUploadBytes {
+		return nil, huma.Error400BadRequest("file size exceeds 2MB limit")
 	}
 
 	filename := fmt.Sprintf("%s-%d", userID, time.Now().Unix())
 
-	fileURL, err := utils.UploadPDFToCloudinary(file, filename)
+	profileService := services.NewProfileService(c.cfg)
+	fileURL, err := profileService.UploadAndSaveResume(userID, file, filename)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UploadResumeOutput{
@@ -298,21 +298,21 @@ func (c *ProfileController) UploadAvatarHandler(ctx context.Context, input *dto.
 	form := input.RawBody.Data()
 	file := form.Avatar
 
-	ext := filepath.Ext(file.Filename)
+	ext := strings.ToLower(filepath.Ext(file.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
 		return nil, huma.Error400BadRequest("only JPG, PNG, and WebP images are allowed")
 	}
 
-	const maxFileSize = 5 * 1024 * 1024
-	if file.Size > maxFileSize {
-		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
+	if file.Size > utils.MaxUploadBytes {
+		return nil, huma.Error400BadRequest("file size exceeds 2MB limit")
 	}
 
 	filename := fmt.Sprintf("%s-%d", userID, time.Now().Unix())
 
-	fileURL, err := utils.UploadImageToCloudinary(file, filename)
+	profileService := services.NewProfileService(c.cfg)
+	fileURL, err := profileService.UploadAndSaveAvatar(userID, file, filename)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UploadAvatarOutput{
@@ -321,7 +321,6 @@ func (c *ProfileController) UploadAvatarHandler(ctx context.Context, input *dto.
 }
 
 // ---------- UploadLogo ----------
-
 func (c *ProfileController) UploadLogoHandler(ctx context.Context, input *dto.UploadLogoInput) (*dto.UploadLogoOutput, error) {
 	userID, err := utils.GetUserIDFromHumaContext(ctx)
 	if err != nil {
@@ -331,21 +330,21 @@ func (c *ProfileController) UploadLogoHandler(ctx context.Context, input *dto.Up
 	form := input.RawBody.Data()
 	file := form.Logo
 
-	ext := filepath.Ext(file.Filename)
+	ext := strings.ToLower(filepath.Ext(file.Filename))
 	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
 		return nil, huma.Error400BadRequest("only JPG, PNG, and WebP images are allowed")
 	}
 
-	const maxFileSize = 5 * 1024 * 1024
-	if file.Size > maxFileSize {
-		return nil, huma.Error400BadRequest("file size exceeds 5MB limit")
+	if file.Size > utils.MaxUploadBytes {
+		return nil, huma.Error400BadRequest("file size exceeds 2MB limit")
 	}
 
 	filename := fmt.Sprintf("%s-logo-%d", userID, time.Now().Unix())
 
-	fileURL, err := utils.UploadImageToCloudinary(file, filename)
+	profileService := services.NewProfileService(c.cfg)
+	fileURL, err := profileService.UploadAndSaveLogo(userID, file, filename)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to upload to cloudinary: " + err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UploadLogoOutput{
@@ -368,6 +367,9 @@ func (c *ProfileController) DeleteAvatarHandler(ctx context.Context, input *dto.
 		}
 		if errors.Is(err, services.ErrNothingToDelete) {
 			return nil, huma.Error400BadRequest(err.Error())
+		}
+		if errors.Is(err, services.ErrForbidden) { // ← YE 3 LINE ADD KARO
+			return nil, huma.Error403Forbidden(err.Error())
 		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
@@ -569,3 +571,34 @@ func (c *ProfileController) CheckSlugHandler(ctx context.Context, input *dto.Che
 // 		},
 // 	}, nil
 // }
+
+// mapProfileError centralizes mapping of service-layer sentinel errors
+// to HTTP status codes, avoiding duplication across handlers.
+func mapProfileError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, services.ErrUserNotFound):
+		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, services.ErrProfileNotFound):
+		return huma.Error404NotFound("profile not found, create it first")
+	case errors.Is(err, services.ErrProfileAlreadyExists):
+		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, services.ErrForbidden):
+		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, services.ErrValidation):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, services.ErrNothingToDelete):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, services.ErrAccountTypeNotSet):
+		return huma.Error400BadRequest("account type not set")
+	case errors.Is(err, services.ErrInvalidAccountType):
+		return huma.Error400BadRequest("invalid account type")
+	case errors.Is(err, services.ErrInvalidPassword):
+		return huma.Error401Unauthorized("invalid password")
+	case errors.Is(err, services.ErrSessionNotFound):
+		return huma.Error404NotFound("session not found")
+	default:
+		return huma.Error500InternalServerError(err.Error())
+	}
+}
