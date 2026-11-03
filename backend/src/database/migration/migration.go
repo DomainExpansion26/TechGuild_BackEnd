@@ -68,6 +68,7 @@ func Migrate() {
 		&models.UserTwoFactorAuthentication{},
 		&models.UserRecoveryCode{},
 
+
 		// Payment
 		&models.PaymentCustomer{},
 		&models.ClientPaymentMethod{},
@@ -87,6 +88,13 @@ func Migrate() {
 		// Wallet
 		&models.Wallet{},
 		&models.WalletTransaction{},
+
+		//Guildhall
+		&models.GuildhallPost{},
+		&models.GuildhallComment{},
+		&models.GuildhallReaction{},
+		&models.GuildhallVote{},
+
 	)
 
 	if err != nil {

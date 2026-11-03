@@ -153,6 +153,7 @@ func main() {
 	routes.RegisterQuestRoutes(api)
 	routes.RegisterQuestApplicationRoutes(api)
 	routes.RegisterTaskManagementRoutes(api)
+	routes.RegisterGuildhallRoutes(api)
 
 	routes.RegisterQuestMilestoneRoutes(api, questMilestoneController)
 	routes.RegisterMilestoneFundingRoutes(api, milestoneFundingController)
@@ -179,3 +180,9 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+
+// {
+//   "email": "david@techguild.dev",
+//   "password": "Test@1234"
+// }
