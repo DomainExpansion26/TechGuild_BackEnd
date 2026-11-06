@@ -21,7 +21,7 @@ type PartyInvitation struct {
 
 	// Party
 	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
+	Party   Party     `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	// Sender
 	InvitedByID uuid.UUID `gorm:"type:uuid;not null;index"`

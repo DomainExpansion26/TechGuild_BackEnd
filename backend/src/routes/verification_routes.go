@@ -2,117 +2,145 @@ package routes
 
 import (
 	"techguild-backend/src/controllers"
-	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
 
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// RegisterVerificationRoutes registers all verification endpoints via Huma
-func RegisterVerificationRoutes(api huma.API) {
+func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
+	adminMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)}
 
-	// Individual Verification (file-upload)
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "submit-identity-verification",
-		Method:      "POST",
-		Path:        "/v1/verification/identity/submit",
-		Tags:        []string{"Verification"},
-		Summary:     "Submit identity verification",
-		Middlewares: authMw,
-	}, controllers.SubmitIdentityVerificationHandler)
+	// ==========================================
+	// 1. User Flow
+	// ==========================================
 
-	// Business Verification (file-upload)
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "submit-business-verification",
-		Method:      "POST",
-		Path:        "/v1/verification/business/submit",
-		Tags:        []string{"Verification"},
-		Summary:     "Submit business verification",
-		Middlewares: authMw,
-	}, controllers.SubmitBusinessVerificationHandler)
-
-	// Identity Verification Status
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "get-identity-verification-status",
-		Method:      "GET",
-		Path:        "/v1/verification/identity/status",
-		Tags:        []string{"Verification"},
-		Summary:     "Get identity verification status",
-		Middlewares: authMw,
-	}, controllers.GetIdentityVerificationStatusHandler)
-
-	// Generic Verification Status
-	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
 		OperationID: "get-verification-status",
 		Method:      "GET",
 		Path:        "/v1/verification/status",
 		Tags:        []string{"Verification"},
-		Summary:     "Get verification status",
+		Summary:     "Get current verification draft/status",
 		Middlewares: authMw,
-	}, controllers.GetVerificationStatusHandler)
+	}, c.GetStatusHandler)
 
-	// Resubmit Verification (file-upload)
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "resubmit-verification",
-		Method:      "POST",
-		Path:        "/v1/verification/resubmit/{record_id}",
+		OperationID: "update-individual-info",
+		Method:      "PUT",
+		Path:        "/v1/verification/individual/info",
 		Tags:        []string{"Verification"},
-		Summary:     "Resubmit verification",
+		Summary:     "Step 1: Save Individual Info (Aadhaar/PAN)",
 		Middlewares: authMw,
-	}, controllers.ResubmitVerificationHandler)
+	}, c.UpdateIndividualInfoHandler)
 
-	// Admin Verification
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "get-verification-queue",
+		OperationID: "update-business-info",
+		Method:      "PUT",
+		Path:        "/v1/verification/business/info",
+		Tags:        []string{"Verification"},
+		Summary:     "Step 1: Save Business Info",
+		Middlewares: authMw,
+	}, c.UpdateBusinessInfoHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-bank-details",
+		Method:      "PUT",
+		Path:        "/v1/verification/bank-details",
+		Tags:        []string{"Verification"},
+		Summary:     "Step 3: Save Bank Details",
+		Middlewares: authMw,
+	}, c.UpdateBankDetailsHandler)
+
+	// Upload Endpoint
+	huma.Register(api, huma.Operation{
+		OperationID: "upload-verification-document",
+		Method:      "POST",
+		Path:        "/v1/verification/upload",
+		Tags:        []string{"Verification"},
+		Summary:     "Step 2: Upload KYC Document",
+		Middlewares: authMw,
+	}, c.UploadDocumentHandler)
+
+	// Submit Endpoint
+	huma.Register(api, huma.Operation{
+		OperationID: "submit-verification",
+		Method:      "POST",
+		Path:        "/v1/verification/submit",
+		Tags:        []string{"Verification"},
+		Summary:     "Step 4: Submit Verification for Review",
+		Middlewares: authMw,
+	}, c.SubmitVerificationHandler)
+
+	// ==========================================
+	// 2. Admin Flow
+	// ==========================================
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-get-verification-queue",
 		Method:      "GET",
 		Path:        "/v1/admin/verification/queue",
 		Tags:        []string{"Admin Verification"},
-		Summary:     "Get verification queue",
-		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
-	}, controllers.GetVerificationQueueHandler)
+		Summary:     "List all pending verifications",
+		Middlewares: adminMw,
+	}, c.AdminGetQueueHandler)
+
+	// ==========================================
+	// 3. KYC AI Pipeline (Phase D)
+	// ==========================================
+	// NOTE: the legacy AdminReviewHandler registration was replaced by
+	// admin-manual-action below (same path, richer audit + queue semantics).
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "approve-verification",
-		Method:      "POST",
-		Path:        "/v1/admin/verification/{id}/approve",
-		Tags:        []string{"Admin Verification"},
-		Summary:     "Approve verification",
-		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: dto.AdminApproveRequest{
-						Note: "Documents verified successfully",
-					},
-				},
-			},
-		},
-	}, controllers.ApproveVerificationHandler)
+		OperationID: "admin-get-ai-auto-eligible",
+		Method:      "GET",
+		Path:        "/v1/admin/verification/ai-auto-eligible",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Queue of AI auto-eligible records (24-48h batch approval window)",
+		Middlewares: adminMw,
+	}, c.AdminGetAutoEligibleHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "reject-verification",
+		OperationID: "admin-get-manual-review",
+		Method:      "GET",
+		Path:        "/v1/admin/verification/manual-review",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Queue of borderline records (supports weakest-first AI score sorting)",
+		Middlewares: adminMw,
+	}, c.AdminGetManualReviewHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-verification-detail",
+		Method:      "GET",
+		Path:        "/v1/admin/verification/{id}/detail",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Full verification detail with AI scores and documents",
+		Middlewares: adminMw,
+	}, c.AdminGetDetailHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-bulk-approve",
 		Method:      "POST",
-		Path:        "/v1/admin/verification/{id}/reject",
-		Tags:        []string{"Admin Verification"},
-		Summary:     "Reject verification",
-		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api), middleware.AdminMiddlewareHuma(api)},
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: dto.AdminRejectRequest{
-						Reason: "Documents are blurry",
-					},
-				},
-			},
-		},
-	}, controllers.RejectVerificationHandler)
+		Path:        "/v1/admin/verification/bulk-approve",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Bulk approve auto-eligible records (transactional, audited)",
+		Middlewares: adminMw,
+	}, c.AdminBulkApproveHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-manual-action",
+		Method:      "POST",
+		Path:        "/v1/admin/verification/{id}/review",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Single approve/reject from manual review (audited)",
+		Middlewares: adminMw,
+	}, c.AdminManualActionHandler)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-escalate-manual",
+		Method:      "POST",
+		Path:        "/v1/admin/verification/{id}/escalate",
+		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
+		Summary:     "Escalate auto-eligible record to manual review",
+		Middlewares: adminMw,
+	}, c.AdminEscalateHandler)
 }

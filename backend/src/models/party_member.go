@@ -23,20 +23,19 @@ const (
 	MemberRemoved PartyMemberStatus = "removed"
 )
 
-
 type PartyMember struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
 	// Party Relationship
 	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
+	Party   Party     `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	// User Relationship
 	UserID uuid.UUID `gorm:"type:uuid;not null;index"`
 	User   User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 
 	// Member Details
-	Role PartyMemberRole `gorm:"type:varchar(20);default:'member'"`
+	Role   PartyMemberRole   `gorm:"type:varchar(20);default:'member'"`
 	Status PartyMemberStatus `gorm:"type:varchar(20);default:'pending'"`
 
 	JoinedAt *time.Time

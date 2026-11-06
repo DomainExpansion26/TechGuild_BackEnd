@@ -1,23 +1,24 @@
 package models
+
 // BusinessPANDedup ensures one business PAN cannot be registered with multiple organizations.
 import (
-    "time"
+	"time"
 
-    "github.com/google/uuid"
-    "gorm.io/gorm"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type BusinessPANDedup struct {
-    ID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-    PANHash string `gorm:"size:255;uniqueIndex;not null"`
+	PANHash string `gorm:"size:255;uniqueIndex;not null"`
 
-    UserID uuid.UUID `gorm:"type:uuid;not null"`
+	UserID uuid.UUID `gorm:"type:uuid;not null"`
 
-    CreatedAt time.Time
+	CreatedAt time.Time
 }
 
 func (b *BusinessPANDedup) BeforeCreate(tx *gorm.DB) error {
-    b.ID = uuid.New()
-    return nil
+	b.ID = uuid.New()
+	return nil
 }

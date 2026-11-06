@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
@@ -13,6 +15,18 @@ import (
 
 var DB *gorm.DB
 var RedisDB *redis.Client
+
+// redisTLSEnabled reports whether the Redis connection should use TLS.
+// REDIS_SSL is optional: missing, empty, "false", "0", etc. mean plain redis://
+// (required by Redis Cloud Free tier and local Redis).
+func redisTLSEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("REDIS_SSL"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
 
 func ConnectDatabase() {
 
@@ -43,12 +57,24 @@ func ConnectDatabase() {
 	if redisHost == "" || redisPort == "" {
 		log.Fatal("Missing Redis environment variables")
 	}
-	RedisDB = redis.NewClient(&redis.Options{
+
+	redisOptions := &redis.Options{
 		Addr:     redisHost + ":" + redisPort,
 		Username: os.Getenv("REDIS_USERNAME"),
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,
-	})
+	}
+
+	// TLS is opt-in. Redis Cloud Free tier and local Redis expect a plain
+	// connection, so only set a TLS config when REDIS_SSL is explicitly true.
+	if redisTLSEnabled() {
+		redisOptions.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		log.Println("Redis TLS enabled")
+	} else {
+		log.Println("Redis TLS disabled (plain redis://)")
+	}
+
+	RedisDB = redis.NewClient(redisOptions)
 	_, err = RedisDB.Ping(context.Background()).Result()
 	if err != nil {
 		log.Fatal("Redis connection failed:", err)

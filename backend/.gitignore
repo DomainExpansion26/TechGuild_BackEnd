@@ -1,8 +1,44 @@
+# Environment / secrets (templates are committed, real values are not)
 .env
+.env.*
+!.env.example
+!.env.production.example
 
-.air.toml
+# Go build artifacts and local binaries
+bin/
+server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Local runtime data
 tmp/
+tmp_uploads/
+uploads/
+*.log
+
+# Local tooling / editor config
+.air.toml
+opencode.jsonc
+
+# Local scratch files and notes
 seed_data.json
+test_remaining.go
 PARTY_MANAGEMENT_SUGGESTIONS.md
-test_remaining.gosrc/script/
+
+# Local E2E scripts and generated reports
+src/script/
 script/
+
+# Go build output
+/bin/
+
+# Go test binaries
+
+# Go coverage
+coverage.out
+coverage.html

@@ -1,0 +1,19 @@
+# Keep credentials and local state out of the build context.
+.env
+.env.*
+!.env.example
+
+# Model weights are mounted by docker-compose, not baked into the image.
+models/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.git/
+.gitignore

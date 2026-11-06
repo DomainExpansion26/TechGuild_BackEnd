@@ -26,6 +26,8 @@ func Migrate() {
 		&models.GovernmentID{},
 		&models.GovtIDDedup{},
 		&models.BusinessPANDedup{},
+		&models.VerificationAuditLog{},
+		&models.BulkReviewItem{},
 
 		// Rules & Notifications
 		&models.RuleDocument{},
@@ -102,7 +104,65 @@ func Migrate() {
 		log.Fatal("Milestone payment constraints migration failed:", err)
 	}
 
+	// Raw SQL: KYC Phase 3 routing columns + router hot-query index
+	if err := migrateVerificationRouting(postgres.DB); err != nil {
+		log.Fatal("Verification routing migration failed:", err)
+	}
+
 	log.Println("Database Migrated Successfully")
+}
+
+// ============================================================
+// Verification records (KYC Phase 3: Go router + evidence gates)
+// ============================================================
+
+// migrateVerificationRouting introduces the router-owned routing columns.
+// Only records written with an explicit routing_state='pending' (new ML-job
+// submits) are visible to the Go router; existing rows keep 'routed' so no
+// historical record is suddenly re-evaluated.
+func migrateVerificationRouting(db *gorm.DB) error {
+	statements := []string{
+
+		// 1. Columns (explicit idempotent ALTERs: AutoMigrate adds them from the
+		//    model tags too, but the raw statements keep SQL migrations
+		//    self-contained and reviewable).
+		//
+		// 2. Backfill for records that already completed ML before this phase:
+		//    the historical 'auto_approved' priority (Phase 1.5 double-approve
+		//    window, if any) maps to 'auto_eligible' so the router does not
+		//    skip them.
+		//
+		// No CHECK constraint on ai_recommended_priority on purpose: the
+		// review-priority enum may grow, and ReviewPriorityAutoApproved=
+		// 'auto_approved' is still a valid historical value for review_priority.
+
+		`ALTER TABLE verification_records
+			ADD COLUMN IF NOT EXISTS ai_recommended_priority VARCHAR(20),
+			ADD COLUMN IF NOT EXISTS routing_state VARCHAR(20) NOT NULL DEFAULT 'routed',
+			ADD COLUMN IF NOT EXISTS shadow_mode_applied BOOLEAN NOT NULL DEFAULT false,
+			ADD COLUMN IF NOT EXISTS decision_source VARCHAR(30),
+			ADD COLUMN IF NOT EXISTS policy_version VARCHAR(50),
+			ADD COLUMN IF NOT EXISTS system_escalated_at TIMESTAMP,
+			ADD COLUMN IF NOT EXISTS user_id_validation JSONB;`,
+
+		`UPDATE verification_records
+		 SET ai_recommended_priority = CASE
+				WHEN review_priority = 'auto_approved' THEN 'auto_eligible'
+				ELSE review_priority::text
+			END
+		 WHERE ml_status = 'ml_completed' AND ai_recommended_priority IS NULL;`,
+
+		`CREATE INDEX IF NOT EXISTS idx_vr_routing_pending
+			ON verification_records (ml_completed_at)
+			WHERE ml_status = 'ml_completed' AND routing_state = 'pending';`,
+	}
+
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ============================================================

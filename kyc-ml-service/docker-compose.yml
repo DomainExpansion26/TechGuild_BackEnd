@@ -1,0 +1,70 @@
+name: techguild-kyc-ml
+
+# ---------------------------------------------------------------------------
+# KYC ML worker only.
+#
+# PostgreSQL and Redis are EXTERNAL cloud services (Neon, Supabase, Upstash,
+# Redis Cloud, ElastiCache, ...). This compose file no longer starts any
+# database or cache containers.
+#
+# 1. Copy the example environment file and fill in your cloud credentials:
+#
+#      cp .env.example .env
+#
+# 2. Start the worker:
+#
+#      docker compose up -d --build
+#
+# The Go backend runs separately and must point at the SAME cloud PostgreSQL
+# and Redis instance.
+# ---------------------------------------------------------------------------
+
+services:
+  ml-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: techguild-kyc-ml-worker
+
+    # Cloud credentials and worker tuning all live in .env. Existing shell
+    # environment variables are not required; compose reads this file.
+    env_file:
+      - .env
+
+    # Container-specific paths override whatever is in .env so the same file
+    # also works when running `python -m app.worker` directly on the host.
+    environment:
+      MODEL_DIR: /app/models
+      PADDLE_OCR_BASE_DIR: /app/.paddleocr
+      PADDLE_PDX_CACHE_HOME: /app/.paddlex
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    volumes:
+      # ONNX weights downloaded on the host with download_models.py.
+      - ./models:/app/models:ro
+      # PaddleOCR model cache (first run downloads detector/recognizer weights).
+      - paddle_ocr_cache:/app/.paddleocr
+      - paddle_pdx_cache:/app/.paddlex
+
+    ports:
+      - "8000:8000"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # Cloud DB/Redis TLS handshakes and PaddleOCR warm-up can be slow.
+      start_period: 90s
+
+volumes:
+  paddle_ocr_cache:
+  paddle_pdx_cache:

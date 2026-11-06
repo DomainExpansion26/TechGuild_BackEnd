@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -88,6 +89,16 @@ func main() {
 
 	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
 	payoutMethodController := controllers.NewPayoutMethodController(payoutMethodService)
+	//1. Initialize Service (Assuming redisClient is available)
+	verificationService := services.NewVerificationService(postgres.RedisDB)
+
+	// ---- Phase 3: Go owns routing; Python only writes ML evidence ----
+	// Attach the env-loaded policy (shadow mode / rollout cohort /
+	// thresholds) and start the router cron. LoadConfig logs the
+	// shadow-mode assertion (LogKYCShadowModeAssertion) for the operator.
+	verificationService.SetKYCPolicy(cfg.KYCPolicy)
+
+	jobs.StartKYCRouter(context.Background(), verificationService, cfg.RouterIntervalSeconds, 50)
 
 	// --------------------------------------------------
 	// Quest Milestone flow
@@ -99,6 +110,9 @@ func main() {
 	milestoneReleaseController := controllers.NewMilestoneReleaseController(cfg, paymentProvider)
 
 	jobs.StartReconciliationJob(milestoneFundingService)
+
+	// KYC stale-pending escalator cron (manual review only; never auto-approves)
+	jobs.StartStalePendingEscalator(verificationService)
 
 	// --------------------------------------------------
 	// Wallet + Withdrawal + Refund
@@ -136,6 +150,7 @@ func main() {
 	profileController := controllers.NewProfileController(cfg)
 	settingsController := controllers.NewSettingsController(cfg)
 	oauthController := controllers.NewOAuthController(cfg)
+	verificationController := controllers.NewVerificationController(verificationService)
 
 	// --------------------------------------------------
 	// Route registration
@@ -147,7 +162,7 @@ func main() {
 	routes.RegisterOAuthRoutes(api, oauthController)
 
 	routes.RegisterPartyRoutes(api)
-	routes.RegisterVerificationRoutes(api)
+	routes.RegisterVerificationRoutes(api, verificationController)
 	routes.RegisterTwoFactorRoutes(api)
 
 	routes.RegisterQuestRoutes(api)
