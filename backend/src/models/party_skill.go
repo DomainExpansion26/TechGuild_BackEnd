@@ -12,7 +12,7 @@ type PartySkill struct {
 
 	// Party Relationship
 	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
+	Party   Party     `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	SkillName string `gorm:"size:100;not null"`
 

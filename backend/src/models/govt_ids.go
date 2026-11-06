@@ -1,4 +1,5 @@
 package models
+
 // GovernmentID stores the verified government identity of a user.
 // This table only contains successfully verified IDs.
 // Raw government ID numbers are never stored.
@@ -12,10 +13,10 @@ import (
 type GovernmentIDType string
 
 const (
-	IDAadhaar         GovernmentIDType = "aadhaar"
-	IDPAN             GovernmentIDType = "pan"
-	IDPassport        GovernmentIDType = "passport"
-	IDDrivingLicense  GovernmentIDType = "driving_license"
+	IDAadhaar        GovernmentIDType = "aadhaar"
+	IDPAN            GovernmentIDType = "pan"
+	IDPassport       GovernmentIDType = "passport"
+	IDDrivingLicense GovernmentIDType = "driving_license"
 )
 
 type GovernmentID struct {

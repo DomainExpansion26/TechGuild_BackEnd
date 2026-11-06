@@ -1,6 +1,8 @@
-# Env files
+# Env files (templates are committed, real values are not)
 .env
 .env.*
+!.env.example
+!.env.production.example
 *.env
 
 # macOS system files
@@ -8,6 +10,7 @@
 
 # Go binaries and builds
 backend/server
+backend/bin/
 server
 *.exe
 *.exe~
@@ -17,7 +20,11 @@ server
 *.test
 *.out
 
-# IDE configs
+# Local logs / coverage
+*.log
+coverage.html
+
+# IDE and local agent configs
 .idea/
 .vscode/
 *.suo
@@ -26,6 +33,125 @@ server
 *.sln
 *.sw?
 
+# Local provider config only. The committed guard lives in .opencode/.
+backend/opencode.jsonc
+
 .jcode/
 .serena/
 .dsh/
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage/
+htmlcov/
+
+# Python virtualenvs (per-service; do NOT add plain "env/")
+.venv/
+venv/
+
+# Real env files (NOT examples)
+.env.local
+.env.production
+.env.staging
+.env.development
+
+# Backups
+*.bak.*
+*.bak-*
+backend.bak.*
+kyc-ml-service.bak.*
+
+# Model weights (downloaded, not .gitkeep)
+kyc-ml-service/models/*.onnx
+kyc-ml-service/models/*.pth
+kyc-ml-service/models/*.pt
+kyc-ml-service/models/*.safetensors
+kyc-ml-service/models/*.ckpt
+kyc-ml-service/models/*.bin
+
+# Paddle OCR model caches
+.paddlex/
+.paddleocr/
+paddle_ocr_cache/
+paddle_pdx_cache/
+**/paddle_ocr_cache/
+**/paddle_pdx_cache/
+
+# Agent workspace
+.opencode/
+.claude/
+.cursor/
+
+# IDE / OS
+*.swp
+*.swo
+*~
+
+# Logs and temp
+logs/
+*.pid
+*.tmp
+*.temp
+
+# Local dev DB files
+*.sqlite
+*.sqlite3
+*.db
+
+# Node (future)
+node_modules/
+
+AGENTS.md
+LOCAL_TESTING.md
+
+# --- Final cleanup (Phase 4.5) ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.bak.*
+kyc-ml-service.bak.*
+backend.bak.*
+.opencode/
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+kyc-ml-service/models/*.onnx
+kyc-ml-service/models/*.pth
+kyc-ml-service/models/*.pt
+kyc-ml-service/models/*.safetensors
+kyc-ml-service/models/*.ckpt
+kyc-ml-service/models/*.bin
+.paddlex/
+.paddleocr/
+paddle_ocr_cache/
+paddle_pdx_cache/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+backend/bin/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+node_modules/
+
+# Preserve example templates + .gitkeep
+!kyc-ml-service/models/.gitkeep
+!kyc-ml-service/.env.example
+!kyc-ml-service/.env.production.example
+!backend/.env.example
+!backend/.env.production.example
