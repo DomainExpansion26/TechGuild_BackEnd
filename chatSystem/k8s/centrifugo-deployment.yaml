@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: centrifugo
+  namespace: techguild
+  labels:
+    app.kubernetes.io/name: centrifugo
+    app.kubernetes.io/part-of: techguild-chat
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: centrifugo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: centrifugo
+    spec:
+      containers:
+        - name: centrifugo
+          image: centrifugo/centrifugo:v5
+          imagePullPolicy: IfNotPresent
+          args:
+            - "centrifugo"
+            - "--config=/etc/centrifugo/config.json"
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: REDIS_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: techguild-env
+                  key: REDIS_ADDR
+                  optional: true
+            - name: CENTRIFUGO_TOKEN_HMAC_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: centrifugo-secrets
+                  key: token_hmac_secret_key
+            - name: CENTRIFUGO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: centrifugo-secrets
+                  key: api_key
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/centrifugo
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: centrifugo-config
+
