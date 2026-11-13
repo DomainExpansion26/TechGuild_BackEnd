@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: centrifugo-config
+  namespace: techguild
+  labels:
+    app.kubernetes.io/name: centrifugo
+    app.kubernetes.io/part-of: techguild-chat
+data:
+  config.json: |
+    {
+      "token_hmac_secret_key": "${CENTRIFUGO_TOKEN_HMAC_SECRET_KEY}",
+      "api_key": "${CENTRIFUGO_API_KEY}",
+      "engine": "redis",
+      "redis_address": "${REDIS_ADDRESS}",
+      "allowed_origins": [
+        "https://techguild.io",
+        "https://*.techguild.io",
+        "http://localhost:3000",
+        "http://localhost:8080"
+      ],
+      "allow_subscribe_for_client": false,
+      "proxy_subscribe_endpoint": "http://techguild-backend.techguild.svc.cluster.local:8080/v1/communication/centrifugo/subscribe-proxy",
+      "proxy_subscribe_timeout": "5s",
+      "proxy_http_headers": ["Authorization"],
+      "namespaces": [
+        {
+          "name": "quest",
+          "proxy_subscribe": true,
+          "presence": true,
+          "join_leave": true,
+          "history_size": 0,
+          "history_ttl": "0s"
+        },
+        {
+          "name": "party",
+          "proxy_subscribe": true,
+          "presence": true,
+          "join_leave": true,
+          "history_size": 0,
+          "history_ttl": "0s"
+        },
+        {
+          "name": "dm",
+          "proxy_subscribe": true,
+          "presence": true,
+          "join_leave": true,
+          "history_size": 0,
+          "history_ttl": "0s"
+        }
+      ]
+    }
+
