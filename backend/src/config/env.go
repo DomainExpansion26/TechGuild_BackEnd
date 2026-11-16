@@ -31,8 +31,9 @@ func LoadConfig() (*Config, error) {
 		JWTSecret:        viper.GetString("JWT_SECRET"),
 		JWTRefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
 
-		FrontendURL: viper.GetString("FRONTEND_URL"),
-		ZudokuURL:   viper.GetString("ZUDOKU_URL"),
+		FrontendURL:      viper.GetString("FRONTEND_URL"),
+		ZudokuURL:        viper.GetString("ZUDOKU_URL"),
+		GeoNamesUsername: viper.GetString("GEONAMES_USERNAME"),
 
 		SMTPHost:     viper.GetString("SMTP_HOST"),
 		SMTPPort:     viper.GetString("SMTP_PORT"),
