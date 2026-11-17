@@ -109,6 +109,11 @@ func Migrate() {
 		log.Fatal("Verification routing migration failed:", err)
 	}
 
+	// Raw SQL: KYC Phase 4 attempt audit trail + rate-limit counters
+	if err := migrateVerificationAttempts(postgres.DB); err != nil {
+		log.Fatal("Verification attempts migration failed:", err)
+	}
+
 	log.Println("Database Migrated Successfully")
 }
 
@@ -159,6 +164,48 @@ func migrateVerificationRouting(db *gorm.DB) error {
 
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ============================================================
+// Verification attempts (KYC Phase 4: rate limiting)
+// ============================================================
+
+// migrateVerificationAttempts creates the append-only attempt audit trail and
+// the per-window counters that back the KYC rate limiter.
+func migrateVerificationAttempts(db *gorm.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS verification_attempts (
+			id BIGSERIAL PRIMARY KEY,
+			user_id UUID NOT NULL,
+			verification_id UUID,
+			action VARCHAR(32) NOT NULL,
+			outcome VARCHAR(32) NOT NULL,
+			ip_hash VARCHAR(64) NOT NULL,
+			user_agent_hash VARCHAR(64),
+			request_id VARCHAR(64),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_va_user_allowed_created
+			ON verification_attempts (user_id, created_at DESC)
+			WHERE outcome = 'allowed'`,
+		`CREATE INDEX IF NOT EXISTS idx_va_ip_allowed_created
+			ON verification_attempts (ip_hash, created_at DESC)
+			WHERE outcome = 'allowed'`,
+		`CREATE TABLE IF NOT EXISTS kyc_attempt_counters (
+			subject_type VARCHAR(8) NOT NULL,
+			subject_hash VARCHAR(64) NOT NULL,
+			window_kind VARCHAR(8) NOT NULL,
+			window_start TIMESTAMPTZ NOT NULL,
+			count BIGINT NOT NULL DEFAULT 0,
+			PRIMARY KEY (subject_type, subject_hash, window_kind, window_start)
+		)`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
 			return err
 		}
 	}

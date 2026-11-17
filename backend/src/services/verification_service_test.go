@@ -4,18 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime/multipart"
+	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
+	"techguild-backend/src/utils"
 )
 
 // ---------------------------------------------------------------------------
@@ -33,7 +40,7 @@ type mockVerificationRecordsRepo struct {
 	getDocumentsFn                func(recordID string) ([]models.VerificationDocument, error)
 	updateVerificationRecordFn    func(record *models.VerificationRecord) error
 	getVerificationByIDFn         func(id string) (*models.VerificationRecord, error)
-	bulkApproveFn                 func(ids []string, adminID uuid.UUID) error
+	bulkApproveFn                 func(ids []string, adminID uuid.UUID, afterApprove func(tx *gorm.DB, rec *models.VerificationRecord) error) error
 	markManualActionFn            func(verificationID, action string, adminID uuid.UUID, reason string) error
 	createGovtHashFn              func(hash *models.GovtIDDedup) error
 	createBusinessHashFn          func(hash *models.BusinessPANDedup) error
@@ -70,11 +77,11 @@ func (m *mockVerificationRecordsRepo) GetVerificationByID(id string) (*models.Ve
 	return m.getVerificationByIDFn(id)
 }
 
-func (m *mockVerificationRecordsRepo) BulkApprove(ids []string, adminID uuid.UUID) error {
+func (m *mockVerificationRecordsRepo) BulkApprove(ids []string, adminID uuid.UUID, afterApprove func(tx *gorm.DB, rec *models.VerificationRecord) error) error {
 	if m.bulkApproveFn == nil {
 		panic("unexpected call: BulkApprove")
 	}
-	return m.bulkApproveFn(ids, adminID)
+	return m.bulkApproveFn(ids, adminID, afterApprove)
 }
 
 func (m *mockVerificationRecordsRepo) MarkManualAction(verificationID, action string, adminID uuid.UUID, reason string) error {
@@ -254,7 +261,7 @@ func TestSubmitVerification_PublishesMLJobAndMarksQueued(t *testing.T) {
 
 	svc := newTestVerificationService(vr, &mockUserRepo{}, rdb)
 
-	if err := svc.SubmitVerification(userID.String()); err != nil {
+	if err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), ""); err != nil {
 		t.Fatalf("SubmitVerification returned an error: %v", err)
 	}
 
@@ -343,7 +350,7 @@ func TestSubmitVerification_ValidationFailureDoesNotPublish(t *testing.T) {
 
 	svc := newTestVerificationService(vr, &mockUserRepo{}, rdb)
 
-	if err := svc.SubmitVerification(userID.String()); err == nil {
+	if err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), ""); err == nil {
 		t.Fatal("SubmitVerification succeeded with missing required documents")
 	}
 
@@ -381,7 +388,7 @@ func TestSubmitVerification_FailsWhenRedisUnavailable(t *testing.T) {
 
 	svc := newTestVerificationService(vr, &mockUserRepo{}, nil)
 
-	err := svc.SubmitVerification(userID.String())
+	err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), "")
 	if !errors.Is(err, ErrMLQueueFailed) {
 		t.Fatalf("SubmitVerification error = %v, want ErrMLQueueFailed", err)
 	}
@@ -422,7 +429,7 @@ func TestAdminBulkApprove(t *testing.T) {
 		var gotIDs []string
 		var gotAdmin uuid.UUID
 		vr := &mockVerificationRecordsRepo{
-			bulkApproveFn: func(got []string, admin uuid.UUID) error {
+			bulkApproveFn: func(got []string, admin uuid.UUID, _ func(tx *gorm.DB, rec *models.VerificationRecord) error) error {
 				gotIDs = append([]string(nil), got...)
 				gotAdmin = admin
 				return nil
@@ -449,7 +456,7 @@ func TestAdminBulkApprove(t *testing.T) {
 	t.Run("propagates repository error", func(t *testing.T) {
 		repoErr := errors.New("bulk approve failed")
 		vr := &mockVerificationRecordsRepo{
-			bulkApproveFn: func([]string, uuid.UUID) error { return repoErr },
+			bulkApproveFn: func([]string, uuid.UUID, func(tx *gorm.DB, rec *models.VerificationRecord) error) error { return repoErr },
 		}
 		svc := newTestVerificationService(vr, &mockUserRepo{}, nil)
 
@@ -918,7 +925,7 @@ func TestSubmitRequiresAadhaar(t *testing.T) {
 	}
 	svc := newTestVerificationService(vr, &mockUserRepo{}, nil)
 
-	err := svc.SubmitVerification(userID.String())
+	err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), "")
 	if err == nil {
 		t.Fatal("SubmitVerification succeeded with only pan_card (aadhaar required)")
 	}
@@ -957,7 +964,7 @@ func TestSubmitAcceptsAadhaarPlusPan(t *testing.T) {
 	}
 	svc := newTestVerificationService(vr, &mockUserRepo{}, rdb)
 
-	if err := svc.SubmitVerification(userID.String()); err != nil {
+	if err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), ""); err != nil {
 		t.Fatalf("SubmitVerification with aadhaar+pan returned an error: %v", err)
 	}
 	if !updated {
@@ -994,7 +1001,7 @@ func TestSubmitLegacyGovtIDLogsWarning(t *testing.T) {
 	}
 	svc := newTestVerificationService(vr, &mockUserRepo{}, rdb)
 
-	if err := svc.SubmitVerification(userID.String()); err != nil {
+	if err := svc.SubmitVerification(context.Background(), userID.String(), netip.MustParseAddr("203.0.113.7"), ""); err != nil {
 		t.Fatalf("SubmitVerification with legacy govt_id returned an error: %v", err)
 	}
 	if !updated {
@@ -1011,5 +1018,237 @@ func TestDocTypeAadhaarAllowedForIndividual(t *testing.T) {
 	}
 	if isDocTypeAllowedForVerification(models.VerificationBusiness, models.DocTypeAadhaar) {
 		t.Error("isDocTypeAllowedForVerification(Business, Aadhaar) = true, want false")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SubmitVerification — Phase 4 rate limiting
+// ---------------------------------------------------------------------------
+
+// setupRateLimitedSubmit wires a SQLite-backed service with a real attempts
+// repository and a draft record (plus selfie+aadhaar docs) for userID.
+func setupRateLimitedSubmit(
+	t *testing.T,
+	status models.VerificationStatus,
+	rdb *redis.Client,
+) (*VerificationService, *gorm.DB, uuid.UUID) {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite test database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get underlying sql.DB: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.VerificationRecord{},
+		&models.VerificationDocument{},
+		&models.VerificationAttempt{},
+		&models.KYCAttemptCounter{},
+	); err != nil {
+		t.Fatalf("auto-migrate test schema: %v", err)
+	}
+
+	previous := postgres.DB
+	postgres.DB = db
+	t.Cleanup(func() { postgres.DB = previous })
+
+	userID := uuid.New()
+	record := &models.VerificationRecord{
+		ID:         uuid.New(),
+		UserID:     userID,
+		Type:       models.VerificationIndividual,
+		Status:     status,
+		GovtIDHash: "govt-hash",
+	}
+	if err := db.Create(record).Error; err != nil {
+		t.Fatalf("seed verification record: %v", err)
+	}
+	docs := []models.VerificationDocument{
+		{VerificationRecordID: record.ID, DocumentType: models.DocTypeSelfie, FileURL: "https://cdn.example/selfie.jpg"},
+		{VerificationRecordID: record.ID, DocumentType: models.DocTypeAadhaar, FileURL: "https://cdn.example/aadhaar.jpg"},
+	}
+	if err := db.Create(&docs).Error; err != nil {
+		t.Fatalf("seed verification documents: %v", err)
+	}
+
+	resolver, err := utils.NewIPResolver("")
+	if err != nil {
+		t.Fatalf("build IP resolver: %v", err)
+	}
+	svc := newTestVerificationService(&mockVerificationRecordsRepo{}, &mockUserRepo{}, rdb)
+	if err := svc.SetRateLimiter(repository.NewAttemptsRepository(), resolver, "00112233445566778899aabbccddeeff"); err != nil {
+		t.Fatalf("SetRateLimiter: %v", err)
+	}
+	return svc, db, userID
+}
+
+func seedHourlyCounter(t *testing.T, db *gorm.DB, userID uuid.UUID, count int64) {
+	t.Helper()
+	if err := db.Create(&models.KYCAttemptCounter{
+		SubjectType: "user",
+		SubjectHash: userID.String(),
+		WindowKind:  "hour",
+		WindowStart: time.Now().UTC().Truncate(time.Hour),
+		Count:       count,
+	}).Error; err != nil {
+		t.Fatalf("seed counter: %v", err)
+	}
+}
+
+func userHourlyCount(t *testing.T, db *gorm.DB, userID uuid.UUID) int64 {
+	t.Helper()
+	var count int64
+	if err := db.Model(&models.KYCAttemptCounter{}).
+		Where("subject_type = ? AND subject_hash = ? AND window_kind = ?", "user", userID.String(), "hour").
+		Select("COALESCE(MAX(count), 0)").Scan(&count).Error; err != nil {
+		t.Fatalf("read counter: %v", err)
+	}
+	return count
+}
+
+func countAttemptRows(t *testing.T, db *gorm.DB) int64 {
+	t.Helper()
+	var n int64
+	if err := db.Model(&models.VerificationAttempt{}).Count(&n).Error; err != nil {
+		t.Fatalf("count attempts: %v", err)
+	}
+	return n
+}
+
+func TestSubmit_RateLimit_ReturnsRateLimitError(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	svc, db, userID := setupRateLimitedSubmit(t, models.VerificationDraft, newTestRedis(t))
+	seedHourlyCounter(t, db, userID, 3) // user_hourly limit is 3
+
+	err := svc.SubmitVerification(context.Background(), userID.String(), ip, "")
+	if err == nil {
+		t.Fatal("expected RateLimitError, got nil")
+	}
+	var rlErr *repository.RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected *repository.RateLimitError, got %T: %v", err, err)
+	}
+	if rlErr.Scope != "user_hourly" {
+		t.Errorf("scope = %q, want user_hourly", rlErr.Scope)
+	}
+	if !errors.Is(err, repository.ErrRateLimited) {
+		t.Error("expected error to unwrap to ErrRateLimited")
+	}
+	if n := countAttemptRows(t, db); n != 0 {
+		t.Errorf("verification_attempts rows = %d, want 0 (rejected reserve must not write a row)", n)
+	}
+}
+
+func TestSubmit_Concurrent_OnlyOneSucceedsWhenLimitReached(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	svc, db, userID := setupRateLimitedSubmit(t, models.VerificationDraft, newTestRedis(t))
+	seedHourlyCounter(t, db, userID, 2) // 1 slot remaining out of 3
+
+	const goroutines = 5
+	var (
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		succeeded int
+		limited   int
+		other     []error
+	)
+	start := make(chan struct{})
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			err := svc.SubmitVerification(context.Background(), userID.String(), ip, "")
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				succeeded++
+				return
+			}
+			var rlErr *repository.RateLimitError
+			if errors.As(err, &rlErr) {
+				limited++
+				return
+			}
+			other = append(other, err)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if len(other) > 0 {
+		t.Fatalf("unexpected non-rate-limit errors: %v", other)
+	}
+	if succeeded != 1 {
+		t.Errorf("succeeded = %d, want exactly 1", succeeded)
+	}
+	if limited != goroutines-1 {
+		t.Errorf("rate limited = %d, want %d", limited, goroutines-1)
+	}
+}
+
+func TestSubmit_PublishesAfterCommit(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	// nil redis => publish fails after commit.
+	svc, db, userID := setupRateLimitedSubmit(t, models.VerificationDraft, nil)
+	seedHourlyCounter(t, db, userID, 2) // 1 slot remaining
+
+	err := svc.SubmitVerification(context.Background(), userID.String(), ip, "")
+	if !errors.Is(err, ErrMLQueueFailed) {
+		t.Fatalf("first submit error = %v, want ErrMLQueueFailed", err)
+	}
+	// MarkFailed must release the reserved slot.
+	if got := userHourlyCount(t, db, userID); got != 2 {
+		t.Fatalf("counter after failed publish = %d, want 2 (slot released)", got)
+	}
+
+	// Reset the record to draft (the pre-publish Save committed) and give the
+	// service a working Redis; the released quota lets the retry succeed.
+	if err := db.Model(&models.VerificationRecord{}).
+		Where("user_id = ?", userID).
+		Update("status", models.VerificationDraft).Error; err != nil {
+		t.Fatalf("reset record status: %v", err)
+	}
+	rdb := newTestRedis(t)
+	svc.redisClient = rdb
+
+	if err := svc.SubmitVerification(context.Background(), userID.String(), ip, ""); err != nil {
+		t.Fatalf("second submit after quota release = %v, want nil", err)
+	}
+	if n, err := rdb.XLen(context.Background(), kycJobStream).Result(); err != nil || n != 1 {
+		t.Fatalf("stream length = %d (err=%v), want 1", n, err)
+	}
+}
+
+func TestSubmit_TransactionRollbackOnStateCheckFail(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	svc, db, userID := setupRateLimitedSubmit(t, models.VerificationPending, newTestRedis(t))
+
+	err := svc.SubmitVerification(context.Background(), userID.String(), ip, "")
+	if !errors.Is(err, ErrAlreadySubmitted) {
+		t.Fatalf("submit error = %v, want ErrAlreadySubmitted", err)
+	}
+	// Reserve ran before the state check, so a rollback must leave no counter.
+	if got := userHourlyCount(t, db, userID); got != 0 {
+		t.Fatalf("counter after rollback = %d, want 0", got)
+	}
+
+	// Move the record back to draft; if quota had leaked, this second call
+	// (needing a slot) could still pass at limit 3, so assert the exact row.
+	if err := db.Model(&models.VerificationRecord{}).
+		Where("user_id = ?", userID).
+		Update("status", models.VerificationDraft).Error; err != nil {
+		t.Fatalf("reset record status: %v", err)
+	}
+	if err := svc.SubmitVerification(context.Background(), userID.String(), ip, ""); err != nil {
+		t.Fatalf("second submit = %v, want nil", err)
 	}
 }

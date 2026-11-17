@@ -30,10 +30,10 @@ const (
 type VerificationReviewPriority string
 
 const (
-	ReviewPriorityAutoEligible  VerificationReviewPriority = "auto_eligible"   // AI-high confidence; eligible for bulk approve
-	ReviewPriorityManual        VerificationReviewPriority = "manual_review"   // borderline; human must check
-	ReviewPriorityAutoReject    VerificationReviewPriority = "auto_reject"     // hard fraud signal; auto-fail
-	ReviewPriorityAutoApproved  VerificationReviewPriority = "auto_approved"   // passed the 24-48h auto-approve window
+	ReviewPriorityAutoEligible VerificationReviewPriority = "auto_eligible" // AI-high confidence; eligible for bulk approve
+	ReviewPriorityManual       VerificationReviewPriority = "manual_review" // borderline; human must check
+	ReviewPriorityAutoReject   VerificationReviewPriority = "auto_reject"   // hard fraud signal; auto-fail
+	ReviewPriorityAutoApproved VerificationReviewPriority = "auto_approved" // passed the 24-48h auto-approve window
 )
 
 type MLVerificationStatus string
@@ -72,11 +72,12 @@ type VerificationRecord struct {
 	BusinessPANHash string `gorm:"size:64;index"`
 
 	// Business Information
-	BusinessName       string `gorm:"size:255"`
-	GSTNumber          string `gorm:"size:50"`
-	RegistrationNumber string `gorm:"size:100"`
-	Website            string `gorm:"size:255"`
-	Country            string `gorm:"size:100"`
+	BusinessName        string `gorm:"size:255"`
+	GSTNumber           string `gorm:"size:50"`
+	RegistrationNumber  string `gorm:"size:100"`
+	Website             string `gorm:"size:255"`
+	Country             string `gorm:"size:100"`
+	SelectedBusinessDoc string `gorm:"size:50"`
 
 	// Bank Details (Security: Account number MUST be encrypted)
 	BankName          string `gorm:"size:100"`
@@ -94,20 +95,20 @@ type VerificationRecord struct {
 	MLJobID          string               `gorm:"size:100"`
 	MLSubmittedAt    *time.Time
 	MLCompletedAt    *time.Time
-	MLProcessingTime int                  `gorm:"default:0"`
-	MLVendor         string               `gorm:"size:100"`
-	MLModelVersion   string               `gorm:"size:50"`
+	MLProcessingTime int    `gorm:"default:0"`
+	MLVendor         string `gorm:"size:100"`
+	MLModelVersion   string `gorm:"size:50"`
 
 	// ---- AI Score Results (JSONB) ----
-	OCROcrResult      datatypes.JSON `gorm:"type:jsonb"`
-	FaceMatchResult   datatypes.JSON `gorm:"type:jsonb"`
-	LivenessResult    datatypes.JSON `gorm:"type:jsonb"`
+	OCROcrResult    datatypes.JSON `gorm:"type:jsonb"`
+	FaceMatchResult datatypes.JSON `gorm:"type:jsonb"`
+	LivenessResult  datatypes.JSON `gorm:"type:jsonb"`
 
 	// ---- Human-in-the-Loop Decision State ----
 	ReviewPriority         VerificationReviewPriority `gorm:"size:20;default:'manual_review'"`
-	BulkReviewRequestedAt  *time.Time                   `gorm:"type:timestamp;index"`
-	AdminReviewRequestedBy *uuid.UUID                   `gorm:"type:uuid"`
-	AdminReviewRequestedAt *time.Time                   `gorm:"type:timestamp"`
+	BulkReviewRequestedAt  *time.Time                 `gorm:"type:timestamp;index"`
+	AdminReviewRequestedBy *uuid.UUID                 `gorm:"type:uuid"`
+	AdminReviewRequestedAt *time.Time                 `gorm:"type:timestamp"`
 
 	// ---- Phase 3: Go router state ----
 	// Explicit column tags: the Python worker writes these columns by name,

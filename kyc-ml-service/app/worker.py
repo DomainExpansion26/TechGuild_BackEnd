@@ -44,7 +44,17 @@ from app.qr.aadhaar_qr import QRResult, QRVerificationError, verify_aadhaar_qr
 from app.config import settings
 from app.qr.qr_decode import decode_qr_text
 from app.qr.cert_loader import TrustedCert, load_pinned_certs
+from app.image_preprocess import preprocess_selfie_image
 from app.validators.id_formats import is_valid_pan, find_aadhaar_in_text
+from app.validators.document_match import (
+    compare_business_documents,
+    compare_documents,
+    fold_ocr_confusables,
+    normalise_gstin,
+    normalise_ifsc,
+    normalise_pan,
+    normalise_registration_number,
+)
 from app.validators.verhoeff import is_valid_aadhaar
 
 logger = logging.getLogger("kyc.worker")
@@ -77,6 +87,97 @@ GOVT_DOC_TYPES = {
     "driving_license",
 }
 SELFIE_DOC_TYPES = {"selfie", "live_selfie", "face"}
+
+# Phase G business KYC: a business job uploads the ONE business document the
+# user selected (a GST certificate, a PAN card, an incorporation certificate or
+# a business registration certificate) plus a cancelled cheque, and has no
+# selfie at all. The selected document is the only identity anchor; the cheque
+# is the bank-details anchor.
+BUSINESS_PRIMARY_DOC_TYPES = (
+    "gst_certificate",
+    "pan_card",
+    "incorporation_certificate",
+    "business_registration",
+)
+BUSINESS_DOC_TYPES = (*BUSINESS_PRIMARY_DOC_TYPES, "cancelled_cheque")
+AADHAAR_DOC_TYPES = {"aadhaar", "aadhaar_card"}
+
+# Document "type" strings the Go producer may send for each business slot.
+_BUSINESS_DOC_ALIASES = {
+    "pan_card": ("pan_card", "pan", "pan_document", "pan_card_image"),
+    "gst_certificate": (
+        "gst_certificate",
+        "gst_cert",
+        "gstin_certificate",
+        "gst",
+    ),
+    "incorporation_certificate": (
+        "incorporation_certificate",
+        "incorporation_cert",
+        "inc_cert",
+        "certificate_of_incorporation",
+        "coi",
+    ),
+    "business_registration": (
+        "business_registration",
+        "biz_reg",
+        "business_reg_cert",
+        "registration_certificate",
+        "shop_act",
+        "udyam",
+        "msme",
+    ),
+    "cancelled_cheque": (
+        "cancelled_cheque",
+        "canceled_cheque",
+        "cancelled_check",
+        "canceled_check",
+        "cheque",
+        "check",
+    ),
+}
+
+_BUSINESS_MISSING_ERRORS = {
+    "pan_card": "missing_pan_card",
+    "gst_certificate": "missing_gst_certificate",
+    "incorporation_certificate": "missing_incorporation_certificate",
+    "business_registration": "missing_business_registration",
+    "cancelled_cheque": "missing_cancelled_cheque",
+}
+
+# No selectable business document was found at all (nothing was uploaded, or the
+# document list carries only individual-KYC slots).
+_BUSINESS_NO_DOCUMENT_ERROR = "missing_business_documents"
+
+
+def _canonical_business_doc_type(doc_type: Any) -> str | None:
+    """Map a document "type" string (or an alias) onto its canonical slot."""
+    value = str(doc_type or "").strip().lower()
+    if not value:
+        return None
+    for canonical, aliases in _BUSINESS_DOC_ALIASES.items():
+        if value == canonical or value in aliases:
+            return canonical
+    return None
+
+
+def _infer_business_doc_type(documents: Any) -> str | None:
+    """The selected document type implied by an uploaded document list.
+
+    The first document, in upload order, whose type is one of the four
+    selectable business documents. Deterministic on purpose: with a producer
+    that sends no explicit selection, the workload itself decides, and a
+    cancelled cheque alone never counts as the selected document.
+    """
+    if not isinstance(documents, (list, tuple)):
+        return None
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        canonical = _canonical_business_doc_type(document.get("type"))
+        if canonical in BUSINESS_PRIMARY_DOC_TYPES:
+            return canonical
+    return None
 
 
 class JobPayloadError(ValueError):
@@ -227,12 +328,24 @@ def parse_job_payload(
             }
         )
 
+    business_info = data.get("business_info") if isinstance(data.get("business_info"), dict) else {}
+    bank_details = data.get("bank_details") if isinstance(data.get("bank_details"), dict) else {}
     return {
         "job_id": str(data.get("job_id") or ""),
         "verification_id": verification_id,
         "user_id": str(data.get("user_id") or ""),
         "type": str(data.get("type") or ""),
         "documents": documents,
+        "business_info": {
+            "gstin": str(business_info.get("gstin") or ""),
+            "pan": str(business_info.get("pan") or ""),
+            "reg_no": str(business_info.get("reg_no") or ""),
+        },
+        "bank_details": {
+            "ifsc": str(bank_details.get("ifsc") or ""),
+            "account_number": str(bank_details.get("account_number") or ""),
+        },
+        "selected_business_doc": str(data.get("selected_business_doc") or ""),
     }
 
 
@@ -435,7 +548,10 @@ _NAME_STOPWORDS = frozenset(
         "year",
     }
 )
-_AADHAAR_RE = re.compile(r"\b(\d{4})[\s-]?(\d{4})[\s-]?(\d{4})\b")
+# Separators are space/hyphen only. `\s` let the pattern run across a line
+# break, so "2003\n2345 6789 0124" glued an unrelated 4-digit token onto the
+# Aadhaar run and left eight unmasked digits in the stored text.
+_AADHAAR_RE = re.compile(r"\b(\d{4})[ -]?(\d{4})[ -]?(\d{4})\b")
 _PAN_RE = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")
 _PAN_CANDIDATE_RE = re.compile(
     r"(?<![A-Za-z0-9])"
@@ -552,6 +668,87 @@ def _extract_dob(text: str) -> str:
     return match.group(0) if match else ""
 
 
+# Tokens that appear on an Aadhaar card but are never part of the holder's
+# name. Used by the loose selfie fallback below.
+_SELFIE_NAME_STOPWORDS = frozenset(
+    {
+        "aadhaar",
+        "address",
+        "authority",
+        "birth",
+        "card",
+        "date",
+        "dob",
+        "enrolment",
+        "female",
+        "government",
+        "identification",
+        "india",
+        "male",
+        "mobile",
+        "number",
+        "photo",
+        "signature",
+        "uidai",
+        "unique",
+        "vid",
+        "year",
+    }
+)
+
+_SELFIE_DOB_RE = re.compile(
+    r"(?<!\d)(\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2})(?!\d)"
+)
+
+
+def _extract_name_from_selfie_text(text: str) -> str:
+    """Loose name fallback for selfie OCR text.
+
+    :func:`_extract_name` is tuned for a tight Aadhaar crop; in a selfie the
+    card is a small part of the frame and those heuristics can come up empty.
+    This picks the first line that looks like a person's name (2+ alphabetic
+    words, no known card label).
+    """
+    for line in text.splitlines():
+        cleaned = re.sub(r"[^A-Za-z ]+", " ", line)
+        tokens = [token for token in cleaned.split() if len(token) > 1]
+        if len(tokens) < 2:
+            continue
+        if {token.lower() for token in tokens} & _SELFIE_NAME_STOPWORDS:
+            continue
+        return " ".join(tokens)[:80]
+    return ""
+
+
+def _extract_dob_from_selfie_text(text: str) -> str:
+    """Loose DOB fallback for selfie OCR text without a ``/DOB`` label."""
+    match = _SELFIE_DOB_RE.search(text)
+    return match.group(0) if match else ""
+
+
+def _selfie_ocr_for_storage(selfie_ocr: dict[str, Any]) -> dict[str, Any]:
+    """Copy of the selfie OCR result that is safe to persist.
+
+    ``text_redacted`` is already masked, but ``aadhaar_number`` holds the raw
+    12-digit number read off the selfie. Raw government IDs are never stored
+    (see :func:`_redact_sensitive_ids`), so only the last four digits are kept,
+    matching the convention used for the uploaded document.
+    """
+    stored = {
+        key: value
+        for key, value in selfie_ocr.items()
+        # ``_internal_aadhaar_number`` is the raw in-memory number: it must
+        # never reach storage, log lines or the API response.
+        if key not in {"error", "_internal_aadhaar_number"}
+    }
+    number = stored.get("aadhaar_number") or selfie_ocr.get(
+        "_internal_aadhaar_number"
+    )
+    stored["aadhaar_number"] = None
+    stored["aadhaar_last4"] = str(number)[-4:] if number else None
+    return stored
+
+
 def _redact_sensitive_ids(text: str) -> str:
     """Keep human-readable fields but mask Aadhaar/PAN/long ID numbers.
 
@@ -649,6 +846,591 @@ def _ocr_error(
         "error": reason,
         "error_detail": detail[:200],
     }
+
+
+# ---------------------------------------------------------------------------
+# Document-in-selfie / business document helpers
+# ---------------------------------------------------------------------------
+
+
+def _selfie_ocr_result() -> dict[str, Any]:
+    """Frozen result contract of ModelLoader.run_selfie_document_ocr.
+
+    The key set is pinned by tests/worker/test_worker_doc_in_selfie.py. The full
+    12-digit number travels in aadhaar_number / _internal_aadhaar_number for the
+    in-memory comparison only; _selfie_ocr_for_storage() reduces it to
+    aadhaar_last4 before anything is persisted.
+    """
+    return {
+        "error": None,
+        "aadhaar_number": None,
+        "_internal_aadhaar_number": None,
+        "name": None,
+        "dob": None,
+        "confidence": 0.0,
+        "text_redacted": "",
+        "preprocess_strategy": None,
+        "card_detected": False,
+        "images_tried": 0,
+    }
+
+
+# The three identifiers a business document set is cross-checked on. Patterns
+# are applied to an UPPERCASED, whitespace-stripped copy of each OCR line,
+# because documents print "HDFC 0001234" as often as "HDFC0001234".
+_PAN_SEARCH_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
+_GSTIN_SEARCH_RE = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]")
+_IFSC_SEARCH_RE = re.compile(r"[A-Z]{4}0[A-Z0-9]{6}")
+_PAN_LABEL_RE = re.compile(r"\bPAN\b|PERMANENT\s*ACCOUNT", re.IGNORECASE)
+_GSTIN_LABEL_RE = re.compile(
+    r"\bGSTIN\b|\bGST\b|GOODS\s*AND\s*SERVICE", re.IGNORECASE
+)
+_IFSC_LABEL_RE = re.compile(r"\bIFSC\b|I\.F\.S\.C", re.IGNORECASE)
+
+# Registration numbers (incorporation certificate / business registration
+# certificate) are not shape-stable the way a PAN or a GSTIN is, so the label
+# carries the weight: the value printed next to the document's own label
+# ("CIN", "Registration No", "Udyam") is the one it means.
+_CIN_SEARCH_RE = re.compile(r"[LU][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}")
+_REGISTRATION_LABEL_RE = re.compile(
+    r"\bCIN\b|\bREG[A-Z]*\b|\bUDYAM\b|\bMSME\b|\bSHOP\s*ACT\b", re.IGNORECASE
+)
+_ALNUM_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+
+# The cancelled cheque's account number: a labelled run of digits ("A/c No",
+# "Account Number"), grouped in fours on many cheque books, or - unlabelled -
+# the longest standalone digit run on the page.
+_ACCOUNT_LABEL_RE = re.compile(
+    r"\bA\s*/?\s*C\b|\bAC(?:CT|COUNT)?\s*(?:NO|NUMBER|NUM)?\b", re.IGNORECASE
+)
+_DIGIT_RUN_RE = re.compile(r"[0-9]+")
+# A digit run that stands alone: "HDFC0001234" and "ABCDE1234F" are not account
+# numbers, 12345678901 on its own line is.
+_STANDALONE_DIGIT_RE = re.compile(r"(?<![A-Za-z0-9])[0-9]{6,}(?![A-Za-z0-9])")
+
+_OCR_LINE_SPLIT_RE = re.compile(r"[\r\n]+")
+
+
+def _ocr_text_lines(text: Any) -> list[str]:
+    if not isinstance(text, str) or not text:
+        return []
+    return [line.strip() for line in _OCR_LINE_SPLIT_RE.split(text) if line.strip()]
+
+
+def _squash_ocr_line(line: str) -> str:
+    """Uppercase and drop separators, so "HDFC 0001234" scans as one token."""
+    return re.sub(r"[^A-Za-z0-9]", "", line).upper()
+
+
+def _candidate_matches(pattern: re.Pattern, squashed: str) -> Iterator[str]:
+    """Raw matches on the line, then on its OCR-confusable-folded copy.
+
+    The second pass recovers a value whose digit was read as a letter (a PAN
+    printed as "...1O34..." folds to "...1034..."), which the strict pattern
+    cannot see on its own.
+    """
+    for match in pattern.finditer(squashed):
+        yield match.group(0)
+    folded = fold_ocr_confusables(squashed)
+    if folded != squashed:
+        for match in pattern.finditer(folded):
+            yield match.group(0)
+
+
+def _business_id_candidates(
+    text: Any,
+    pattern: re.Pattern,
+    label_re: re.Pattern,
+    validate: Any,
+) -> list[str]:
+    """Candidates for one identifier, values on a labelled line first.
+
+    "HDFC0001234" anywhere in a document is weak evidence; the same value on the
+    line carrying the field's own label ("IFSC:", "GSTIN", "PAN") is the one the
+    document means. Within a bucket the first structural match in document order
+    wins, and every candidate is shape-validated before it is accepted.
+    """
+    labelled: list[str] = []
+    plain: list[str] = []
+    for line in _ocr_text_lines(text):
+        squashed = _squash_ocr_line(line)
+        if not squashed:
+            continue
+        bucket = labelled if label_re.search(line) else plain
+        for candidate in _candidate_matches(pattern, squashed):
+            value = validate(candidate)
+            if value and value not in bucket:
+                bucket.append(value)
+    return labelled + plain
+
+
+def _first_business_id(
+    text: Any,
+    pattern: re.Pattern,
+    label_re: re.Pattern,
+    validate: Any,
+) -> str | None:
+    candidates = _business_id_candidates(text, pattern, label_re, validate)
+    return candidates[0] if candidates else None
+
+
+def _business_text_for(text_by_type: Any, doc_type: str) -> str:
+    """OCR text for one business document slot (canonical name or alias key)."""
+    if not isinstance(text_by_type, dict):
+        return ""
+    for key in (doc_type, *_BUSINESS_DOC_ALIASES[doc_type]):
+        value = text_by_type.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _append_once(bucket: list[str], value: str) -> None:
+    if value and value not in bucket:
+        bucket.append(value)
+
+
+def _registration_candidates(text: Any) -> list[str]:
+    """Registration-number candidates off a certificate, strongest first.
+
+    Four buckets, in priority order:
+
+    1. a CIN-shaped match on a line that carries a registration label,
+    2. a CIN-shaped match anywhere else on the line,
+    3. the alphanumeric run(s) the label introduces,
+    4. any other alphanumeric token of six characters or more carrying a digit.
+
+    A certificate prints several numbers (dates, serial numbers, PIN codes), so
+    the label and the CIN shape are what separate the registration number from
+    the rest of the page. Labels win over shape, because a state's registration
+    number ("UDYAM-MH-12-3456789", "1234 5678") is often not CIN-shaped.
+    """
+    buckets: list[list[str]] = [[], [], [], []]
+    for line in _ocr_text_lines(text):
+        label_match = _REGISTRATION_LABEL_RE.search(line)
+        labelled = label_match is not None
+        squashed = _squash_ocr_line(line)
+        for candidate in _candidate_matches(_CIN_SEARCH_RE, squashed):
+            value = normalise_registration_number(candidate)
+            if value:
+                _append_once(buckets[0] if labelled else buckets[1], value)
+
+        if label_match is not None:
+            # The run(s) the label introduces, joined first: registrations are
+            # routinely printed in groups.
+            tokens = _ALNUM_TOKEN_RE.findall(line[label_match.end() :])
+            joined = normalise_registration_number("".join(tokens))
+            if joined:
+                _append_once(buckets[2], joined)
+            for token in tokens:
+                value = normalise_registration_number(token)
+                if value:
+                    _append_once(buckets[2], value)
+
+        for token in _ALNUM_TOKEN_RE.findall(line):
+            value = normalise_registration_number(token)
+            if value:
+                _append_once(buckets[2] if labelled else buckets[3], value)
+
+    return [value for bucket in buckets for value in bucket]
+
+
+def _extract_primary_business_id(text: Any, doc_type: str | None) -> str | None:
+    """The identifier read off the ONE selected business document.
+
+    GST certificate -> GSTIN, PAN card -> PAN, incorporation certificate and
+    business registration certificate -> the company registration number. None
+    when the selected type is unknown or the value could not be read.
+    """
+    if doc_type == "pan_card":
+        return _first_business_id(text, _PAN_SEARCH_RE, _PAN_LABEL_RE, normalise_pan)
+    if doc_type == "gst_certificate":
+        return _first_business_id(
+            text, _GSTIN_SEARCH_RE, _GSTIN_LABEL_RE, normalise_gstin
+        )
+    if doc_type in {"incorporation_certificate", "business_registration"}:
+        candidates = _registration_candidates(text)
+        return candidates[0] if candidates else None
+    return None
+
+
+def _joined_digit_run(tail: str) -> str | None:
+    """The digit run an account label introduces, grouping included.
+
+    "12345678901" stays whole; "0012 3456 7890" is joined into one value. When
+    the first group is short and a longer run follows it (a MICR line after a
+    branch/sort code), joining stops at that run so the tail stays the account
+    number. Fewer than four digits is not an account number at all.
+    """
+    runs = _DIGIT_RUN_RE.findall(tail)
+    if not runs:
+        return None
+    if len(runs[0]) >= 6:
+        return runs[0]
+    grouped = ""
+    for run in runs:
+        if len(run) > 4:
+            break
+        grouped += run
+    return grouped if len(grouped) >= 4 else None
+
+
+def _longest_digit_run(line: str, minimum: int, standalone: bool = False) -> str | None:
+    pattern = _STANDALONE_DIGIT_RE if standalone else _DIGIT_RUN_RE
+    runs = [run for run in pattern.findall(line) if len(run) >= minimum]
+    return max(runs, key=len) if runs else None
+
+
+def _extract_account_last4(text: Any) -> str | None:
+    """The LAST FOUR DIGITS of the account number printed on the cheque.
+
+    A labelled account number is read first ("A/c No", "Account Number") with
+    its grouped digits joined; without a label the longest standalone digit run
+    on the page is used. Digit runs glued to letters are never candidates (the
+    IFSC's "HDFC0001234", a PAN's "1234"), lines carrying the IFSC label are
+    skipped, and anything shorter than four digits is unreadable - never a match.
+    """
+    if not isinstance(text, str) or not text:
+        return None
+
+    labelled: list[str] = []
+    plain: list[str] = []
+    for line in _ocr_text_lines(text):
+        label_match = _ACCOUNT_LABEL_RE.search(line)
+        if label_match is not None:
+            value = _joined_digit_run(line[label_match.end() :]) or _longest_digit_run(
+                line, minimum=4
+            )
+            if value:
+                labelled.append(value)
+            continue
+        if _IFSC_LABEL_RE.search(line):
+            continue
+        value = _longest_digit_run(line, minimum=6, standalone=True)
+        if value:
+            plain.append(value)
+
+    if labelled:
+        return labelled[0][-4:]
+    if plain:
+        return max(plain, key=len)[-4:]
+    return None
+
+
+def extract_selected_business_document_fields(
+    text_by_type: Any, primary_doc_type: str | None
+) -> dict[str, Any]:
+    """Read the selected document's identifier and the cheque's bank details.
+
+    Returns extracted_biz_num (the identifier the selected document type is
+    identified by), cheque_ifsc and cheque_acc_no (the last four digits of the
+    cheque's account number); each is None when it could not be read.
+
+    The identifier is read ONLY off the selected document, never borrowed from
+    another uploaded document, so a fake certificate cannot inherit the identity
+    of a genuine one.
+    """
+    if primary_doc_type in _BUSINESS_DOC_ALIASES:
+        primary_text = _business_text_for(text_by_type, primary_doc_type)
+    else:
+        primary_text = ""
+    cheque_text = _business_text_for(text_by_type, "cancelled_cheque")
+
+    return {
+        "extracted_biz_num": _extract_primary_business_id(
+            primary_text, primary_doc_type
+        ),
+        "cheque_ifsc": _first_business_id(
+            cheque_text, _IFSC_SEARCH_RE, _IFSC_LABEL_RE, normalise_ifsc
+        ),
+        "cheque_acc_no": _extract_account_last4(cheque_text),
+        "cheque_acc_last4": _extract_account_last4(cheque_text),
+    }
+
+
+def _business_ocr_failure(error: str | None) -> dict[str, Any]:
+    """The Phase G evidence shape with nothing read (every key present)."""
+    return {
+        "extracted_biz_num": None,
+        "cheque_ifsc": None,
+        "cheque_acc_no": None,
+        "cheque_acc_last4": None,
+        "primary_doc_type": None,
+        "error": error,
+    }
+
+
+def run_business_document_ocr(
+    documents: list[dict[str, str]] | dict[str, Any] | None,
+    cache: Any = None,
+    selected_doc_type: str | None = None,
+    loader: Any = None,
+    text_by_type: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Read the ONE selected business document and the cancelled cheque.
+
+    Returns the Phase G evidence shape, always carrying every key:
+
+    * ``extracted_biz_num`` - the identifier read off the selected document
+      (GSTIN / PAN / registration number), None when it could not be read
+    * ``cheque_ifsc``       - the IFSC read off the cancelled cheque
+    * ``cheque_acc_no``     - the LAST FOUR DIGITS of the cheque's account number
+    * ``primary_doc_type``  - the resolved canonical type of the selected
+      document (one of BUSINESS_PRIMARY_DOC_TYPES), None when the job carries
+      no selectable business document
+    * ``error``             - None, or "missing_pan_card" /
+      "missing_cancelled_cheque" / "missing_business_documents" /
+      "ocr_unavailable" / "<type>_fetch_failed" / "<type>_ocr_failed"
+
+    ``selected_doc_type`` is the type the user picked. When it is absent or is
+    not one of the four selectable business documents, the type is INFERRED from
+    the uploaded documents (see _infer_business_doc_type) - the Go producer does
+    not send the selection today, so inference is what keeps the stage working
+    at runtime.
+
+    * text_by_type - already-extracted OCR text per document type. The mock
+      pipeline passes the mock_business_document_text() seam here, so no image is
+      ever fetched in mock mode.
+    * otherwise the located documents are fetched through cache (or fetch_image)
+      and OCRd with loader.ocr_image_text() - the same engine path the selfie
+      stage uses. There is no second OCR engine.
+
+    Never raises. A missing document, an unavailable engine or a failed fetch
+    sets error and returns whatever was read, so the comparison stage routes the
+    record to manual review.
+    """
+    result: dict[str, Any] = _business_ocr_failure(None)
+
+    try:
+        document_list = [doc for doc in (documents or []) if isinstance(doc, dict)]
+
+        primary_doc_type = _canonical_business_doc_type(selected_doc_type)
+        if primary_doc_type not in BUSINESS_PRIMARY_DOC_TYPES:
+            primary_doc_type = _infer_business_doc_type(document_list)
+        result["primary_doc_type"] = primary_doc_type
+
+        located: dict[str, dict] = {}
+        missing_error: str | None = None
+
+        primary_document = (
+            _find_document(document_list, set(_BUSINESS_DOC_ALIASES[primary_doc_type]))
+            if primary_doc_type
+            else None
+        )
+        if primary_doc_type is None:
+            # Nothing says which business document was selected or uploaded.
+            missing_error = _BUSINESS_NO_DOCUMENT_ERROR
+        elif primary_document is None or not str(
+            primary_document.get("url") or ""
+        ).strip():
+            missing_error = _BUSINESS_MISSING_ERRORS[primary_doc_type]
+        else:
+            located[primary_doc_type] = primary_document
+
+        cheque_document = _find_document(
+            document_list, set(_BUSINESS_DOC_ALIASES["cancelled_cheque"])
+        )
+        if cheque_document is None or not str(cheque_document.get("url") or "").strip():
+            if missing_error is None:
+                missing_error = _BUSINESS_MISSING_ERRORS["cancelled_cheque"]
+        else:
+            located["cancelled_cheque"] = cheque_document
+
+        if not located:
+            result["error"] = missing_error or _BUSINESS_NO_DOCUMENT_ERROR
+            return result
+
+        if text_by_type is None:
+            engine = getattr(loader, "ocr_engine", None)
+            if loader is None or engine is None:
+                result["error"] = "ocr_unavailable"
+                return result
+            texts: dict[str, str] = {}
+            for doc_type, document in located.items():
+                try:
+                    image = (
+                        cache.get(document["url"])
+                        if cache is not None
+                        else fetch_image(document["url"])
+                    )
+                except Exception as exc:  # noqa: BLE001 - one document only
+                    logger.warning(
+                        "business_doc_fetch_failed type=%s error=%s",
+                        doc_type,
+                        type(exc).__name__,
+                    )
+                    result["error"] = result["error"] or f"{doc_type}_fetch_failed"
+                    continue
+                try:
+                    text, _confidence = loader.ocr_image_text(image)
+                except Exception as exc:  # noqa: BLE001 - one document only
+                    logger.warning(
+                        "business_doc_ocr_failed type=%s error=%s",
+                        doc_type,
+                        type(exc).__name__,
+                    )
+                    result["error"] = result["error"] or f"{doc_type}_ocr_failed"
+                    continue
+                texts[doc_type] = text
+        else:
+            # Only documents the payload actually carries are trusted: text for
+            # a slot the job never uploaded is not evidence. Alias keys ("gst")
+            # are normalised onto the canonical document types here.
+            texts = {
+                doc_type: _business_text_for(text_by_type, doc_type)
+                for doc_type in located
+            }
+
+        result.update(
+            extract_selected_business_document_fields(texts, primary_doc_type)
+        )
+        if missing_error and not result["error"]:
+            result["error"] = missing_error
+        return result
+    except Exception as exc:  # noqa: BLE001 - per-job stage, never fatal
+        logger.warning("business_docs_ocr_exception error=%s", type(exc).__name__)
+        result["error"] = result["error"] or "business_docs_ocr_exception"
+        return result
+
+
+def is_business_job(job: Any) -> bool:
+    """True when the job is a business KYC record.
+
+    Rule (mirrors the Go router): type == "business", or the document list
+    carries at least one business slot (one of the four selectable business
+    documents, or the cancelled cheque) and no individual marker (selfie /
+    aadhaar).
+    """
+    if not isinstance(job, dict):
+        return False
+    if str(job.get("type") or "").strip().lower() == "business":
+        return True
+
+    document_types = {
+        str(document.get("type") or "").strip().lower()
+        for document in (job.get("documents") or [])
+        if isinstance(document, dict)
+    }
+    business_slots = {
+        alias for aliases in _BUSINESS_DOC_ALIASES.values() for alias in aliases
+    }
+    if not (document_types & business_slots):
+        return False
+    individual_markers = set(SELFIE_DOC_TYPES) | AADHAAR_DOC_TYPES
+    return not (document_types & individual_markers)
+
+
+def _raw_payload_dict(payload: Any) -> dict[str, Any]:
+    """Best-effort raw job payload as a dict. Never raises."""
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, (bytes, bytearray)):
+        try:
+            payload = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return {}
+    if isinstance(payload, str):
+        try:
+            data = json.loads(payload)
+        except (TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+    return {}
+
+
+def _first_text_value(source: dict, keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+    return ""
+
+
+_BUSINESS_NESTED_SOURCES = ("business", "business_details", "bank_details", "bank", "kyc")
+
+_BUSINESS_SELECTION_KEYS = (
+    "selected_doc_type",
+    "selected_business_doc",
+    "business_doc_type",
+    "business_document_type",
+)
+
+
+def _payload_sources(data: dict) -> list[dict]:
+    """The payload dict plus every nested business/bank object it carries."""
+    sources = [data]
+    for key in _BUSINESS_NESTED_SOURCES:
+        nested = data.get(key)
+        if isinstance(nested, dict):
+            sources.append(nested)
+    return sources
+
+
+def _first_payload_value(sources: list[dict], keys: tuple[str, ...]) -> str:
+    """First non-empty value among *keys*; the root payload wins over nesting."""
+    for source in sources:
+        value = _first_text_value(source, keys)
+        if value:
+            return value
+    return ""
+
+
+def resolve_business_doc_type(payload: Any, documents: Any = None) -> str | None:
+    """The canonical business document type this job is about.
+
+    The explicit selection the user made - "selected_doc_type" /
+    "selected_business_doc" (also accepted nested inside the payload's
+    "business" / "business_details" object) - wins. When it is absent or is not
+    one of the four selectable business documents, the type is INFERRED from the
+    uploaded documents. Inference matters in production: the Go producer
+    publishes documents only, so without it a business job would never have a
+    selected document to read and would always land on manual review with no
+    evidence at all.
+
+    Returns one of BUSINESS_PRIMARY_DOC_TYPES, or None when nothing in the job
+    indicates a selectable business document.
+    """
+    data = _raw_payload_dict(payload)
+    sources = _payload_sources(data)
+    for key in _BUSINESS_SELECTION_KEYS:
+        selected = _canonical_business_doc_type(_first_payload_value(sources, (key,)))
+        if selected in BUSINESS_PRIMARY_DOC_TYPES:
+            return selected
+    if documents is None:
+        documents = data.get("documents")
+    return _infer_business_doc_type(documents)
+
+
+def _business_uploaded_ocr(payload: Any) -> dict[str, Any]:
+    """Return the explicit Phase G form data carried by the Go job payload."""
+    data = _raw_payload_dict(payload)
+    business = data.get("business_info") if isinstance(data.get("business_info"), dict) else {}
+    bank = data.get("bank_details") if isinstance(data.get("bank_details"), dict) else {}
+    return {
+        "business_info": {
+            "gstin": str(business.get("gstin") or ""),
+            "pan": str(business.get("pan") or ""),
+            "reg_no": str(business.get("reg_no") or ""),
+        },
+        "bank_details": {
+            "ifsc": str(bank.get("ifsc") or ""),
+            "account_number": str(bank.get("account_number") or ""),
+        },
+        "selected_business_doc": str(data.get("selected_business_doc") or ""),
+    }
+
+
+def mock_business_document_text(documents: list[dict[str, str]] | None) -> dict[str, str]:
+    """Synthetic business document OCR text for the mock pipeline.
+
+    Empty by default: mock mode runs on fake document URLs, so it must never
+    fabricate a document read. A business job therefore lands on manual review
+    unless a test supplies matching text by monkeypatching this hook (the seam
+    tests/worker/test_worker_business.py uses).
+    """
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -891,6 +1673,32 @@ def mock_ocr(documents: list[dict[str, str]]) -> dict[str, Any]:
 # divergence threshold (0.62 - 0.45 = 0.17 <= 0.25) so the mock exercises the
 # healthy multi-reference path; divergence paths are covered by unit tests.
 MOCK_FACE_REFERENCE_SCORES = {"aadhaar": 0.45, "pan_card": 0.62}
+
+
+def _make_face_disabled_result(doc_types: list[str] | None = None) -> dict:
+    """
+    Result shape when face match is disabled.
+    Must include 'error' so determine_review_priority returns
+    manual_review (NOT auto_reject). face_similarity=0.0 means
+    no evidence; router's SQL guard (>0.363) and evidenceComplete
+    will also reject auto-approval.
+    """
+    return {
+        "enabled": False,
+        "engine": "disabled",
+        "model_version": None,
+        "error": "face_match_disabled",
+        "face_similarity": 0.0,
+        "cosine_similarity": 0.0,
+        "aadhaar_similarity": None,
+        "winning_reference": None,
+        "reference_scores": {},
+        "reference_count": 0,
+        "second_reference_divergence": False,
+        "quality": {},
+        "document_types": doc_types or [],
+        "face_detected": {"selfie": False},
+    }
 
 
 def mock_face_match(documents: list[dict[str, str]]) -> dict[str, Any]:
@@ -1304,8 +2112,135 @@ class ModelLoader:
             "aadhaar_valid": aadhaar_from_ocr is not None,
             "aadhaar_source": "ocr_text" if aadhaar_from_ocr else "none",
             "aadhaar_last4": aadhaar_from_ocr[-4:] if aadhaar_from_ocr else None,
+            # INTERNAL, in-memory only: the full 12-digit number is what makes
+            # a real identity comparison possible. process_job strips this key
+            # before anything is logged, persisted or returned.
+            "_internal_aadhaar_number": aadhaar_from_ocr,
             "pan_valid": pan_valid,
         }
+
+    def ocr_image_text(self, image: Any) -> tuple[str, float]:
+        """Run the shared OCR engine over ONE preprocessed image.
+
+        Returns (text, confidence): newline-joined lines plus the
+        length-weighted mean of the per-line scores. Engine exceptions
+        propagate so the caller can decide whether to try the next frame.
+        """
+        raw = self._run_paddleocr(image)
+        lines = [
+            (text, score)
+            for text, score in _iter_ocr_lines(raw)
+            if text and text.strip()
+        ]
+        if not lines:
+            return "", 0.0
+        texts = [text.strip() for text, _ in lines]
+        weights = [max(1, len(text)) for text in texts]
+        total = sum(
+            max(0.0, min(1.0, score)) * weight
+            for (_, score), weight in zip(lines, weights)
+        )
+        return "\n".join(texts), round(float(total / sum(weights)), 4)
+
+    def _preprocess_selfie_frames(self, image: Any) -> dict[str, Any]:
+        """Run the module-level preprocessor, falling back to the raw frame.
+
+        The preprocessor is looked up on the module (instead of being imported
+        inside the method) so a test can monkeypatch
+        worker.preprocess_selfie_image; if it is missing or raises, the
+        unmodified frame is OCRd instead of failing the whole stage.
+        """
+        processor = globals().get("preprocess_selfie_image")
+        if callable(processor):
+            try:
+                result = processor(image)
+            except Exception as exc:  # noqa: BLE001 - degrade to the raw frame
+                logger.warning("selfie_preprocess_failed error=%s", type(exc).__name__)
+            else:
+                if isinstance(result, dict):
+                    return result
+        if image is None:
+            return {"images": [], "strategy": "decode_failed", "card_detected": False}
+        return {"images": [image], "strategy": "full_image", "card_detected": False}
+
+    def run_selfie_document_ocr(
+        self, documents: list[dict[str, str]], cache: Any = None
+    ) -> dict:
+        """OCR the government document held in the selfie.
+
+        Every failure path returns the full result contract with error set: the
+        method never raises, because an unreadable selfie must not fail the job.
+        The frames the preprocessor returned are OCRd in order; the first frame
+        carrying a Verhoeff-valid Aadhaar wins, otherwise the highest-confidence
+        read is kept. A read below settings.doc_in_selfie_min_confidence is
+        reported as selfie_ocr_low_confidence (with its evidence) so the
+        comparison stage routes it to manual review.
+        """
+        result = _selfie_ocr_result()
+
+        document_list = [doc for doc in (documents or []) if isinstance(doc, dict)]
+        selfie_doc = _find_document(document_list, SELFIE_DOC_TYPES)
+        if selfie_doc is None or not str(selfie_doc.get("url") or "").strip():
+            result["error"] = "selfie_not_found"
+            return result
+
+        if self.ocr_engine is None:
+            result["error"] = "ocr_unavailable"
+            return result
+
+        try:
+            image = (
+                cache.get(selfie_doc["url"])
+                if cache is not None
+                else fetch_image(selfie_doc["url"])
+            )
+        except Exception:  # noqa: BLE001 - reported as a stage error
+            result["error"] = "selfie_fetch_failed"
+            return result
+
+        preprocessed = self._preprocess_selfie_frames(image)
+        result["preprocess_strategy"] = str(preprocessed.get("strategy") or "full_image")
+        result["card_detected"] = bool(preprocessed.get("card_detected"))
+        frames = [frame for frame in (preprocessed.get("images") or [])]
+
+        if not frames:
+            result["error"] = "selfie_ocr_decode_failed"
+            return result
+
+        best_text = ""
+        best_confidence = 0.0
+        for frame in frames:
+            result["images_tried"] += 1
+            try:
+                text, confidence = self.ocr_image_text(frame)
+            except Exception as exc:  # noqa: BLE001 - try the next frame
+                logger.warning("Selfie OCR pass failed: %s", exc)
+                continue
+            if not text.strip():
+                continue
+            if not best_text or confidence > best_confidence:
+                best_text = text
+                best_confidence = confidence
+            if find_aadhaar_in_text(text):
+                best_text = text
+                best_confidence = confidence
+                break
+
+        if not best_text.strip():
+            result["error"] = "selfie_no_text_detected"
+            return result
+
+        aadhaar = find_aadhaar_in_text(best_text)
+        result["aadhaar_number"] = aadhaar
+        result["_internal_aadhaar_number"] = aadhaar
+        result["name"] = _extract_name_from_selfie_text(best_text) or None
+        result["dob"] = _extract_dob_from_selfie_text(best_text) or None
+        result["confidence"] = float(best_confidence)
+        result["text_redacted"] = _redact_sensitive_ids(best_text)
+
+        if best_confidence < settings.doc_in_selfie_min_confidence:
+            result["error"] = "selfie_ocr_low_confidence"
+        return result
 
     def _run_paddleocr(self, image: Any) -> Any:
         engine = self.ocr_engine
@@ -2058,7 +2993,54 @@ def determine_review_priority(
     # Hard fraud gate: only a *successful* inference scoring below the reject
     # threshold auto-rejects. A borderline score (reject <= score < pass) must
     # stay in the manual queue, not be silently rejected.
-    if not face_error and face_similarity < settings.threshold_face_reject:
+    # Face matching disabled (FACE_MATCH_ENABLED=false): the reported 0.0 is
+    # "no evidence", not a fraud signal. Guard first so the reject branch below
+    # can never turn a disabled stage into an auto_reject.
+    # Phase G: a business KYC record has no selfie and no liveness stage, so the
+    # selected-document + cheque verdict is its whole decision. The business
+    # branch is checked FIRST so a missing selfie/liveness can never turn a
+    # business record into an auto_reject, and anything other than a confirmed
+    # approve is manual. The canonical Phase G key is read first, with the
+    # Phase E flat mirror as the fallback for records written before it.
+    business_decision = str(
+        face_result.get("business_decision")
+        or face_result.get("business_docs_decision")
+        or ""
+    ).strip()
+    if business_decision:
+        if business_decision == "approve":
+            raw_priority = PRIORITY_AUTO_ELIGIBLE
+            logger.info(
+                "kyc.business_docs_approved raw=auto_eligible score=%s",
+                face_result.get("business_docs_score"),
+            )
+        else:
+            raw_priority = PRIORITY_MANUAL_REVIEW
+            logger.info(
+                "kyc.business_docs_manual raw=manual_review decision=%s",
+                business_decision,
+            )
+    elif (
+        face_result.get("document_in_selfie_decision") == "approve"
+        and settings.ml_mode == "real"
+    ):
+        # Phase B: with FACE_MATCH_ENABLED=false the document-in-selfie verdict
+        # is an individual record's identity anchor, and the Go router only
+        # auto-approves when this AI recommendation is auto_eligible.
+        # Mock mode is excluded on purpose: it never touched a real image, so a
+        # synthetic verdict must not promote a job (this is the routing the
+        # Phase A test test_determine_review_priority_unchanged pins).
+        raw_priority = PRIORITY_AUTO_ELIGIBLE
+        logger.info("kyc.doc_in_selfie_approved raw=auto_eligible")
+    elif not face_result.get("enabled", True) or (
+        not settings.face_match_enabled
+        and face_result.get("error") == "face_match_disabled"
+    ):
+        raw_priority = PRIORITY_MANUAL_REVIEW
+        logger.info(
+            "kyc.face_disabled raw=manual_review reason=face_match_disabled"
+        )
+    elif not face_error and face_similarity < settings.threshold_face_reject:
         raw_priority = PRIORITY_AUTO_REJECT
     elif not liveness_error and liveness_score < settings.threshold_live_reject:
         raw_priority = PRIORITY_AUTO_REJECT
@@ -2330,9 +3312,19 @@ def process_job(
         }
 
     primary_bytes: bytes | None = None
+    # Only real mode builds a shared cache; mock mode never fetches images, so
+    # the document-in-selfie stage creates its own cache if it needs one.
+    cache: ImageCache | None = None
     if settings.ml_mode == "mock":
         ocr_result = mock_ocr(job["documents"])
-        face_result = mock_face_match(job["documents"])
+        if settings.face_match_enabled:
+            face_result = mock_face_match(job["documents"])
+        else:
+            face_result = _make_face_disabled_result(
+                doc_types=[
+                    d.get("type", "unknown") for d in job.get("documents", [])
+                ]
+            )
         liveness_result = mock_liveness(job["documents"])
         ml_vendor = ML_VENDOR_MOCK
         ml_model_version = ML_MODEL_VERSION_MOCK
@@ -2344,10 +3336,171 @@ def process_job(
         ocr_result = loader.run_ocr(
             job["documents"], cache, primary_bytes=primary_bytes
         )
-        face_result = loader.run_face_match(job["documents"], cache)
+        if settings.face_match_enabled:
+            face_result = loader.run_face_match(job["documents"], cache)
+        else:
+            face_result = _make_face_disabled_result(
+                doc_types=[
+                    d.get("type", "unknown") for d in job.get("documents", [])
+                ]
+            )
         liveness_result = loader.run_liveness(job["documents"], cache)
         ml_vendor = ML_VENDOR_REAL
         ml_model_version = loader.model_version
+
+    # Phase A: document-in-selfie verification. The Go router gates
+    # auto-approval on document_in_selfie_decision/score/match, so these keys
+    # must be written for both the real and the mock pipeline.
+    if settings.doc_in_selfie_enabled:
+        try:
+            selfie_ocr = loader.run_selfie_document_ocr(job["documents"], cache)
+        except Exception as exc:  # noqa: BLE001 - must never fail the job
+            logger.warning("selfie_ocr_exception error=%s", type(exc).__name__)
+            selfie_ocr = {
+                "error": "selfie_ocr_exception",
+                "aadhaar_number": None,
+                "name": None,
+                "dob": None,
+                "confidence": 0.0,
+                "text_redacted": "",
+            }
+
+        uploaded_ocr = {
+            # The full 12-digit number travels only in memory: it is what lets
+            # compare_documents verify identity instead of comparing tails.
+            "_internal_aadhaar_number": ocr_result.get(
+                "_internal_aadhaar_number"
+            ),
+            # Everything else on this side stays redacted.
+            "aadhaar_number": ocr_result.get("aadhaar_number"),
+            "aadhaar_last4": ocr_result.get("aadhaar_last4"),
+            "name": ocr_result.get("name"),
+            "dob": ocr_result.get("dob"),
+        }
+
+        comparison = compare_documents(
+            uploaded_ocr,
+            selfie_ocr,
+            config={
+                "approve_threshold": settings.doc_in_selfie_approve_threshold,
+                "manual_threshold": settings.doc_in_selfie_manual_threshold,
+                "reject_on_mismatch": settings.doc_in_selfie_reject_on_mismatch,
+                "name_match_threshold": settings.doc_in_selfie_name_match_threshold,
+            },
+        )
+
+        face_result["document_in_selfie"] = {
+            "attempted": True,
+            "error": selfie_ocr.get("error"),
+            "selfie_ocr": _selfie_ocr_for_storage(selfie_ocr),
+            "uploaded_ocr": uploaded_ocr,
+            "comparison": comparison,
+        }
+        face_result["document_in_selfie_decision"] = comparison["decision"]
+        face_result["document_in_selfie_score"] = comparison["score"]
+        face_result["document_in_selfie_match"] = (
+            comparison["decision"] == "approve"
+        )
+    else:
+        face_result["document_in_selfie"] = {"attempted": False}
+        face_result["document_in_selfie_decision"] = "manual"
+        face_result["document_in_selfie_score"] = 0
+        face_result["document_in_selfie_match"] = False
+
+    # Phase G: business KYC. A business job has no selfie at all, so its identity
+    # anchor is the ONE business document the user selected: that document is
+    # checked against the identifier on the form, and the cancelled cheque
+    # against the bank details on the form. The verdict is written BEFORE
+    # determine_review_priority so the routing branch can read it.
+    if is_business_job(job):
+        selected_doc_type = resolve_business_doc_type(payload, job["documents"])
+        uploaded_business_info = _business_uploaded_ocr(payload)
+        uploaded_business_info["selected_business_doc"] = job.get("selected_business_doc") or uploaded_business_info.get("selected_business_doc") or selected_doc_type
+        try:
+            if settings.ml_mode == "mock":
+                # Mock mode never fetches an image: the hook is the seam a test
+                # uses to supply synthetic OCR text. It returns {} by default,
+                # which keeps the verdict at manual review.
+                business_ocr = run_business_document_ocr(
+                    job["documents"],
+                    None,
+                    selected_doc_type,
+                    None,
+                    mock_business_document_text(job["documents"]),
+                )
+            else:
+                business_ocr = run_business_document_ocr(
+                    job["documents"], cache, selected_doc_type, loader
+                )
+        except Exception as exc:  # noqa: BLE001 - must never fail the job
+            logger.warning(
+                "business_docs_ocr_exception error=%s", type(exc).__name__
+            )
+            business_ocr = _business_ocr_failure("business_docs_ocr_exception")
+
+        try:
+            business_comparison = compare_business_documents(
+                uploaded_business_info, business_ocr
+            )
+        except Exception as exc:  # noqa: BLE001 - must never fail the job
+            logger.warning(
+                "business_docs_comparison_exception error=%s", type(exc).__name__
+            )
+            business_comparison = {
+                "decision": "manual",
+                "score": 0,
+                "reason": "mismatch",
+                "signals": ["business_docs_comparison_error"],
+            }
+
+        # The nested object carries the evidence an operator needs to see WHY a
+        # record was held back plus the decision/score shape the Go router
+        # decodes; the flat keys mirror it, and "business_decision" is the Phase
+        # G canonical alias all three writers of that field agree on.
+        face_result["business_docs"] = {
+            "extracted_biz_num": business_ocr.get("extracted_biz_num"),
+            "primary_doc_type": business_ocr.get("primary_doc_type"),
+            "cheque_ifsc": business_ocr.get("cheque_ifsc"),
+            "cheque_acc_no": business_ocr.get("cheque_acc_no"),
+            "error": business_ocr.get("error"),
+            "decision": business_comparison["decision"],
+            "score": business_comparison["score"],
+            "reason": business_comparison["reason"],
+            "signals": business_comparison.get("signals") or [],
+        }
+        face_result["business_decision"] = business_comparison["decision"]
+        face_result["business_docs_decision"] = business_comparison["decision"]
+        face_result["business_docs_score"] = business_comparison["score"]
+        face_result["business_docs_match"] = (
+            business_comparison["decision"] == "approve"
+        )
+        logger.info(
+            "kyc.business_docs decision=%s score=%s reason=%s signals=%s "
+            "doc_type=%s uploaded_gstin=%s uploaded_pan=%s "
+            "uploaded_registration=%s uploaded_ifsc=%s uploaded_account=%s",
+            business_comparison["decision"],
+            business_comparison["score"],
+            business_comparison["reason"],
+            ",".join(str(signal) for signal in business_comparison.get("signals") or []),
+            business_ocr.get("primary_doc_type"),
+            bool(uploaded_business_info.get("gstin")),
+            bool(uploaded_business_info.get("pan_number")),
+            bool(uploaded_business_info.get("registration_number")),
+            bool(uploaded_business_info.get("ifsc_code")),
+            bool(uploaded_business_info.get("account_number")),
+        )
+
+    # Privacy invariant: the full 12-digit Aadhaar number is used only for the
+    # in-memory comparison above and is never persisted (or handed to the
+    # validation/logging stages). Strip every internal carrier before the
+    # payloads leave this function.
+    ocr_result.pop("_internal_aadhaar_number", None)
+    document_in_selfie = face_result.get("document_in_selfie")
+    if isinstance(document_in_selfie, dict):
+        for side_key in ("selfie_ocr", "uploaded_ocr"):
+            side = document_in_selfie.get(side_key)
+            if isinstance(side, dict):
+                side.pop("_internal_aadhaar_number", None)
 
     _log_document_validations(job_id, ocr_result)
 

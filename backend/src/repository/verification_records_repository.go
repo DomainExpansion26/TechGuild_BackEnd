@@ -45,7 +45,11 @@ type VerificationRecordsRepository interface {
 	GetAutoEligibleQueue(limit, offset int, minAgeHours float64) ([]models.VerificationRecord, int64, error)
 	GetManualReviewQueue(sortBy, sortDir string, limit, offset int) ([]models.VerificationRecord, int64, error)
 	GetVerificationDetail(id string) (*models.VerificationRecord, error)
-	BulkApprove(verificationIDs []string, adminID uuid.UUID) error
+	// BulkApprove approves many records atomically. afterApprove, when set, runs
+	// inside the same transaction for every approved record (dedup registration,
+	// bonus points, account activation) so the side effects commit or roll back
+	// with the status flip. A nil hook is a status-only approve.
+	BulkApprove(verificationIDs []string, adminID uuid.UUID, afterApprove func(tx *gorm.DB, rec *models.VerificationRecord) error) error
 	MarkManualAction(verificationID string, action string, adminID uuid.UUID, reason string) error
 	RequestManualReview(verificationID string, adminID uuid.UUID, reason string) error
 
@@ -300,7 +304,9 @@ func (r *verificationRecordsRepository) GetVerificationDetail(id string) (*model
 // BulkApprove transactionally approves multiple auto-eligible records at once:
 // it flips their status/plane, records BulkReviewItem rows (human decision
 // trail for the 24-48h window) and per-record audit log entries. All-or-nothing.
-func (r *verificationRecordsRepository) BulkApprove(verificationIDs []string, adminID uuid.UUID) error {
+// afterApprove runs per record inside the same transaction, before the audit
+// entry, so approve side effects are atomic with the status flip.
+func (r *verificationRecordsRepository) BulkApprove(verificationIDs []string, adminID uuid.UUID, afterApprove func(tx *gorm.DB, rec *models.VerificationRecord) error) error {
 	if len(verificationIDs) == 0 {
 		return errors.New("no verification IDs provided for bulk approve")
 	}
@@ -364,6 +370,16 @@ func (r *verificationRecordsRepository) BulkApprove(verificationIDs []string, ad
 
 		// Per-record accountability trail.
 		for _, rec := range records {
+			// Approve side effects (dedup hash, bonus points, activation) on the
+			// same transaction: if any of them fails the whole batch rolls back,
+			// so a record can never end up approved without its uniqueness claim.
+			if afterApprove != nil {
+				recCopy := rec
+				if err := afterApprove(tx, &recCopy); err != nil {
+					return fmt.Errorf("approve side effects for record %s: %w", rec.ID, err)
+				}
+			}
+
 			details, err := json.Marshal(map[string]interface{}{
 				"verification_id": rec.ID,
 				"admin_id":        adminID,

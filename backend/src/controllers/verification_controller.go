@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
+	"techguild-backend/src/repository"
 	"techguild-backend/src/services"
 	"techguild-backend/src/utils"
 
@@ -18,11 +21,17 @@ import (
 )
 
 type VerificationController struct {
-	service *services.VerificationService
+	service    *services.VerificationService
+	ipResolver *utils.IPResolver
 }
 
 func NewVerificationController(service *services.VerificationService) *VerificationController {
 	return &VerificationController{service: service}
+}
+
+// SetIPResolver attaches the shared client-IP resolver (wired from main.go).
+func (c *VerificationController) SetIPResolver(r *utils.IPResolver) {
+	c.ipResolver = r
 }
 
 // Helper to map service errors to Huma HTTP errors
@@ -130,7 +139,23 @@ func (c *VerificationController) SubmitVerificationHandler(ctx context.Context, 
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
-	if err := c.service.SubmitVerification(userID); err != nil {
+	// Resolve the true client IP (honours X-Forwarded-For only when the peer
+	// is a configured trusted proxy) and capture the User-Agent for the
+	// attempt audit trail.
+	clientIP, err := c.ipResolver.Resolve(input.ClientAddrResolver.RemoteAddr, input.ForwardedFor)
+	if err != nil {
+		return nil, huma.Error400BadRequest("invalid client address")
+	}
+	userAgent := input.UserAgent
+
+	if err := c.service.SubmitVerification(ctx, userID, clientIP, userAgent); err != nil {
+		var rlErr *repository.RateLimitError
+		if errors.As(err, &rlErr) {
+			seconds := int(math.Ceil(rlErr.RetryAfter.Seconds()))
+			return nil, huma.Error429TooManyRequests(
+				fmt.Sprintf("rate limited (%s); retry after %ds", rlErr.Scope, seconds),
+			)
+		}
 		return nil, mapVerificationError(err)
 	}
 

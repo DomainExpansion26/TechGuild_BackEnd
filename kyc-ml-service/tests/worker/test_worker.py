@@ -767,6 +767,14 @@ def test_inference_fallbacks_when_models_unavailable():
 
 
 def test_process_job_mock_mode_runs_pipeline_and_persists(monkeypatch):
+    # Face matching is switched off in the shipped configuration, which routes
+    # the mock pipeline to manual review. Pin it on so this test keeps covering
+    # the full auto-eligible path end to end.
+    monkeypatch.setattr(
+        worker,
+        "settings",
+        dataclasses.replace(worker.settings, face_match_enabled=True),
+    )
     calls: dict[str, object] = {}
 
     def fake_mark_processing(verification_id: str) -> bool:
@@ -995,3 +1003,61 @@ def test_process_job_fetches_primary_document_once(monkeypatch):
     assert len(fetch_calls) == 1
     assert ocr_primary == [b"primary-bytes"]
     assert result["ml_status"] == "ml_completed"
+
+
+# ---------------------------------------------------------------------------
+# Face match master switch (FACE_MATCH_ENABLED=false)
+# ---------------------------------------------------------------------------
+
+
+def _disable_face_match(monkeypatch):
+    """Pin the master switch off, with shadow mode off so raw == effective."""
+    monkeypatch.setattr(
+        worker,
+        "settings",
+        dataclasses.replace(
+            worker.settings, face_match_enabled=False, shadow_mode=False
+        ),
+    )
+
+
+def test_face_match_disabled_returns_manual(monkeypatch):
+    _disable_face_match(monkeypatch)
+    ocr_result = {"ocr_confidence": 0.99, "text": "NAME: TEST USER"}
+    liveness_result = {"liveness_score": 0.99, "is_live": True}
+    face_result = worker._make_face_disabled_result(doc_types=["aadhaar", "selfie"])
+
+    effective, raw = worker.determine_review_priority(
+        ocr_result, face_result, liveness_result
+    )
+    assert raw == worker.PRIORITY_MANUAL_REVIEW
+    assert effective == worker.PRIORITY_MANUAL_REVIEW
+
+
+def test_face_match_disabled_result_shape():
+    result = worker._make_face_disabled_result()
+
+    assert result["enabled"] is False
+    assert result["error"] == "face_match_disabled"
+    assert result["face_similarity"] == 0.0
+    assert result["aadhaar_similarity"] is None
+    assert "reference_scores" in result
+    assert result["engine"] == "disabled"
+    assert result["document_types"] == []
+
+
+def test_face_disabled_not_auto_rejected(monkeypatch):
+    # Critical: 0.0 < threshold_face_reject would normally trigger auto_reject
+    # via the face_similarity branch. The disabled-path error flag must win.
+    _disable_face_match(monkeypatch)
+    face_result = worker._make_face_disabled_result(doc_types=["aadhaar", "selfie"])
+    ocr_result = {"ocr_confidence": 0.95, "text": "NAME: TEST USER"}
+    liveness_result = {"liveness_score": 0.99, "is_live": True}
+
+    effective, raw = worker.determine_review_priority(
+        ocr_result, face_result, liveness_result
+    )
+    # even with shadow_mode=False, we must NOT auto_reject
+    assert raw == worker.PRIORITY_MANUAL_REVIEW
+    assert raw != worker.PRIORITY_AUTO_REJECT
+    assert effective == worker.PRIORITY_MANUAL_REVIEW

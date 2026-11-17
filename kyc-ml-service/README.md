@@ -1,5 +1,33 @@
 # KYC ML Service
 
+# build image
+# 1. Rebuild image (code ko image me bake karta hai)
+docker compose build ml-worker
+
+# How to start (from scratch)
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service" && docker compose up -d ml-worker
+
+# start workers
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service"
+docker compose up -d ml-worker
+
+# stop workers 
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service"
+docker compose down
+
+# restart workers
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service"
+docker compose restart ml-worker
+
+# full rebuild
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service"
+docker compose down && docker compose build ml-worker && docker compose up -d ml-worker
+
+# live logs
+cd "/home/fujel/Documents/Domain Expansion/TechGuild_BackEnd/kyc-ml-service"
+docker compose logs -f ml-worker | grep -E "kyc\.|Received [1-9]"
+
+#
 Python worker that consumes KYC verification jobs from **Redis Streams**, runs
 OCR / face-match / liveness inference, and writes the results into
 **PostgreSQL**.
