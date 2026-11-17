@@ -43,6 +43,12 @@ const (
 	routerSourceShadow = "shadow" // shadow mode or cohort gate, not the AI score
 	routerSourceAI     = "ai"     // Python's threshold decision, re-verified by Go gates
 	routerSourceSystem = "system" // Go-side fallback (incomplete evidence, guards)
+
+	// routerSourceDocInSelfie (Phase B): the hard Aadhaar-number mismatch
+	// between the uploaded document and the document held in the selfie.
+	// Distinct from "system" so an operator can tell a document-in-selfie
+	// rejection apart from a guard fallback in decision_source.
+	routerSourceDocInSelfie = "doc_in_selfie"
 )
 
 // routerReason values appear in logs/audit details (there is no reason column).
@@ -53,6 +59,10 @@ const (
 	routerReasonRejectNotHardSignal = "reject_not_hard_signal"
 	routerReasonGuardRejected       = "guard_rejected"
 	routerReasonRejectGuardRejected = "reject_guard_rejected"
+
+	// routerReasonAadhaarMismatch (Phase B): the document held in the selfie
+	// carries a different Aadhaar number than the uploaded document.
+	routerReasonAadhaarMismatch = "aadhaar_number_mismatch"
 )
 
 // routingActionType marks router decisions in verification_audit_logs.
@@ -145,15 +155,23 @@ func (s *VerificationService) applyRouting(tx *gorm.DB, rec *models.Verification
 	case dec.Approve:
 		// Defense-in-depth guard: the SQL itself must reject if evidence is
 		// missing or below threshold (independently re-parsed by the DB).
+		// Exactly routerApproveGuardArgCount arguments, positionally matching the
+		// guard's ? placeholders (the constant lives in the test file and
+		// TestRouterApproveGuardPlaceholderRegression pins its value on both
+		// dialects). A stale extra argument here (the removed FaceAutoPass)
+		// silently SHIFTS every following binding, so every threshold would be
+		// compared against the wrong value.
 		result := tx.Exec(routerApproveGuardSQL(dialect),
-			dec.Source == routerSourceShadow,
-			dec.Source,
-			dec.PolicyVersion,
-			rec.ID,
-			policy.FaceAutoPass,
-			policy.AadhaarFloor,
-			policy.LivenessPass,
-			policy.OCRPass,
+			dec.Source == routerSourceShadow, // 1 shadow_mode_applied
+			dec.Source,                       // 2 decision_source
+			dec.PolicyVersion,                // 3 policy_version
+			rec.ID,                           // 4 id
+			// Phase B: document-in-selfie score floor replaces the
+			// aadhaar_similarity floor that a disabled face match kept nil.
+			policy.DocInSelfieApproveThreshold, // 5 doc_in_selfie score floor
+			policy.RequireQRVerified,           // 6 require_qr switch
+			policy.LivenessPass,                // 7 liveness floor
+			policy.OCRPass,                     // 8 ocr floor
 		)
 		if result.Error != nil {
 			return result.Error
@@ -163,6 +181,15 @@ func (s *VerificationService) applyRouting(tx *gorm.DB, rec *models.Verification
 			// Guard rejected the approval — fall back to manual review.
 			log.Printf("[KYC Router] ROUTING_GUARD_REJECTED id=%s", rec.ID)
 			return s.applyManual(tx, rec, dec, routerReasonGuardRejected)
+		}
+
+		// The status flip above is only half the contract: an approved record
+		// must also claim its dedup hash, grant the KYC bonus and activate the
+		// account. Running it on the same tx means a failure rolls the approval
+		// back instead of leaving a record approved with no uniqueness claim.
+		if err := s.approveVerificationSideEffectsTx(tx, rec); err != nil {
+			log.Printf("[KYC Router] APPROVE_SIDE_EFFECTS_FAILED id=%s: %v", rec.ID, err)
+			return err
 		}
 
 		rec.Status = models.VerificationApproved
@@ -271,7 +298,21 @@ func (s *VerificationService) decideRouting(rec *models.VerificationRecord) rout
 		return dec
 	}
 
-	// 3. AI says eligible -> re-check the evidence against the thresholds.
+	// 3. Phase B hard signal: the document held in the selfie carries a
+	//    different Aadhaar number than the uploaded document. Like the
+	//    liveness spoof, this is a "hard" signal and outranks the AI
+	//    recommendation — but it is operator-gated, because a mis-OCR must
+	//    never silently reject a legitimate user. Checked before the
+	//    liveness-spoof path so the audit records the mismatch reason.
+	if hardDocInSelfieMismatch(rec) && policy.DocInSelfieRejectOnMismatch {
+		dec.Effective = models.ReviewPriorityAutoReject
+		dec.Source = routerSourceDocInSelfie
+		dec.Reason = routerReasonAadhaarMismatch
+		dec.Reject = true
+		return dec
+	}
+
+	// 4. AI says eligible -> re-check the evidence against the thresholds.
 	if rec.AIRecommendedPriority == models.ReviewPriorityAutoEligible {
 		if !s.evidenceComplete(rec) {
 			dec.Effective = models.ReviewPriorityManual
@@ -285,7 +326,7 @@ func (s *VerificationService) decideRouting(rec *models.VerificationRecord) rout
 		return dec
 	}
 
-	// 4. AI says reject -> only a clean liveness spoof backfills that.
+	// 5. AI says reject -> only a clean liveness spoof backfills that.
 	if rec.AIRecommendedPriority == models.ReviewPriorityAutoReject {
 		if !s.isLivenessSpoof(rec) {
 			dec.Effective = models.ReviewPriorityManual
@@ -299,10 +340,33 @@ func (s *VerificationService) decideRouting(rec *models.VerificationRecord) rout
 		return dec
 	}
 
-	// 5. Default: the AI recommendation is manual (or unknown) -> manual.
+	// 6. Default: the AI recommendation is manual (or unknown) -> manual.
 	dec.Effective = models.ReviewPriorityManual
 	dec.Source = routerSourceAI
 	return dec
+}
+
+// hardDocInSelfieMismatch reports whether face_match_result carries the
+// worker's hard document-in-selfie rejection: document_in_selfie_decision ==
+// "reject". Unparseable evidence is never a hard signal — a malformed column
+// must fall through to manual review, not auto-reject a user.
+//
+// Phase E: a business record has NO document-in-selfie stage, so a "reject"
+// value there could only come from a leaked/copied column — and this path leads
+// to an auto-REJECT. It is therefore gated on rec.Type == VerificationIndividual
+// so a business record can never be auto-rejected on an individual-only signal.
+func hardDocInSelfieMismatch(rec *models.VerificationRecord) bool {
+	if rec.Type != models.VerificationIndividual {
+		return false
+	}
+	if len(rec.FaceMatchResult) == 0 {
+		return false
+	}
+	var face faceEvidenceJSON
+	if err := json.Unmarshal(rec.FaceMatchResult, &face); err != nil {
+		return false
+	}
+	return face.DocumentInSelfieDecision == "reject"
 }
 
 // ============================================================
@@ -321,18 +385,58 @@ func (s *VerificationService) evidenceComplete(rec *models.VerificationRecord) b
 	if err := json.Unmarshal(rec.FaceMatchResult, &face); err != nil {
 		return false
 	}
-	if face.Error != "" || face.FaceSimilarity == nil ||
-		float64(*face.FaceSimilarity) < policy.FaceAutoPass {
-		return false
+
+	// Phase E — business KYC is a DIFFERENT evidence contract, so it branches
+	// BEFORE any selfie/liveness predicate. A business record carries no selfie
+	// and no liveness_result at all: gating it on document_in_selfie_*,
+	// second_reference_divergence or liveness would make auto-approval
+	// impossible. Its anchors are the ML model version, the document review
+	// verdict and (when the policy asks for it) the UIDAI QR check.
+	if rec.Type == models.VerificationBusiness {
+		if rec.MLModelVersion == "" {
+			return false // no model version: the ML stage never completed
+		}
+		if !businessDocsApproved(face) {
+			return false // documents not approved (or verdict absent)
+		}
+		var ocr ocrEvidenceJSON
+		if err := json.Unmarshal(rec.OCROcrResult, &ocr); err != nil {
+			return false
+		}
+		// OCR confidence must be present and above the floor: it is the quality
+		// proof of the document/registry read the verdict above depends on.
+		if ocr.OCRConfidence == nil || float64(*ocr.OCRConfidence) < policy.OCRPass {
+			return false
+		}
+		if policy.RequireQRVerified {
+			if ocr.DocumentValidation == nil ||
+				ocr.DocumentValidation.Overall != "verified" {
+				return false // same operator escape hatch as the individual path
+			}
+		}
+		return true
 	}
 
-	// Phase 5 — Aadhaar floor even when PAN wins the multi-reference match:
-	// a fake PAN cannot carry the score for an unverified Aadhaar.
-	if face.AadhaarSimilarity == nil {
-		return false // no usable Aadhaar photo — cannot auto-approve
+	// // 	if face.Error != "" || face.FaceSimilarity == nil ||
+	// // 		float64(*face.FaceSimilarity) < policy.FaceAutoPass {
+	// // 		return false
+	// // 	}
+
+	// Phase B — document-in-selfie is the identity anchor now that face match
+	// is disabled (FACE_MATCH_ENABLED=false), which makes aadhaar_similarity
+	// permanently nil. The worker OCRs the selfie and compares the document
+	// held in it against the uploaded document; only a clean "approve" verdict
+	// with a score at/above the threshold may auto-approve. "manual" and
+	// "reject" both fall through to manual review here — the hard reject is
+	// decided in decideRouting, which outranks this evidence gate.
+	if face.DocumentInSelfieDecision != "approve" {
+		return false // no (or failed) document-in-selfie verification
 	}
-	if float64(*face.AadhaarSimilarity) < policy.AadhaarFloor {
-		return false // Aadhaar too weak — cannot auto-approve
+	if face.DocumentInSelfieScore == nil {
+		return false // worker never scored the match — cannot auto-approve
+	}
+	if *face.DocumentInSelfieScore < policy.DocInSelfieApproveThreshold {
+		return false // match too weak — cannot auto-approve
 	}
 
 	// Phase 5 — divergence guard: PAN-only strong match with a weak Aadhaar
@@ -357,9 +461,15 @@ func (s *VerificationService) evidenceComplete(rec *models.VerificationRecord) b
 	if ocr.OCRConfidence == nil || float64(*ocr.OCRConfidence) < policy.OCRPass {
 		return false
 	}
-	if ocr.DocumentValidation == nil ||
-		ocr.DocumentValidation.Overall != "verified" {
-		return false
+	// QR gate (Phase B): require document_validation.overall == "verified"
+	// only when the policy asks for it. THRESHOLD_REQUIRE_QR=false is the
+	// operator escape hatch for a UIDAI QR-certificate outage — every other
+	// gate above and below stays enforced.
+	if policy.RequireQRVerified {
+		if ocr.DocumentValidation == nil ||
+			ocr.DocumentValidation.Overall != "verified" {
+			return false
+		}
 	}
 
 	// user_id_validation is optional; when present it must be explicitly valid.
@@ -374,6 +484,40 @@ func (s *VerificationService) evidenceComplete(rec *models.VerificationRecord) b
 	}
 
 	return rec.MLModelVersion != ""
+}
+
+// businessDocsApproved reports whether the business document review verdict in
+// face_match_result is an approval. The worker writes the verdict in several
+// shapes and different producers may write only one of them, so ALL are
+// accepted:
+//
+//	nested: {"business_docs": {"decision": "approve", "score": 100}}
+//	flat:   {"business_docs_decision": "approve", "business_docs_score": 100}
+//	flat:   {"business_decision": "approve"}            (Phase G canonical key)
+//
+// Any one confirming "approve" is enough. Anything else — "manual", "reject",
+// an empty string, or an absent key — reads as NOT approved, so a missing field
+// can never fail open into an auto-approval.
+//
+// Phase G: the verdict now means "the single selected business document matched
+// the form value AND the cancelled cheque matched the bank details" — the
+// worker only writes "approve" when BOTH checks passed (see
+// validators/document_match.compare_business_documents). A mismatch or an OCR
+// failure writes "manual", which this gate reads as not-approved and the router
+// then holds for a human. The gate itself is unchanged in strength: it still
+// requires exactly the string "approve".
+func businessDocsApproved(face faceEvidenceJSON) bool {
+	if strings.TrimSpace(string(face.BusinessDecision)) == "approve" {
+		return true
+	}
+	if strings.TrimSpace(string(face.BusinessDocsDecision)) == "approve" {
+		return true
+	}
+	if face.BusinessDocs != nil &&
+		strings.TrimSpace(string(face.BusinessDocs.Decision)) == "approve" {
+		return true
+	}
+	return false
 }
 
 // isLivenessSpoof identifies the ONLY auto-reject signal: a successful
@@ -476,8 +620,50 @@ type faceEvidenceJSON struct {
 	// SecondReferenceDivergence is a plain bool (not pointer): absent means
 	// the record predates Phase 5, which evidenceComplete already blocks
 	// via the nil/nil-floor Aadhaar gate.
+	//
+	// Phase B: the router no longer GATES on AadhaarSimilarity — with
+	// FACE_MATCH_ENABLED=false the worker always writes nil, which would
+	// block every approval. The fields stay so the divergence guardrail and
+	// the SQL guards keep a readable contract. Auto-approval now gates on the
+	// DocumentInSelfie* fields below.
 	AadhaarSimilarity         *flexibleFloat `json:"aadhaar_similarity"`
 	SecondReferenceDivergence flexibleBool   `json:"second_reference_divergence"`
+
+	// Phase B — document-in-selfie signal, written by the worker into
+	// face_match_result. Decision is "approve" | "manual" | "reject"; Score is
+	// a pointer so "field absent" is distinguishable from a legitimate 0, and
+	// Match is the worker's boolean cross-check of the two OCR reads.
+	DocumentInSelfieDecision string `json:"document_in_selfie_decision"`
+	DocumentInSelfieScore    *int   `json:"document_in_selfie_score"`
+	DocumentInSelfieMatch    bool   `json:"document_in_selfie_match"`
+
+	// Phase E — business KYC verdicts. A business record has no selfie and no
+	// liveness result, so its only identity anchor is the registry/document
+	// review. The Python worker writes the verdict in BOTH shapes (a nested
+	// business_docs object plus a flat business_docs_* mirror) and other writers
+	// may emit only one of them, so both are decoded here and EITHER one
+	// confirming "approve" is accepted by businessDocsApproved. Every key is
+	// optional: absent means NOT approved (fail-closed), never fail-open.
+	//
+	// Phase G adds the canonical flat alias "business_decision": the worker now
+	// emits it alongside the two Phase E shapes, so a Phase G producer that
+	// writes only the documented key still gates correctly. All three are read
+	// and any single "approve" is sufficient; the value of the Phase G verdict
+	// is what business_docs.decision carries.
+	BusinessDocsDecision flexibleString    `json:"business_docs_decision"`
+	BusinessDocsScore    *int              `json:"business_docs_score"`
+	BusinessDocs         *businessDocsJSON `json:"business_docs"`
+	BusinessDecision     flexibleString    `json:"business_decision"`
+}
+
+// businessDocsJSON is the NESTED business verdict object the worker writes
+// into face_match_result: {"business_docs": {"decision": "approve",
+// "score": 100}}. The pointer on faceEvidenceJSON keeps "no nested object"
+// distinguishable from "object present but decision absent" — both read as
+// not-approved.
+type businessDocsJSON struct {
+	Decision flexibleString `json:"decision"`
+	Score    *int           `json:"score"`
 }
 
 type livenessEvidenceJSON struct {
@@ -526,6 +712,40 @@ func (s *flexibleString) UnmarshalJSON(v []byte) error {
 // extension; both yield the same decision. The guard additionally requires
 // system_escalated_at IS NULL so an escalated record can never be approved by
 // a router instance racing the escalator.
+//
+// Phase B: the aadhaar_similarity floor predicate is GONE. With
+// FACE_MATCH_ENABLED=false the worker writes aadhaar_similarity as null, so
+// that predicate could never be satisfied and blocked every approval. The
+// documented identity anchor is now document_in_selfie_decision/score, which
+// Phase A's worker writes. The QR predicate is now conditional on
+// THRESHOLD_REQUIRE_QR so a UIDAI cert outage can be bypassed deliberately.
+//
+// Phase E: the identity predicates are TYPE-AWARE. A business record has no
+// selfie and no liveness result at all, so gating it on
+// document_in_selfie_*/divergence/liveness made business auto-approval
+// impossible. For type='business' the identity block is replaced by the
+// business-documents verdict (flat business_decision, flat
+// business_docs_decision, OR nested business_docs.decision == 'approve') and
+// the liveness block is exempted. Individual records keep the exact same
+// predicates as before.
+//
+// Phase G only widens the accepted KEY NAMES for that same verdict (the worker
+// now writes the canonical "business_decision"); the required VALUE is still
+// exactly 'approve', so a mismatch or an OCR failure can never pass this guard.
+//
+// Parameter order — EXACTLY routerApproveGuardArgCount (8) placeholders, no more:
+//
+//	1 shadow_mode_applied  (bool)
+//	2 decision_source      (string)
+//	3 policy_version       (string)
+//	4 id                   (uuid)
+//	5 doc_in_selfie_approve_threshold (int)  — individual only
+//	6 require_qr           (bool)            — both types
+//	7 liveness_pass        (float)           — individual only
+//	8 ocr_pass             (float)           — both types
+//
+// The removed face_auto_pass argument is NOT part of this statement: passing it
+// again shifts every binding after it by one position.
 func routerApproveGuardSQL(dialect string) string {
 	if dialect == "postgres" {
 		return `
@@ -543,13 +763,23 @@ func routerApproveGuardSQL(dialect string) string {
 		   AND status = 'pending'
 		   AND ml_status = 'ml_completed'
 		   AND system_escalated_at IS NULL
-		   AND (face_match_result->>'face_similarity')::float >= ?
-		   AND (face_match_result->>'aadhaar_similarity')::float >= ?
-		   AND (face_match_result->>'second_reference_divergence')::boolean IS NOT TRUE
-		   AND liveness_result->>'is_live' = 'true'
-		   AND (liveness_result->>'liveness_score')::float >= ?
-		   AND (ocr_ocr_result->>'ocr_confidence')::float >= ?
-		   AND ocr_ocr_result->'document_validation'->>'overall' = 'verified'`
+		   AND CASE WHEN type = 'business' THEN
+		              COALESCE(face_match_result->>'business_decision', '') = 'approve'
+		              OR COALESCE(face_match_result->>'business_docs_decision', '') = 'approve'
+		              OR COALESCE(face_match_result->'business_docs'->>'decision', '') = 'approve'
+		            ELSE (
+		              (face_match_result->>'document_in_selfie_decision') = 'approve'
+		              AND (face_match_result->>'document_in_selfie_score')::int >= ?
+		              AND (face_match_result->>'second_reference_divergence')::boolean IS NOT TRUE
+		            ) END
+		   AND (CASE WHEN ? THEN
+		              COALESCE(ocr_ocr_result->'document_validation'->>'overall', '') = 'verified'
+		            ELSE TRUE END)
+		   AND CASE WHEN type = 'business' THEN TRUE
+		            ELSE (liveness_result->>'is_live' = 'true'
+		                  AND (liveness_result->>'liveness_score')::float >= ?)
+		       END
+		   AND (ocr_ocr_result->>'ocr_confidence')::float >= ?`
 	}
 	return `
 		UPDATE verification_records
@@ -566,19 +796,31 @@ func routerApproveGuardSQL(dialect string) string {
 		   AND status = 'pending'
 		   AND ml_status = 'ml_completed'
 		   AND system_escalated_at IS NULL
-		   AND CAST(json_extract(face_match_result, '$.face_similarity') AS REAL) >= ?
-		   AND CAST(json_extract(face_match_result, '$.aadhaar_similarity') AS REAL) >= ?
-		   AND COALESCE(json_extract(face_match_result, '$.second_reference_divergence'), 0) = 0
-		   AND json_extract(liveness_result, '$.is_live') = 1
-		   AND CAST(json_extract(liveness_result, '$.liveness_score') AS REAL) >= ?
-		   AND CAST(json_extract(ocr_ocr_result, '$.ocr_confidence') AS REAL) >= ?
-		   AND json_extract(ocr_ocr_result, '$.document_validation.overall') = 'verified'`
+		   AND CASE WHEN type = 'business' THEN
+		              COALESCE(json_extract(face_match_result, '$.business_decision'), '') = 'approve'
+		              OR COALESCE(json_extract(face_match_result, '$.business_docs_decision'), '') = 'approve'
+		              OR COALESCE(json_extract(face_match_result, '$.business_docs.decision'), '') = 'approve'
+		            ELSE
+		              (json_extract(face_match_result, '$.document_in_selfie_decision') = 'approve'
+		               AND CAST(json_extract(face_match_result, '$.document_in_selfie_score') AS INTEGER) >= ?
+		               AND COALESCE(json_extract(face_match_result, '$.second_reference_divergence'), 0) = 0)
+		            END = 1
+		   AND (CASE WHEN ? <> 0 THEN
+		              COALESCE(json_extract(ocr_ocr_result, '$.document_validation.overall'), '') = 'verified'
+		            ELSE 1 END) = 1
+		   AND (CASE WHEN type = 'business' THEN 1
+		             ELSE (json_extract(liveness_result, '$.is_live') = 1
+		                   AND CAST(json_extract(liveness_result, '$.liveness_score') AS REAL) >= ?)
+		        END) = 1
+		   AND CAST(json_extract(ocr_ocr_result, '$.ocr_confidence') AS REAL) >= ?`
 }
 
 // routerRejectGuardSQL mirrors the approval guard for the auto-reject path.
-// Only a clean spoof signal (is_live=false and a score below the reject
-// threshold) reaches 'rejected'; everything else is protected by the metric
-// predicate falling through into the manual-review fallback.
+// Two independent hard signals can reach 'rejected': a clean liveness spoof
+// (is_live=false and a score below the reject threshold) or, since Phase B, a
+// hard document-in-selfie Aadhaar-number mismatch, which the worker marks with
+// document_in_selfie_score = -100. Everything else is protected by the metric
+// predicates falling through into the manual-review fallback.
 func routerRejectGuardSQL(dialect string) string {
 	if dialect == "postgres" {
 		return `
@@ -595,8 +837,16 @@ func routerRejectGuardSQL(dialect string) string {
 		   AND status = 'pending'
 		   AND ml_status = 'ml_completed'
 		   AND system_escalated_at IS NULL
-		   AND liveness_result->>'is_live' = 'false'
-		   AND (liveness_result->>'liveness_score')::float < ?`
+		   AND (
+		         (
+		           liveness_result->>'is_live' = 'false'
+		           AND (liveness_result->>'liveness_score')::float < ?
+		         )
+		         OR (
+		           face_match_result->>'document_in_selfie_decision' = 'reject'
+		           AND (face_match_result->>'document_in_selfie_score')::int = -100
+		         )
+		       )`
 	}
 	return `
 		UPDATE verification_records
@@ -612,8 +862,16 @@ func routerRejectGuardSQL(dialect string) string {
 		   AND status = 'pending'
 		   AND ml_status = 'ml_completed'
 		   AND system_escalated_at IS NULL
-		   AND json_extract(liveness_result, '$.is_live') = 0
-		   AND CAST(json_extract(liveness_result, '$.liveness_score') AS REAL) < ?`
+		   AND (
+		         (
+		           json_extract(liveness_result, '$.is_live') = 0
+		           AND CAST(json_extract(liveness_result, '$.liveness_score') AS REAL) < ?
+		         )
+		         OR (
+		           json_extract(face_match_result, '$.document_in_selfie_decision') = 'reject'
+		           AND CAST(json_extract(face_match_result, '$.document_in_selfie_score') AS INTEGER) = -100
+		         )
+		       )`
 }
 
 // auditRouterDecision records one KYC_ROUTED entry per approve/reject outcome.

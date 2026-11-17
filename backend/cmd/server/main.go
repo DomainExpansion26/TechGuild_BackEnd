@@ -19,6 +19,7 @@ import (
 	"techguild-backend/src/repository"
 	"techguild-backend/src/routes"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 )
 
 func main() {
@@ -98,6 +99,16 @@ func main() {
 	// shadow-mode assertion (LogKYCShadowModeAssertion) for the operator.
 	verificationService.SetKYCPolicy(cfg.KYCPolicy)
 
+	// ---- Phase 4: KYC submit rate limiting ----
+	ipResolver, err := utils.NewIPResolver(cfg.TrustedProxies)
+	if err != nil {
+		log.Fatalf("IP resolver init: %v", err)
+	}
+	attemptsRepo := repository.NewAttemptsRepository()
+	if err := verificationService.SetRateLimiter(attemptsRepo, ipResolver, cfg.KYCIPPepper); err != nil {
+		log.Fatalf("KYC rate limiter init: %v", err)
+	}
+
 	jobs.StartKYCRouter(context.Background(), verificationService, cfg.RouterIntervalSeconds, 50)
 
 	// --------------------------------------------------
@@ -113,6 +124,11 @@ func main() {
 
 	// KYC stale-pending escalator cron (manual review only; never auto-approves)
 	jobs.StartStalePendingEscalator(verificationService)
+
+	// KYC document retention cron (DPDP Act): deletes document images for
+	// approved/rejected records after KYCDocRetentionDays. Pending and
+	// under_review records are never touched — admins need them to review.
+	go jobs.StartKYCDocumentCleanup(context.Background(), cfg.KYCDocRetentionDays)
 
 	// --------------------------------------------------
 	// Wallet + Withdrawal + Refund
@@ -152,6 +168,7 @@ func main() {
 	settingsController := controllers.NewSettingsController(cfg)
 	oauthController := controllers.NewOAuthController(cfg)
 	verificationController := controllers.NewVerificationController(verificationService)
+	verificationController.SetIPResolver(ipResolver)
 
 	// --------------------------------------------------
 	// Route registration

@@ -39,6 +39,10 @@ func setupVerificationTestDB(t *testing.T) *gorm.DB {
 		&models.User{},
 		&models.VerificationRecord{},
 		&models.VerificationDocument{},
+		&models.GovtIDDedup{},
+		&models.BusinessPANDedup{},
+		&models.BulkReviewItem{},
+		&models.VerificationAuditLog{},
 	); err != nil {
 		t.Fatalf("auto-migrate test schema: %v", err)
 	}
@@ -209,21 +213,106 @@ func TestGetAutoEligibleQueue_RespectsConfiguredAge(t *testing.T) {
 	}
 }
 
+// TestBulkApprove_RunsSideEffectsInSameTransaction locks in the HIGH-severity
+// fix: bulk approve must register the dedup hash, award the KYC bonus and
+// activate the account, and a failing hook must roll the whole batch back.
+func TestBulkApprove_RunsSideEffectsInSameTransaction(t *testing.T) {
+	db := setupVerificationTestDB(t)
+	user := createTestUser(t, db)
+	// Inactive until KYC approval activates it.
+	if err := db.Model(&models.User{}).
+		Where("id = ?", user.ID).
+		Update("status", "pending").Error; err != nil {
+		t.Fatalf("reset user status: %v", err)
+	}
+
+	const idHash = "hash-abc"
+	record := seedVerificationRecord(t, db, user.ID, func(r *models.VerificationRecord) {
+		r.GovtIDHash = idHash
+	})
+
+	repo := NewVerificationRecordsRepository()
+	hookCalls := 0
+	err := repo.BulkApprove([]string{record.ID.String()}, uuid.New(), func(tx *gorm.DB, rec *models.VerificationRecord) error {
+		hookCalls++
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.GovtIDDedup{
+			GovtIDHash: rec.GovtIDHash,
+			UserID:     rec.UserID,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.User{}).Where("id = ?", rec.UserID).
+			UpdateColumn("points", gorm.Expr("points + ?", 40)).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.User{}).Where("id = ?", rec.UserID).
+			Update("status", string(models.StatusActive)).Error
+	})
+	if err != nil {
+		t.Fatalf("BulkApprove returned an error: %v", err)
+	}
+	if hookCalls != 1 {
+		t.Fatalf("side-effect hook ran %d time(s), want 1", hookCalls)
+	}
+
+	var dedup models.GovtIDDedup
+	if err := db.Where("govt_id_hash = ?", idHash).First(&dedup).Error; err != nil {
+		t.Fatalf("dedup hash was not registered by bulk approve: %v", err)
+	}
+
+	var refreshed models.User
+	if err := db.First(&refreshed, "id = ?", user.ID).Error; err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if refreshed.Points < 40 {
+		t.Errorf("user points = %d after bulk approve, want >= 40", refreshed.Points)
+	}
+	if refreshed.Status != models.StatusActive {
+		t.Errorf("user status = %q after bulk approve, want %q", refreshed.Status, models.StatusActive)
+	}
+}
+
+// TestBulkApprove_RollsBackWhenSideEffectFails proves the batch is atomic: a
+// failing side effect must leave the records unapproved and no dedup rows.
+func TestBulkApprove_RollsBackWhenSideEffectFails(t *testing.T) {
+	db := setupVerificationTestDB(t)
+	user := createTestUser(t, db)
+	record := seedVerificationRecord(t, db, user.ID, func(r *models.VerificationRecord) {
+		r.GovtIDHash = "hash-rollback"
+	})
+
+	repo := NewVerificationRecordsRepository()
+	boom := fmt.Errorf("simulated side-effect failure")
+	err := repo.BulkApprove([]string{record.ID.String()}, uuid.New(),
+		func(tx *gorm.DB, rec *models.VerificationRecord) error { return boom })
+	if err == nil {
+		t.Fatal("BulkApprove swallowed a side-effect failure")
+	}
+
+	var refreshed models.VerificationRecord
+	if err := db.First(&refreshed, "id = ?", record.ID).Error; err != nil {
+		t.Fatalf("reload record: %v", err)
+	}
+	if refreshed.Status == models.VerificationApproved {
+		t.Error("record stayed approved after the side-effect failure rolled back")
+	}
+}
+
 func TestBulkApprove_ValidatesInput(t *testing.T) {
 	setupVerificationTestDB(t)
 	repo := NewVerificationRecordsRepository()
 	adminID := uuid.New()
 
-	if err := repo.BulkApprove(nil, adminID); err == nil {
+	if err := repo.BulkApprove(nil, adminID, nil); err == nil {
 		t.Fatal("BulkApprove accepted an empty ID list")
 	}
 
-	if err := repo.BulkApprove([]string{"not-a-uuid"}, adminID); err == nil {
+	if err := repo.BulkApprove([]string{"not-a-uuid"}, adminID, nil); err == nil {
 		t.Fatal("BulkApprove accepted an invalid verification UUID")
 	}
 
 	valid := uuid.NewString()
-	if err := repo.BulkApprove([]string{valid, "still-not-a-uuid"}, adminID); err == nil {
+	if err := repo.BulkApprove([]string{valid, "still-not-a-uuid"}, adminID, nil); err == nil {
 		t.Fatal("BulkApprove accepted a list containing an invalid verification UUID")
 	}
 }

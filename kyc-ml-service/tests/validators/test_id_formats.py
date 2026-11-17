@@ -45,6 +45,8 @@ def test_invalid_pan(pan: str | None) -> None:
             "old 2345 6789 0123 new 2345 6789 0124",
             "234567890124",
         ),
+        ("2003\n2345 6789 0124", "234567890124"),
+        ("Patel\n16/05/2003\n2345 6789 0124", "234567890124"),
         ("PAN: ABCPE1234F", None),
         ("VID 1234 5678 9012 3456", None),
         ("", None),
@@ -53,3 +55,14 @@ def test_invalid_pan(pan: str | None) -> None:
 )
 def test_find_aadhaar_in_text(text: str | None, expected: str | None) -> None:
     assert find_aadhaar_in_text(text) == expected
+
+
+def test_find_aadhaar_across_lines() -> None:
+    assert find_aadhaar_in_text("Patel\n16/05/2003\n2345 6789 0124") == (
+        "234567890124"
+    )
+
+
+def test_find_aadhaar_not_merged_with_prior_digits() -> None:
+    # A line ending in digits must not glue onto the Aadhaar run below it.
+    assert find_aadhaar_in_text("2003\n2345 6789 0124") == "234567890124"

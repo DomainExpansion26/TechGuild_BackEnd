@@ -19,6 +19,9 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("KYC_ROLLOUT_COHORT_PCT", 0)
 	viper.SetDefault("KYC_POLICY_VERSION", "phase3-v1")
 	viper.SetDefault("KYC_ROUTER_INTERVAL_SECONDS", 60)
+	// DPDP Act: KYC document images are deleted 30 days after the record
+	// reaches a terminal state. A non-positive value disables the job.
+	viper.SetDefault("KYC_DOC_RETENTION_DAYS", 30)
 
 	viper.SetDefault("THRESHOLD_FACE_AUTO_PASS", 0.363)
 	viper.SetDefault("THRESHOLD_FACE_REVIEW", 0.300)
@@ -27,6 +30,16 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("THRESHOLD_LIVE_REJECT", 0.50)
 	viper.SetDefault("THRESHOLD_OCR_PASS", 0.80)
 	viper.SetDefault("THRESHOLD_AADHAAR_FLOOR", 0.35)
+
+	// Phase B document-in-selfie gate. Registered here for the same reason as
+	// the thresholds above: a partial .env must still yield safe values.
+	// DOC_IN_SELFIE_REJECT_ON_MISMATCH and THRESHOLD_REQUIRE_QR default TRUE,
+	// the strict behaviour; THRESHOLD_REQUIRE_QR=false is an explicit operator
+	// opt-out for QR-certificate outages.
+	viper.SetDefault("DOC_IN_SELFIE_APPROVE_THRESHOLD", 75)
+	viper.SetDefault("DOC_IN_SELFIE_MANUAL_THRESHOLD", 25)
+	viper.SetDefault("DOC_IN_SELFIE_REJECT_ON_MISMATCH", true)
+	viper.SetDefault("THRESHOLD_REQUIRE_QR", true)
 
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
@@ -85,13 +98,59 @@ func LoadConfig() (*Config, error) {
 			LivenessReject:   viper.GetFloat64("THRESHOLD_LIVE_REJECT"),
 			OCRPass:          viper.GetFloat64("THRESHOLD_OCR_PASS"),
 			AadhaarFloor:     viper.GetFloat64("THRESHOLD_AADHAAR_FLOOR"),
+
+			DocInSelfieApproveThreshold: getIntWithDefault("DOC_IN_SELFIE_APPROVE_THRESHOLD", 75),
+			DocInSelfieManualThreshold:  getIntWithDefault("DOC_IN_SELFIE_MANUAL_THRESHOLD", 25),
+			DocInSelfieRejectOnMismatch: viper.GetBool("DOC_IN_SELFIE_REJECT_ON_MISMATCH"),
+			RequireQRVerified:           viper.GetBool("THRESHOLD_REQUIRE_QR"),
 		},
 		RouterIntervalSeconds: viper.GetInt("KYC_ROUTER_INTERVAL_SECONDS"),
+
+		KYCIPPepper:    os.Getenv("KYC_IP_HASH_PEPPER"),
+		TrustedProxies: os.Getenv("KYC_TRUSTED_PROXY_CIDRS"),
+
+		// DPDP Act retention window. getIntWithDefault matters here: an
+		// unset KYC_DOC_RETENTION_DAYS must NOT collapse to 0, which would
+		// silently disable the cleanup job. A declared 0 still disables it
+		// deliberately (see jobs.StartKYCDocumentCleanup).
+		KYCDocRetentionDays: getIntWithDefault("KYC_DOC_RETENTION_DAYS", 30),
+	}
+
+	// Phase 4: fail closed in production when the IP-hash pepper is absent.
+	// Development (and test) processes may run without it.
+	if cfg.KYCIPPepper == "" && isProductionEnv() {
+		log.Fatal(
+			"[config] KYC_IP_HASH_PEPPER must be set in production " +
+				"(generate with: openssl rand -hex 32)",
+		)
 	}
 
 	LogKYCShadowModeAssertion(cfg.KYCPolicy)
 
 	return cfg, nil
+}
+
+// isProductionEnv reports whether the process is running in production.
+// Production is signalled by APP_ENV=production (see .env.production.example)
+// or GIN_MODE=release.
+func isProductionEnv() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release")
+}
+
+// getIntWithDefault reads an int key, falling back to the registered default
+// when the key is absent from BOTH the environment and the .env file.
+//
+// viper.IsSet() reports true only for keys supplied by a config file or the
+// environment; a value that exists solely as a viper.SetDefault is NOT "set".
+// So an operator who never declares DOC_IN_SELFIE_APPROVE_THRESHOLD gets the
+// explicit fallback (75) rather than GetInt's zero — a zero threshold would
+// silently reduce the approval bar to "score > 0". A declared 0 is honoured.
+func getIntWithDefault(key string, fallback int) int {
+	if !viper.IsSet(key) {
+		return fallback
+	}
+	return viper.GetInt(key)
 }
 
 // LogKYCShadowModeAssertion prints the Go shadow-mode value next to the Python

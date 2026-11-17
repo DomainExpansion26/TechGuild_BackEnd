@@ -1,157 +1,105 @@
-# Env files (templates are committed, real values are not)
+# ==========================================
+# Environment & Secrets
+# ==========================================
 .env
 .env.*
 !.env.example
 !.env.production.example
 *.env
 
-# macOS system files
-.DS_Store
-
-# Go binaries and builds
-backend/server
+# ==========================================
+# Go & Python Build Artifacts
+# ==========================================
 backend/bin/
+backend/tmp/
+backend/.gocache/
+backend/server
 server
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
 *.test
 *.out
-
-# Local logs / coverage
-*.log
-coverage.html
-
-# IDE and local agent configs
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Local provider config only. The committed guard lives in .opencode/.
-backend/opencode.jsonc
-
-.jcode/
-.serena/
-.dsh/
-
-# Python caches and bytecode
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.egg-info/
+.venv/
+venv/
+myenv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.tox/
 .coverage
 coverage/
 htmlcov/
 
-# Python virtualenvs (per-service; do NOT add plain "env/")
-.venv/
-venv/
-
-# Real env files (NOT examples)
-.env.local
-.env.production
-.env.staging
-.env.development
-
-# Backups
-*.bak.*
-*.bak-*
-backend.bak.*
-kyc-ml-service.bak.*
-
-# Model weights (downloaded, not .gitkeep)
+# ==========================================
+# AI/ML Models & Caches
+# ==========================================
 kyc-ml-service/models/*.onnx
 kyc-ml-service/models/*.pth
 kyc-ml-service/models/*.pt
 kyc-ml-service/models/*.safetensors
 kyc-ml-service/models/*.ckpt
 kyc-ml-service/models/*.bin
-
-# Paddle OCR model caches
+!kyc-ml-service/models/.gitkeep
 .paddlex/
 .paddleocr/
 paddle_ocr_cache/
 paddle_pdx_cache/
-**/paddle_ocr_cache/
-**/paddle_pdx_cache/
 
-# Agent workspace
+# ==========================================
+# AI Tools, IDEs & OS
+# ==========================================
 .opencode/
 .claude/
 .cursor/
-
-# IDE / OS
+.codex/
+.pi/
+.dsh/
+.dsh-index/
+.serena/
+.sense/
+.mcp.json
+.cursorrules
+opencode.json
+AGENTS.md
+CLAUDE.md
+.idea/
+.vscode/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
-# Logs and temp
+# ==========================================
+# Logs, Temp & Backups
+# ==========================================
+*.log
 logs/
 *.pid
 *.tmp
 *.temp
-
-# Local dev DB files
-*.sqlite
-*.sqlite3
-*.db
-
-# Node (future)
-node_modules/
-
-AGENTS.md
-LOCAL_TESTING.md
-
-# --- Final cleanup (Phase 4.5) ---
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
 *.bak.*
-kyc-ml-service.bak.*
+*.bak-*
 backend.bak.*
-.opencode/
-.env
-.env.local
-.env.production
-.env.staging
-.env.development
-kyc-ml-service/models/*.onnx
-kyc-ml-service/models/*.pth
-kyc-ml-service/models/*.pt
-kyc-ml-service/models/*.safetensors
-kyc-ml-service/models/*.ckpt
-kyc-ml-service/models/*.bin
-.paddlex/
-.paddleocr/
-paddle_ocr_cache/
-paddle_pdx_cache/
-*.log
+kyc-ml-service.bak.*
 *.sqlite
 *.sqlite3
 *.db
-backend/bin/
-.DS_Store
-.idea/
-.vscode/
-*.swp
 node_modules/
 
-# Preserve example templates + .gitkeep
-!kyc-ml-service/models/.gitkeep
+# ==========================================
+# Preserve Templates
+# ==========================================
 !kyc-ml-service/.env.example
 !kyc-ml-service/.env.production.example
 !backend/.env.example
 !backend/.env.production.example
+
+KYC_PIPELINE_REVIEW.md
+KYC_VERIFICATION_FILE_FLOW_REVIEW.md
+LOCAL_TESTING.md

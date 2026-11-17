@@ -2,11 +2,14 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"mime/multipart"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Custom Errors for Verification
@@ -39,17 +43,35 @@ var (
 const (
 	kycJobStream       = "kyc:verification:jobs"
 	kycJobPayloadField = "payload"
+
+	// kycApprovalBonusPoints is the one-time bonus granted when a verification
+	// record reaches approved, on every approve path (manual, bulk, router, cron).
+	kycApprovalBonusPoints = 40
 )
 
 // kycMLJob is the payload contract between the API (producer) and the ML
 // worker (consumer). Documents are Cloudinary URLs — the worker fetches them
 // and streams them to the vendor; no PII is stored in Redis beyond the URL.
 type kycMLJob struct {
-	JobID          string             `json:"job_id"`
-	VerificationID string             `json:"verification_id"`
-	UserID         string             `json:"user_id"`
-	Type           string             `json:"type"`
-	Documents      []kycMLJobDocument `json:"documents"`
+	JobID               string             `json:"job_id"`
+	VerificationID      string             `json:"verification_id"`
+	UserID              string             `json:"user_id"`
+	Type                string             `json:"type"`
+	Documents           []kycMLJobDocument `json:"documents"`
+	BusinessInfo        kycMLBusinessInfo  `json:"business_info,omitempty"`
+	BankDetails         kycMLBankDetails   `json:"bank_details,omitempty"`
+	SelectedBusinessDoc string             `json:"selected_business_doc,omitempty"`
+}
+
+type kycMLBusinessInfo struct {
+	GSTIN string `json:"gstin,omitempty"`
+	PAN   string `json:"pan,omitempty"`
+	RegNo string `json:"reg_no,omitempty"`
+}
+
+type kycMLBankDetails struct {
+	IFSC          string `json:"ifsc,omitempty"`
+	AccountNumber string `json:"account_number,omitempty"`
 }
 
 type kycMLJobDocument struct {
@@ -69,6 +91,38 @@ type VerificationService struct {
 
 	// uploadDocumentFn is a seam for tests; production uses Cloudinary.
 	uploadDocumentFn func(file multipart.File, filename string) (string, error)
+
+	// Phase 4 rate limiting. All three are wired together by SetRateLimiter;
+	// when attemptsRepo/ipResolver are nil the service falls back to the
+	// pre-Phase-4 submit path (used by legacy unit tests and internal tooling).
+	attemptsRepo repository.AttemptsRepository
+	ipResolver   *utils.IPResolver
+	ipPepper     []byte
+}
+
+// SetRateLimiter wires the KYC submit rate limiter. pepperHex is the
+// KYC_IP_HASH_PEPPER value (hex); it is decoded up front so an invalid
+// configuration fails at startup rather than on the first submit.
+func (s *VerificationService) SetRateLimiter(
+	repo repository.AttemptsRepository,
+	resolver *utils.IPResolver,
+	pepperHex string,
+) error {
+	pepper, err := hex.DecodeString(pepperHex)
+	if err != nil {
+		return fmt.Errorf("invalid KYC IP pepper (must be hex): %w", err)
+	}
+	s.attemptsRepo = repo
+	s.ipResolver = resolver
+	s.ipPepper = pepper
+	return nil
+}
+
+// sha256Hex returns the lowercase hex SHA-256 of s. Empty input hashes to the
+// SHA-256 of the empty string, which is stable and non-reversible.
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
 
 // SetKYCPolicy attaches the env-loaded router policy (main.go, after
@@ -304,6 +358,15 @@ func (s *VerificationService) UploadDocument(userID string, docType string, file
 	if err := s.verificationRecordsRepo.CreateDocument(doc); err != nil {
 		return nil, err
 	}
+	if record.Type == models.VerificationBusiness {
+		switch docType {
+		case models.DocTypeGSTCert, models.DocTypePANCard, models.DocTypeIncCert, models.DocTypeBizReg:
+			record.SelectedBusinessDoc = docType
+			if err := s.verificationRecordsRepo.UpdateVerificationRecord(record); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	return &dto.UploadDocumentResponse{
 		Message:      "Document uploaded successfully",
@@ -316,7 +379,28 @@ func (s *VerificationService) UploadDocument(userID string, docType string, file
 // 4. User Flow: Submit
 // =====================================================
 
-func (s *VerificationService) SubmitVerification(userID string) error {
+// SubmitVerification moves the user's draft/rejected record to pending and
+// queues the ML job.
+//
+// Phase 4: the quota reservation and the state transition run in ONE database
+// transaction, which closes the concurrent-submit race (two requests can no
+// longer both observe 'draft' and both consume a slot). If the Redis publish
+// fails after commit, MarkFailed releases the reserved quota.
+func (s *VerificationService) SubmitVerification(
+	ctx context.Context,
+	userID string,
+	clientIP netip.Addr,
+	userAgent string,
+) error {
+	if s.attemptsRepo == nil || s.ipResolver == nil {
+		return s.submitVerificationLegacy(userID)
+	}
+	return s.submitVerificationRateLimited(ctx, userID, clientIP, userAgent)
+}
+
+// submitVerificationLegacy is the pre-Phase-4 path, retained for callers that
+// have not wired the rate limiter (legacy unit tests / internal tooling).
+func (s *VerificationService) submitVerificationLegacy(userID string) error {
 	record, err := s.getOrCreateDraft(userID)
 	if err != nil {
 		return err
@@ -331,7 +415,100 @@ func (s *VerificationService) SubmitVerification(userID string) error {
 		return err
 	}
 
-	// Validation Logic
+	if err := validateSubmitPayload(record, docs); err != nil {
+		return err
+	}
+
+	applySubmitTransition(record, time.Now())
+
+	if err := s.verificationRecordsRepo.UpdateVerificationRecord(record); err != nil {
+		return err
+	}
+
+	// Publish the ML job to the Redis Stream; user-facing submit fails if the
+	// pipeline can't be reached (the record stays pending+queued and can be
+	// re-queued later).
+	return s.queueMLJob(record, docs)
+}
+
+// submitVerificationRateLimited reserves quota and performs the state
+// transition inside a single transaction.
+func (s *VerificationService) submitVerificationRateLimited(
+	ctx context.Context,
+	userID string,
+	clientIP netip.Addr,
+	userAgent string,
+) error {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return ErrInvalidState
+	}
+
+	limits := repository.RateLimits{
+		UserHourly: 3, UserDaily: 10,
+		IPHourly: 10, IPDaily: 30,
+	}
+	requestID := uuid.NewString()
+	ipHash := s.ipResolver.Hash(clientIP, s.ipPepper)
+	uaHash := sha256Hex(userAgent)
+
+	var (
+		record models.VerificationRecord
+		docs   []models.VerificationDocument
+	)
+
+	err = postgres.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Reserve quota FIRST, in this same transaction. A limit failure
+		// rolls the whole transaction back.
+		if err := s.attemptsRepo.ReserveAttempt(ctx, tx, repository.ReserveAttemptRequest{
+			UserID:        userUUID,
+			Action:        models.AttemptActionSubmit,
+			IPHash:        ipHash,
+			UserAgentHash: uaHash,
+			RequestID:     requestID,
+			Limits:        limits,
+		}); err != nil {
+			return err
+		}
+
+		// State transition in the SAME transaction: a concurrent submit that
+		// already flipped the record blocks here and rolls back its reserve.
+		if err := tx.Where("user_id = ? AND status IN ?", userUUID,
+			[]string{string(models.VerificationDraft), string(models.VerificationPending), string(models.VerificationRejected)}).
+			Order("created_at DESC").First(&record).Error; err != nil {
+			return err
+		}
+		if record.Status != models.VerificationDraft && record.Status != models.VerificationRejected {
+			return ErrAlreadySubmitted
+		}
+
+		if err := tx.Where("verification_record_id = ?", record.ID).Find(&docs).Error; err != nil {
+			return err
+		}
+		if err := validateSubmitPayload(&record, docs); err != nil {
+			return err
+		}
+
+		applySubmitTransition(&record, time.Now())
+		return tx.Save(&record).Error
+	})
+	if err != nil {
+		return err
+	}
+
+	// AFTER commit: publish the ML job. If Redis is unreachable, compensate by
+	// releasing the reserved quota so the user is not charged for a failed
+	// submit.
+	if pubErr := s.queueMLJob(&record, docs); pubErr != nil {
+		_ = s.attemptsRepo.MarkFailed(ctx, requestID)
+		return pubErr
+	}
+	return nil
+}
+
+// validateSubmitPayload enforces document/info completeness before a record
+// may move to pending.
+func validateSubmitPayload(record *models.VerificationRecord, docs []models.VerificationDocument) error {
 	switch record.Type {
 	case models.VerificationIndividual:
 		if record.GovtIDHash == "" {
@@ -373,30 +550,55 @@ func (s *VerificationService) SubmitVerification(userID string) error {
 		}
 
 	case models.VerificationBusiness:
-		if record.BusinessName == "" || record.AccountNumberEnc == "" {
-			return errors.New("business info or bank details are incomplete")
+		if record.BusinessName == "" {
+			return errors.New("business name is required")
+		}
+		if record.AccountNumberEnc == "" || record.IFSCCode == "" {
+			return errors.New("bank details are incomplete (account number and IFSC code are required)")
 		}
 
-		requiredDocs := map[string]bool{
-			models.DocTypeGSTCert:         false,
-			models.DocTypeIncCert:         false,
-			models.DocTypePANCard:         false,
-			models.DocTypeBizReg:          false,
-			models.DocTypeCancelledCheque: false,
-		}
+		present := make(map[string]bool, len(docs))
 		for _, d := range docs {
-			if _, ok := requiredDocs[d.DocumentType]; ok {
-				requiredDocs[d.DocumentType] = true
+			present[d.DocumentType] = true
+		}
+
+		// Business docs are now an exclusive choice: the merchant selects
+		// EXACTLY ONE proof of business existence (prevents ambiguous review
+		// when several, possibly conflicting, documents are uploaded).
+		// The order is fixed so the error message is deterministic.
+		var selectedBusinessDocs []string
+		for _, docType := range []string{
+			models.DocTypeGSTCert,
+			models.DocTypeIncCert,
+			models.DocTypePANCard,
+			models.DocTypeBizReg,
+		} {
+			if present[docType] {
+				selectedBusinessDocs = append(selectedBusinessDocs, docType)
 			}
 		}
-		for docType, uploaded := range requiredDocs {
-			if !uploaded {
-				return fmt.Errorf("missing required document: %s", docType)
-			}
+		if len(selectedBusinessDocs) == 0 {
+			return errors.New("missing business document: select exactly one of gst_certificate, incorporation_certificate, pan_card or business_registration")
+		}
+		if record.SelectedBusinessDoc == "" || !present[record.SelectedBusinessDoc] {
+			return errors.New("selected business document is required and must match the uploaded document")
+		}
+		if len(selectedBusinessDocs) > 1 {
+			return fmt.Errorf("select exactly one business document, but %d were provided: %s",
+				len(selectedBusinessDocs), strings.Join(selectedBusinessDocs, ", "))
+		}
+
+		// The cancelled cheque is still mandatory: it is the evidence backing
+		// the bank details validated above, not an alternative business proof.
+		if !present[models.DocTypeCancelledCheque] {
+			return fmt.Errorf("missing required document: %s", models.DocTypeCancelledCheque)
 		}
 	}
+	return nil
+}
 
-	now := time.Now()
+// applySubmitTransition stamps the fields that move a record to pending+queued.
+func applySubmitTransition(record *models.VerificationRecord, now time.Time) {
 	record.Status = models.VerificationPending
 	record.SubmittedAt = &now
 	record.RejectionReason = "" // Clear previous rejection reason
@@ -409,8 +611,8 @@ func (s *VerificationService) SubmitVerification(userID string) error {
 	record.MLSubmittedAt = &now
 	record.MLJobID = "kyc-job-" + uuid.NewString()
 
-	// ---- Phase 3 routing contract (UpdateVerificationRecord = Save, which
-	// writes EVERY field, so RoutingState must be set explicitly here) ----
+	// ---- Phase 3 routing contract (Save writes EVERY field, so
+	// RoutingState must be set explicitly here) ----
 	//   this submit           -> routing_state = 'pending'   (below)
 	//   worker save_results   -> ..., routing_state = 'pending' (Python UPDATE,
 	//                            guarded by system_escalated_at IS NULL)
@@ -418,55 +620,43 @@ func (s *VerificationService) SubmitVerification(userID string) error {
 	// The default column value is 'routed', so only records that pass through
 	// here (new submits, explicit re-queues) are visible to the router.
 	record.RoutingState = models.RoutingPending
-
-	if err := s.verificationRecordsRepo.UpdateVerificationRecord(record); err != nil {
-		return err
-	}
-
-	// Publish the ML job to the Redis Stream; user-facing submit fails if the
-	// pipeline can't be reached (the record stays pending+queued and can be
-	// re-queued later).
-	return s.queueMLJob(record, docs)
 }
 
 // queueMLJob pushes a verification job onto the Redis Stream consumed by the
 // ML worker. The payload carries document (Cloudinary) URLs only — no raw PII.
 func (s *VerificationService) queueMLJob(record *models.VerificationRecord, docs []models.VerificationDocument) error {
+	accountNumber := ""
+	if record.AccountNumberEnc != "" {
+		var err error
+		accountNumber, err = utils.DecryptSecret(record.AccountNumberEnc)
+		if err != nil {
+			log.Printf("KYC bank account decrypt failed (verification_id=%s): %v", record.ID, err)
+			return ErrMLQueueFailed
+		}
+	}
 	job := kycMLJob{
-		JobID:          record.MLJobID,
-		VerificationID: record.ID.String(),
-		UserID:         record.UserID.String(),
-		Type:           string(record.Type),
-		Documents:      make([]kycMLJobDocument, 0, len(docs)),
+		JobID: record.MLJobID, VerificationID: record.ID.String(), UserID: record.UserID.String(),
+		Type: string(record.Type), Documents: make([]kycMLJobDocument, 0, len(docs)),
+		BusinessInfo:        kycMLBusinessInfo{GSTIN: record.GSTNumber, PAN: record.BusinessPANHash, RegNo: record.RegistrationNumber},
+		BankDetails:         kycMLBankDetails{IFSC: record.IFSCCode, AccountNumber: accountNumber},
+		SelectedBusinessDoc: record.SelectedBusinessDoc,
 	}
 	for _, d := range docs {
-		job.Documents = append(job.Documents, kycMLJobDocument{
-			Type: d.DocumentType,
-			URL:  d.FileURL,
-		})
+		job.Documents = append(job.Documents, kycMLJobDocument{Type: d.DocumentType, URL: d.FileURL})
 	}
-
 	payload, err := json.Marshal(job)
 	if err != nil {
 		log.Printf("KYC job marshal failed (verification_id=%s): %v", job.VerificationID, err)
 		return ErrMLQueueFailed
 	}
-
 	if s.redisClient == nil {
 		log.Printf("Redis client unavailable; KYC job %s not queued (verification_id=%s)", job.JobID, job.VerificationID)
 		return ErrMLQueueFailed
 	}
-
-	if err := s.redisClient.XAdd(context.Background(), &redis.XAddArgs{
-		Stream: kycJobStream,
-		Values: map[string]interface{}{
-			kycJobPayloadField: string(payload),
-		},
-	}).Err(); err != nil {
+	if err := s.redisClient.XAdd(context.Background(), &redis.XAddArgs{Stream: kycJobStream, Values: map[string]interface{}{kycJobPayloadField: string(payload)}}).Err(); err != nil {
 		log.Printf("Failed to publish KYC job %s to stream %s (verification_id=%s): %v", job.JobID, kycJobStream, job.VerificationID, err)
 		return ErrMLQueueFailed
 	}
-
 	log.Printf("KYC job %s queued (verification_id=%s, user_id=%s)", job.JobID, job.VerificationID, job.UserID)
 	return nil
 }
@@ -534,23 +724,12 @@ func (s *VerificationService) AdminReview(adminID, recordID string, req dto.Admi
 			return err
 		}
 
-		// 2. Insert into Dedup Tables
-		if record.Type == models.VerificationIndividual && record.GovtIDHash != "" {
-			_ = s.verificationRecordsRepo.CreateGovtHash(&models.GovtIDDedup{
-				GovtIDHash: record.GovtIDHash,
-				UserID:     record.UserID,
-			})
+		// 2/3. Dedup registration, KYC bonus points, account activation.
+		// Shared with every other approve path so the guard can't be bypassed.
+		if err := s.approveVerificationSideEffects(record); err != nil {
+			log.Printf("[Verification] approve side effects failed (legacy AdminReview, record %s): %v", record.ID, err)
+			return err
 		}
-		if record.Type == models.VerificationBusiness && record.BusinessPANHash != "" {
-			_ = s.verificationRecordsRepo.CreateBusinessHash(&models.BusinessPANDedup{
-				PANHash: record.BusinessPANHash,
-				UserID:  record.UserID,
-			})
-		}
-
-		// 3. Award Points & Update Status
-		_ = s.userRepo.AddUserPoints(record.UserID.String(), 40)
-		_ = s.userRepo.UpdateUserStatus(record.UserID.String(), string(models.StatusActive))
 
 	case "REJECT":
 		if req.RejectionReason == "" {
@@ -593,6 +772,9 @@ func (s *VerificationService) AdminGetDetail(id string) (*models.VerificationRec
 
 // AdminBulkApprove approves multiple auto-eligible records in one transaction
 // and records the human trail (audit logs + bulk review items).
+// The approve side effects (dedup hash, +points, activation) run inside that
+// same transaction — bulk approve is the primary production approve path, so
+// skipping them would defeat the duplicate-Aadhaar/PAN guard entirely.
 func (s *VerificationService) AdminBulkApprove(ids []string, adminID string) error {
 	adminUUID, err := uuid.Parse(adminID)
 	if err != nil {
@@ -601,7 +783,7 @@ func (s *VerificationService) AdminBulkApprove(ids []string, adminID string) err
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: no verification IDs provided", ErrInvalidAdminAction)
 	}
-	return s.verificationRecordsRepo.BulkApprove(ids, adminUUID)
+	return s.verificationRecordsRepo.BulkApprove(ids, adminUUID, s.approveVerificationSideEffectsTx)
 }
 
 // AdminManualAction applies a single approve/reject decision from the manual
@@ -650,9 +832,14 @@ func (s *VerificationService) AdminManualAction(id string, action string, adminI
 
 // approveVerificationSideEffects contains everything that must happen when a
 // verification record becomes approved, regardless of WHO approved it (admin
-// manual action, or the 24h auto-approver cron).
+// manual action, bulk approve, router auto-approve, or the 24h auto-approver
+// cron).
 // Each step runs even if an earlier one failed; the first error is returned so
 // callers can log/surface it without blocking the remaining steps.
+//
+// Used by the non-transactional paths (AdminManualAction). Paths that already
+// hold an open transaction MUST use approveVerificationSideEffectsTx instead so
+// the side effects commit or roll back atomically with the status flip.
 func (s *VerificationService) approveVerificationSideEffects(record *models.VerificationRecord) error {
 	var firstErr error
 	noteErr := func(err error) {
@@ -661,28 +848,91 @@ func (s *VerificationService) approveVerificationSideEffects(record *models.Veri
 		}
 	}
 
-	// 1. Register dedup hashes (duplicate rejections stay consistent going
-	// forward, regardless of who triggered the approval)
-	if record.Type == models.VerificationIndividual && record.GovtIDHash != "" {
-		noteErr(s.verificationRecordsRepo.CreateGovtHash(&models.GovtIDDedup{
-			GovtIDHash: record.GovtIDHash,
-			UserID:     record.UserID,
-		}))
-	}
-	if record.Type == models.VerificationBusiness && record.BusinessPANHash != "" {
-		noteErr(s.verificationRecordsRepo.CreateBusinessHash(&models.BusinessPANDedup{
-			PANHash: record.BusinessPANHash,
-			UserID:  record.UserID,
-		}))
+	// No global DB handle (unit tests wire repositories directly): fall back to
+	// the repository seam so the same three side effects still run.
+	if postgres.DB == nil {
+		if record.Type == models.VerificationIndividual && record.GovtIDHash != "" {
+			noteErr(s.verificationRecordsRepo.CreateGovtHash(&models.GovtIDDedup{
+				GovtIDHash: record.GovtIDHash,
+				UserID:     record.UserID,
+			}))
+		}
+		if record.Type == models.VerificationBusiness && record.BusinessPANHash != "" {
+			noteErr(s.verificationRecordsRepo.CreateBusinessHash(&models.BusinessPANDedup{
+				PANHash: record.BusinessPANHash,
+				UserID:  record.UserID,
+			}))
+		}
+		noteErr(s.userRepo.AddUserPoints(record.UserID.String(), kycApprovalBonusPoints))
+		noteErr(s.userRepo.UpdateUserStatus(record.UserID.String(), string(models.StatusActive)))
+		return firstErr
 	}
 
-	// 2. Award KYC bonus points
-	noteErr(s.userRepo.AddUserPoints(record.UserID.String(), 40))
-
-	// 3. Activate the account
-	noteErr(s.userRepo.UpdateUserStatus(record.UserID.String(), string(models.StatusActive)))
+	noteErr(s.approveVerificationSideEffectsTx(postgres.DB, record))
 
 	return firstErr
+}
+
+// approveVerificationSideEffectsTx registers the dedup hashes, awards the KYC
+// bonus points and activates the account, all on the supplied transaction
+// handle. Every pipeline that flips a record to approved must call this so the
+// duplicate-Aadhaar/PAN guard and the reward/activation contract cannot be
+// bypassed by choosing a different approve entry point.
+//
+// It returns the first error encountered. Callers inside a transaction should
+// propagate it and abort, so a failed dedup insert never leaves a record
+// approved without its uniqueness claim (which would silently allow the same
+// government ID on a second account).
+func (s *VerificationService) approveVerificationSideEffectsTx(tx *gorm.DB, record *models.VerificationRecord) error {
+	if tx == nil {
+		tx = postgres.DB
+	}
+	if record == nil || record.UserID == uuid.Nil {
+		return errors.New("approve side effects: record has no user")
+	}
+
+	// 1. Register dedup hashes. OnConflict DoNothing keeps the call idempotent:
+	// a retried approve (cron replay, admin double-click, router re-claim)
+	// must not fail on a hash row that is already there.
+	switch record.Type {
+	case models.VerificationIndividual:
+		if record.GovtIDHash != "" {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+				Create(&models.GovtIDDedup{
+					GovtIDHash: record.GovtIDHash,
+					UserID:     record.UserID,
+				}).Error; err != nil {
+				return fmt.Errorf("register govt-id dedup hash: %w", err)
+			}
+		}
+	case models.VerificationBusiness:
+		if record.BusinessPANHash != "" {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+				Create(&models.BusinessPANDedup{
+					PANHash: record.BusinessPANHash,
+					UserID:  record.UserID,
+				}).Error; err != nil {
+				return fmt.Errorf("register business PAN dedup hash: %w", err)
+			}
+		}
+	}
+
+	// 2. Award KYC bonus points (points_only: no rank side effects here).
+	if err := tx.Model(&models.User{}).
+		Where("id = ?", record.UserID).
+		UpdateColumn("points", gorm.Expr("points + ?", kycApprovalBonusPoints)).Error; err != nil {
+		return fmt.Errorf("award kyc bonus points: %w", err)
+	}
+
+	// 3. Activate the account. Scoped to non-terminal-competition states is
+	// overkill here; activation is the intended post-approval state.
+	if err := tx.Model(&models.User{}).
+		Where("id = ?", record.UserID).
+		Update("status", string(models.StatusActive)).Error; err != nil {
+		return fmt.Errorf("activate account: %w", err)
+	}
+
+	return nil
 }
 
 // AdminEscalateToManual pulls an auto-eligible record back to the manual review

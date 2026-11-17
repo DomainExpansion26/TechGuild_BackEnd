@@ -110,10 +110,27 @@ class Settings:
     threshold_face_auto_pass: float = 0.363
     threshold_face_review: float = 0.300
     threshold_face_reject: float = 0.240
+    # Master switch for the whole face-matching stage. When False, the worker
+    # skips face match entirely and forces the record to manual_review; the
+    # comparison code is left intact and is re-enabled by flipping
+    # FACE_MATCH_ENABLED back to true in `.env`.
+    face_match_enabled: bool = True
     shadow_mode: bool = True
     threshold_live_pass: float = 0.90
     threshold_live_reject: float = 0.50
     threshold_ocr_pass: float = 0.80
+
+    # --- Document-in-selfie verification (Phase A) ---
+    # The user uploads the government document plus a selfie in which they
+    # physically hold that document. Both images are OCR'd and compared in
+    # app/validators/document_match.py; the three-band result is written to
+    # face_match_result for the Go router to re-gate auto-approval.
+    doc_in_selfie_enabled: bool = True
+    doc_in_selfie_approve_threshold: int = 75
+    doc_in_selfie_manual_threshold: int = 25
+    doc_in_selfie_reject_on_mismatch: bool = True
+    doc_in_selfie_name_match_threshold: float = 0.85
+    doc_in_selfie_min_confidence: float = 0.60
 
     # --- Policy version (Phase 3) ---
     # Stamped on completed records so a decision can be traced back to the
@@ -207,10 +224,27 @@ class Settings:
             threshold_face_auto_pass=_env_float("THRESHOLD_FACE_AUTO_PASS", 0.363),
             threshold_face_review=_env_float("THRESHOLD_FACE_REVIEW", 0.300),
             threshold_face_reject=_env_float("THRESHOLD_FACE_REJECT", 0.240),
+            face_match_enabled=_env_bool("FACE_MATCH_ENABLED", True),
             shadow_mode=_env_bool("SHADOW_MODE", True),
             threshold_live_pass=_env_float("THRESHOLD_LIVE_PASS", 0.90),
             threshold_live_reject=_env_float("THRESHOLD_LIVE_REJECT", 0.50),
             threshold_ocr_pass=_env_float("THRESHOLD_OCR_PASS", 0.80),
+            doc_in_selfie_enabled=_env_bool("DOC_IN_SELFIE_ENABLED", True),
+            doc_in_selfie_approve_threshold=_env_int(
+                "DOC_IN_SELFIE_APPROVE_THRESHOLD", 75
+            ),
+            doc_in_selfie_manual_threshold=_env_int(
+                "DOC_IN_SELFIE_MANUAL_THRESHOLD", 25
+            ),
+            doc_in_selfie_reject_on_mismatch=_env_bool(
+                "DOC_IN_SELFIE_REJECT_ON_MISMATCH", True
+            ),
+            doc_in_selfie_name_match_threshold=_env_float(
+                "DOC_IN_SELFIE_NAME_MATCH_THRESHOLD", 0.85
+            ),
+            doc_in_selfie_min_confidence=_env_float(
+                "DOC_IN_SELFIE_MIN_CONFIDENCE", 0.60
+            ),
             policy_version=_env_str("KYC_POLICY_VERSION", "phase3-v1"),
             qr_decode_enabled=_env_bool("QR_DECODE_ENABLED", True),
             qr_verification_required=_env_bool("QR_VERIFICATION_REQUIRED", False),

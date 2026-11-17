@@ -38,6 +38,8 @@ func setupEscalationTestDB(t *testing.T) *gorm.DB {
 		&models.VerificationRecord{},
 		&models.VerificationDocument{},
 		&models.VerificationAuditLog{},
+		&models.GovtIDDedup{},
+		&models.BusinessPANDedup{},
 	); err != nil {
 		t.Fatalf("auto-migrate test schema: %v", err)
 	}

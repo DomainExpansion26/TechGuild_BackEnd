@@ -110,7 +110,24 @@ type UploadDocumentInput struct {
 }
 type UploadDocumentOutput struct{ Body UploadDocumentResponse }
 
-type SubmitVerificationInput struct{}
+// ClientAddrResolver is embedded into SubmitVerificationInput so the handler
+// can read the raw peer address. Huma v2 handlers receive a plain
+// context.Context (not huma.Context), so a resolver is the supported way to
+// capture transport-level request metadata.
+type ClientAddrResolver struct {
+	RemoteAddr string
+}
+
+func (r *ClientAddrResolver) Resolve(ctx huma.Context) []error {
+	r.RemoteAddr = ctx.RemoteAddr()
+	return nil
+}
+
+type SubmitVerificationInput struct {
+	ClientAddrResolver
+	ForwardedFor string `header:"X-Forwarded-For"`
+	UserAgent    string `header:"User-Agent"`
+}
 type SubmitVerificationOutput struct{ Body VerificationMessageResponse }
 
 // Admin

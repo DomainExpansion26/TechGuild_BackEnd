@@ -8,7 +8,10 @@ from .verhoeff import is_valid_aadhaar
 
 _PAN_RE = re.compile(r"^[A-Z]{3}[ABCFGHJLPT][A-Z][0-9]{4}[A-Z]$")
 _SEPARATORS_RE = re.compile(r"[\s-]+")
-_AADHAAR_SEPARATOR_RE = re.compile(r"(?<=[0-9])[\s-]+(?=[0-9])")
+# Space/hyphen only: `\s` also matched line breaks, which glued an unrelated
+# leading token to the Aadhaar run ("2003\n2345 6789 0124" became one
+# 16-digit run and no valid Aadhaar was found at all).
+_AADHAAR_SEPARATOR_RE = re.compile(r"(?<=[0-9])[ -]+(?=[0-9])")
 _AADHAAR_CANDIDATE_RE = re.compile(r"(?<![0-9])([0-9]{12})(?![0-9])")
 
 
