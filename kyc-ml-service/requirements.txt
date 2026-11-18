@@ -1,0 +1,37 @@
+# KYC ML worker dependencies (Phase H: real ONNX / PaddleOCR inference)
+# Python 3.11 (see Dockerfile)
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+redis>=5.0,<6.0
+psycopg2-binary>=2.9,<3.0
+
+# ONNX inference (YuNet + SFace run through OpenCV; MiniFASNet through ORT)
+onnxruntime>=1.18,<2.0
+
+# OpenCV: YuNet/SFace live in the main opencv package (no contrib required).
+# PaddleOCR 2.10 pulls the GUI builds of opencv-python/-contrib as transitive
+# dependencies; pin every variant to the same version so only one cv2 ABI is
+# installed. Keep numpy < 2.0 for the Paddle 2.6.x CPU wheel.
+numpy==1.26.4
+opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
+opencv-contrib-python==4.11.0.86
+
+# PaddleOCR (CPU). 2.10 is used instead of 3.x because the current Paddle 3.x
+# PIR/oneDNN combination fails on plain CPU inference with:
+#   NotImplementedError: ConvertPirAttribute2RuntimeAttribute ...
+paddlepaddle==2.6.2
+paddleocr==2.10.0
+
+pydantic>=2.7,<3.0
+python-dotenv>=1.0,<2.0
+requests>=2.32,<3.0
+pillow==13.0.0
+
+# --- Phase 2: Aadhaar Secure QR (decode + verify) ---
+zxing-cpp==3.1.1
+cryptography==50.0.2
+
+# --- Tests ---
+pytest>=8.0,<10.0

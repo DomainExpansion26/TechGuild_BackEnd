@@ -1,31 +1,105 @@
-# Env files
+# ==========================================
+# Environment & Secrets
+# ==========================================
 .env
 .env.*
+!.env.example
+!.env.production.example
 *.env
 
-# macOS system files
-.DS_Store
-
-# Go binaries and builds
+# ==========================================
+# Go & Python Build Artifacts
+# ==========================================
+backend/bin/
+backend/tmp/
+backend/.gocache/
 backend/server
 server
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
 *.test
 *.out
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+myenv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
 
-# IDE configs
+# ==========================================
+# AI/ML Models & Caches
+# ==========================================
+kyc-ml-service/models/*.onnx
+kyc-ml-service/models/*.pth
+kyc-ml-service/models/*.pt
+kyc-ml-service/models/*.safetensors
+kyc-ml-service/models/*.ckpt
+kyc-ml-service/models/*.bin
+!kyc-ml-service/models/.gitkeep
+.paddlex/
+.paddleocr/
+paddle_ocr_cache/
+paddle_pdx_cache/
+
+# ==========================================
+# AI Tools, IDEs & OS
+# ==========================================
+.opencode/
+.claude/
+.cursor/
+.codex/
+.pi/
+.dsh/
+.dsh-index/
+.serena/
+.sense/
+.mcp.json
+.cursorrules
+opencode.json
+AGENTS.md
+CLAUDE.md
 .idea/
 .vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
-.jcode/
-.serena/
-.dsh/
+# ==========================================
+# Logs, Temp & Backups
+# ==========================================
+*.log
+logs/
+*.pid
+*.tmp
+*.temp
+*.bak.*
+*.bak-*
+backend.bak.*
+kyc-ml-service.bak.*
+*.sqlite
+*.sqlite3
+*.db
+node_modules/
+
+# ==========================================
+# Preserve Templates
+# ==========================================
+!kyc-ml-service/.env.example
+!kyc-ml-service/.env.production.example
+!backend/.env.example
+!backend/.env.production.example
+
+KYC_PIPELINE_REVIEW.md
+KYC_VERIFICATION_FILE_FLOW_REVIEW.md
+LOCAL_TESTING.md

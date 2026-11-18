@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"techguild-backend/src/repository"
 	"techguild-backend/src/routes"
 	"techguild-backend/src/services"
+	"techguild-backend/src/utils"
 )
 
 func main() {
@@ -88,6 +90,26 @@ func main() {
 
 	paymentMethodController := controllers.NewPaymentMethodController(paymentMethodService)
 	payoutMethodController := controllers.NewPayoutMethodController(payoutMethodService)
+	//1. Initialize Service (Assuming redisClient is available)
+	verificationService := services.NewVerificationService(postgres.RedisDB)
+
+	// ---- Phase 3: Go owns routing; Python only writes ML evidence ----
+	// Attach the env-loaded policy (shadow mode / rollout cohort /
+	// thresholds) and start the router cron. LoadConfig logs the
+	// shadow-mode assertion (LogKYCShadowModeAssertion) for the operator.
+	verificationService.SetKYCPolicy(cfg.KYCPolicy)
+
+	// ---- Phase 4: KYC submit rate limiting ----
+	ipResolver, err := utils.NewIPResolver(cfg.TrustedProxies)
+	if err != nil {
+		log.Fatalf("IP resolver init: %v", err)
+	}
+	attemptsRepo := repository.NewAttemptsRepository()
+	if err := verificationService.SetRateLimiter(attemptsRepo, ipResolver, cfg.KYCIPPepper); err != nil {
+		log.Fatalf("KYC rate limiter init: %v", err)
+	}
+
+	jobs.StartKYCRouter(context.Background(), verificationService, cfg.RouterIntervalSeconds, 50)
 
 	// --------------------------------------------------
 	// Quest Milestone flow
@@ -99,6 +121,14 @@ func main() {
 	milestoneReleaseController := controllers.NewMilestoneReleaseController(cfg, paymentProvider)
 
 	jobs.StartReconciliationJob(milestoneFundingService)
+
+	// KYC stale-pending escalator cron (manual review only; never auto-approves)
+	jobs.StartStalePendingEscalator(verificationService)
+
+	// KYC document retention cron (DPDP Act): deletes document images for
+	// approved/rejected records after KYCDocRetentionDays. Pending and
+	// under_review records are never touched — admins need them to review.
+	go jobs.StartKYCDocumentCleanup(context.Background(), cfg.KYCDocRetentionDays)
 
 	// --------------------------------------------------
 	// Wallet + Withdrawal + Refund
@@ -137,6 +167,8 @@ func main() {
 	locationController := controllers.NewLocationController(cfg)
 	settingsController := controllers.NewSettingsController(cfg)
 	oauthController := controllers.NewOAuthController(cfg)
+	verificationController := controllers.NewVerificationController(verificationService)
+	verificationController.SetIPResolver(ipResolver)
 
 	// --------------------------------------------------
 	// Route registration
@@ -149,7 +181,7 @@ func main() {
 	routes.RegisterOAuthRoutes(api, oauthController)
 
 	routes.RegisterPartyRoutes(api)
-	routes.RegisterVerificationRoutes(api)
+	routes.RegisterVerificationRoutes(api, verificationController)
 	routes.RegisterTwoFactorRoutes(api)
 
 	routes.RegisterQuestRoutes(api)
