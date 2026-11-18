@@ -12,7 +12,7 @@ type PartyPortfolio struct {
 
 	// Party Relationship
 	PartyID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Party   Party      `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
+	Party   Party     `gorm:"foreignKey:PartyID;constraint:OnDelete:CASCADE"`
 
 	// Portfolio Details
 	Title       string `gorm:"size:200;not null"`
