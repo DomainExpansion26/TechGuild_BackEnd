@@ -164,6 +164,7 @@ func main() {
 
 	authController := controllers.NewAuthController(cfg)
 	profileController := controllers.NewProfileController(cfg)
+	locationController := controllers.NewLocationController(cfg)
 	settingsController := controllers.NewSettingsController(cfg)
 	oauthController := controllers.NewOAuthController(cfg)
 	verificationController := controllers.NewVerificationController(verificationService)
@@ -175,6 +176,7 @@ func main() {
 
 	routes.RegisterAuthRoutes(api, authController)
 	routes.RegisterProfileRoutes(api, profileController)
+	routes.RegisterLocationRoutes(api, locationController)
 	routes.RegisterSettingsRoutes(api, settingsController)
 	routes.RegisterOAuthRoutes(api, oauthController)
 

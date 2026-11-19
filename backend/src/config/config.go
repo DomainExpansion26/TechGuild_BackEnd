@@ -113,8 +113,9 @@ type Config struct {
 	JWTSecret        string
 	JWTRefreshSecret string
 
-	FrontendURL string
-	ZudokuURL   string
+	FrontendURL      string
+	ZudokuURL        string
+	GeoNamesUsername string
 
 	SMTPHost     string
 	SMTPPort     string
