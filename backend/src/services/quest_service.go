@@ -264,7 +264,7 @@ func (s *questService) PublishQuest(userID string, questID string, req dto.Publi
 	} else if cp, err := s.questRepo.GetClientProfile(clientUUID); err == nil && cp != nil {
 		hasFundingMethod = true
 	} else if vr, err := s.userRepo.GetVerificationRecordByUserID(userID); err == nil && vr != nil {
-		if vr.BankName != "" || vr.AccountNumber != "" || vr.Status == models.VerificationApproved {
+		if vr.BankName != "" || vr.AccountNumberEnc != "" || vr.Status == models.VerificationApproved {
 			hasFundingMethod = true
 		}
 	}

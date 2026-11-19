@@ -26,6 +26,8 @@ func Migrate() {
 		&models.GovernmentID{},
 		&models.GovtIDDedup{},
 		&models.BusinessPANDedup{},
+		&models.VerificationAuditLog{},
+		&models.BulkReviewItem{},
 
 		// Rules & Notifications
 		&models.RuleDocument{},
@@ -68,6 +70,7 @@ func Migrate() {
 		&models.UserTwoFactorAuthentication{},
 		&models.UserRecoveryCode{},
 
+
 		// Payment
 		&models.PaymentCustomer{},
 		&models.ClientPaymentMethod{},
@@ -87,6 +90,13 @@ func Migrate() {
 		// Wallet
 		&models.Wallet{},
 		&models.WalletTransaction{},
+
+		//Guildhall
+		&models.GuildhallPost{},
+		&models.GuildhallComment{},
+		&models.GuildhallReaction{},
+		&models.GuildhallVote{},
+
 	)
 
 	if err != nil {
@@ -102,7 +112,112 @@ func Migrate() {
 		log.Fatal("Milestone payment constraints migration failed:", err)
 	}
 
+	// Raw SQL: KYC Phase 3 routing columns + router hot-query index
+	if err := migrateVerificationRouting(postgres.DB); err != nil {
+		log.Fatal("Verification routing migration failed:", err)
+	}
+
+	// Raw SQL: KYC Phase 4 attempt audit trail + rate-limit counters
+	if err := migrateVerificationAttempts(postgres.DB); err != nil {
+		log.Fatal("Verification attempts migration failed:", err)
+	}
+
 	log.Println("Database Migrated Successfully")
+}
+
+// ============================================================
+// Verification records (KYC Phase 3: Go router + evidence gates)
+// ============================================================
+
+// migrateVerificationRouting introduces the router-owned routing columns.
+// Only records written with an explicit routing_state='pending' (new ML-job
+// submits) are visible to the Go router; existing rows keep 'routed' so no
+// historical record is suddenly re-evaluated.
+func migrateVerificationRouting(db *gorm.DB) error {
+	statements := []string{
+
+		// 1. Columns (explicit idempotent ALTERs: AutoMigrate adds them from the
+		//    model tags too, but the raw statements keep SQL migrations
+		//    self-contained and reviewable).
+		//
+		// 2. Backfill for records that already completed ML before this phase:
+		//    the historical 'auto_approved' priority (Phase 1.5 double-approve
+		//    window, if any) maps to 'auto_eligible' so the router does not
+		//    skip them.
+		//
+		// No CHECK constraint on ai_recommended_priority on purpose: the
+		// review-priority enum may grow, and ReviewPriorityAutoApproved=
+		// 'auto_approved' is still a valid historical value for review_priority.
+
+		`ALTER TABLE verification_records
+			ADD COLUMN IF NOT EXISTS ai_recommended_priority VARCHAR(20),
+			ADD COLUMN IF NOT EXISTS routing_state VARCHAR(20) NOT NULL DEFAULT 'routed',
+			ADD COLUMN IF NOT EXISTS shadow_mode_applied BOOLEAN NOT NULL DEFAULT false,
+			ADD COLUMN IF NOT EXISTS decision_source VARCHAR(30),
+			ADD COLUMN IF NOT EXISTS policy_version VARCHAR(50),
+			ADD COLUMN IF NOT EXISTS system_escalated_at TIMESTAMP,
+			ADD COLUMN IF NOT EXISTS user_id_validation JSONB;`,
+
+		`UPDATE verification_records
+		 SET ai_recommended_priority = CASE
+				WHEN review_priority = 'auto_approved' THEN 'auto_eligible'
+				ELSE review_priority::text
+			END
+		 WHERE ml_status = 'ml_completed' AND ai_recommended_priority IS NULL;`,
+
+		`CREATE INDEX IF NOT EXISTS idx_vr_routing_pending
+			ON verification_records (ml_completed_at)
+			WHERE ml_status = 'ml_completed' AND routing_state = 'pending';`,
+	}
+
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ============================================================
+// Verification attempts (KYC Phase 4: rate limiting)
+// ============================================================
+
+// migrateVerificationAttempts creates the append-only attempt audit trail and
+// the per-window counters that back the KYC rate limiter.
+func migrateVerificationAttempts(db *gorm.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS verification_attempts (
+			id BIGSERIAL PRIMARY KEY,
+			user_id UUID NOT NULL,
+			verification_id UUID,
+			action VARCHAR(32) NOT NULL,
+			outcome VARCHAR(32) NOT NULL,
+			ip_hash VARCHAR(64) NOT NULL,
+			user_agent_hash VARCHAR(64),
+			request_id VARCHAR(64),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_va_user_allowed_created
+			ON verification_attempts (user_id, created_at DESC)
+			WHERE outcome = 'allowed'`,
+		`CREATE INDEX IF NOT EXISTS idx_va_ip_allowed_created
+			ON verification_attempts (ip_hash, created_at DESC)
+			WHERE outcome = 'allowed'`,
+		`CREATE TABLE IF NOT EXISTS kyc_attempt_counters (
+			subject_type VARCHAR(8) NOT NULL,
+			subject_hash VARCHAR(64) NOT NULL,
+			window_kind VARCHAR(8) NOT NULL,
+			window_start TIMESTAMPTZ NOT NULL,
+			count BIGINT NOT NULL DEFAULT 0,
+			PRIMARY KEY (subject_type, subject_hash, window_kind, window_start)
+		)`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ============================================================

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: centrifugo
+  namespace: techguild
+  labels:
+    app.kubernetes.io/name: centrifugo
+    app.kubernetes.io/part-of: techguild-chat
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: centrifugo
+

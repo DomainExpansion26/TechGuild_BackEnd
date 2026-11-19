@@ -12,9 +12,10 @@ import (
 )
 
 func getEncryptionKey() ([]byte, error) {
-	key := os.Getenv("TWO_FA_ENCRYPTION_KEY") // must be 32 bytes for AES-256
+	// Bank account / payout details PII (not 2FA). Must be 32 bytes for AES-256.
+	key := os.Getenv("BANK_DETAILS_ENCRYPTION_KEY")
 	if len(key) != 32 {
-		return nil, errors.New("TWO_FA_ENCRYPTION_KEY must be exactly 32 bytes")
+		return nil, errors.New("BANK_DETAILS_ENCRYPTION_KEY must be exactly 32 bytes")
 	}
 	return []byte(key), nil
 }

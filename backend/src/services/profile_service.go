@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"regexp"
 	"strings"
 	"time"
@@ -161,6 +162,9 @@ func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.UpdateIn
 
 // applyIndividualFields selectively updates only the fields present (non-nil) in req.
 func applyIndividualFields(profile *models.IndividualProfile, req dto.UpdateIndividualProfileRequest) error {
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
 	if req.DateOfBirth != nil {
 		t, err := time.Parse("2006-01-02", *req.DateOfBirth)
 		if err != nil {
@@ -331,6 +335,9 @@ func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.UpdateAgency
 }
 
 func applyAgencyFields(profile *models.AgencyProfile, req dto.UpdateAgencyProfileRequest) {
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
 	if req.AgencyName != nil {
 		profile.AgencyName = *req.AgencyName
 	}
@@ -471,6 +478,9 @@ func (s *ProfileService) UpdateClientProfile(userID string, req dto.UpdateClient
 }
 
 func applyClientFields(profile *models.ClientProfile, req dto.UpdateClientProfileRequest) {
+	if req.Phone != nil {
+		profile.Phone = req.Phone
+	}
 	if req.CompanyName != nil {
 		profile.CompanyName = *req.CompanyName
 	}
@@ -508,6 +518,10 @@ func applyClientFields(profile *models.ClientProfile, req dto.UpdateClientProfil
 func (s *ProfileService) checkAndActivateUser(userID string) {
 	verification, err := s.userRepo.GetVerificationRecordByUserID(userID)
 	if err != nil {
+		// New users often have no verification record yet — skip silently.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
 		log.Printf("checkAndActivateUser: failed to load verification for user_id=%s: %v", userID, err)
 		return
 	}
@@ -594,14 +608,12 @@ func (s *ProfileService) GetMyProfile(userID string) (*dto.GetMyProfileResponse,
 		},
 	}
 
-	if user.AccountType == nil {
-		return nil, ErrAccountTypeNotSet
-	}
-
-	// No account type set yet — return partial (no 400/404).
+	// No account type set yet — return partial response (user info only).
 	if user.AccountType == nil {
 		return resp, nil
 	}
+
+	resp.AccountType = string(*user.AccountType)
 
 	// Fetch profile based on account type. Missing profile = partial response, not error.
 	switch *user.AccountType {
@@ -1077,7 +1089,7 @@ func (s *ProfileService) ExportUserData(userID string) (*dto.ExportResponse, err
 	return &dto.ExportResponse{
 		Message:     "Your data export is ready. A download link has been sent to your email.",
 		DownloadURL: downloadURL,
-		ExpiresIn:   "never (Cloudinary raw files are permanent — delete manually if needed)",
+		ExpiresAt:   "never (Cloudinary raw files are permanent — delete manually if needed)",
 	}, nil
 }
 
@@ -1424,4 +1436,170 @@ func (s *ProfileService) DeleteAccountPermanently(userID string, password string
 		}
 		return txRepo.DeleteUser(userID)
 	})
+}
+
+// ================= UPLOAD + SAVE (ATOMIC) =================
+
+// UploadAndSaveAvatar uploads to Cloudinary AND persists URL to profile.
+// If DB save fails, newly uploaded Cloudinary file is rolled back.
+// If save succeeds, previous avatar is deleted from Cloudinary (best effort).
+func (s *ProfileService) UploadAndSaveAvatar(userID string, file multipart.File, filename string) (string, error) {
+	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrProfileNotFound
+		}
+		return "", ErrInternal
+	}
+
+	newURL, err := utils.UploadImageToCloudinary(file, filename)
+	if err != nil {
+		if errors.Is(err, utils.ErrInvalidFileType) {
+			return "", fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+		log.Printf("UploadAndSaveAvatar: cloudinary upload failed for user=%s: %v", userID, err)
+		return "", fmt.Errorf("%w: failed to upload avatar", ErrInternal)
+	}
+
+	oldURL := profile.AvatarURL
+	profile.AvatarURL = newURL
+
+	if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
+		// rollback cloudinary upload
+		if publicID := extractCloudinaryPublicID(newURL); publicID != "" {
+			_ = utils.DeleteFromCloudinary(publicID, "image")
+		}
+		log.Printf("UploadAndSaveAvatar: db save failed for user=%s: %v", userID, err)
+		return "", ErrInternal
+	}
+
+	// best-effort cleanup of previous avatar
+	if oldURL != "" && oldURL != newURL {
+		if oldID := extractCloudinaryPublicID(oldURL); oldID != "" {
+			_ = utils.DeleteFromCloudinary(oldID, "image")
+		}
+	}
+
+	return newURL, nil
+}
+
+// UploadAndSaveLogo uploads to Cloudinary AND persists URL to the correct
+// profile (agency OR client) based on the user's account type.
+func (s *ProfileService) UploadAndSaveLogo(userID string, file multipart.File, filename string) (string, error) {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+
+	if user.AccountType == nil {
+		return "", ErrAccountTypeNotSet
+	}
+
+	newURL, err := utils.UploadImageToCloudinary(file, filename)
+	if err != nil {
+		if errors.Is(err, utils.ErrInvalidFileType) {
+			return "", fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+		log.Printf("UploadAndSaveLogo: cloudinary upload failed for user=%s: %v", userID, err)
+		return "", fmt.Errorf("%w: failed to upload logo", ErrInternal)
+	}
+
+	// rollback on any error below
+	rollback := func() {
+		if publicID := extractCloudinaryPublicID(newURL); publicID != "" {
+			_ = utils.DeleteFromCloudinary(publicID, "image")
+		}
+	}
+
+	switch *user.AccountType {
+	case models.AccountTypeAgencyAdmin:
+		profile, err := s.userRepo.GetAgencyProfileByUserID(userID)
+		if err != nil {
+			rollback()
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return "", ErrProfileNotFound
+			}
+			return "", ErrInternal
+		}
+		oldURL := profile.LogoURL
+		profile.LogoURL = newURL
+		if err := s.userRepo.UpdateAgencyProfile(profile); err != nil {
+			rollback()
+			log.Printf("UploadAndSaveLogo: db save failed (agency) for user=%s: %v", userID, err)
+			return "", ErrInternal
+		}
+		if oldURL != "" && oldURL != newURL {
+			if oldID := extractCloudinaryPublicID(oldURL); oldID != "" {
+				_ = utils.DeleteFromCloudinary(oldID, "image")
+			}
+		}
+		return newURL, nil
+
+	case models.AccountTypeClientAdmin:
+		profile, err := s.userRepo.GetClientProfileByUserID(userID)
+		if err != nil {
+			rollback()
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return "", ErrProfileNotFound
+			}
+			return "", ErrInternal
+		}
+		oldURL := profile.LogoURL
+		profile.LogoURL = newURL
+		if err := s.userRepo.UpdateClientProfile(profile); err != nil {
+			rollback()
+			log.Printf("UploadAndSaveLogo: db save failed (client) for user=%s: %v", userID, err)
+			return "", ErrInternal
+		}
+		if oldURL != "" && oldURL != newURL {
+			if oldID := extractCloudinaryPublicID(oldURL); oldID != "" {
+				_ = utils.DeleteFromCloudinary(oldID, "image")
+			}
+		}
+		return newURL, nil
+
+	default:
+		rollback()
+		return "", ErrForbidden
+	}
+}
+
+// UploadAndSaveResume uploads a PDF to Cloudinary AND persists URL to profile.
+// If DB save fails, newly uploaded file is rolled back.
+func (s *ProfileService) UploadAndSaveResume(userID string, file multipart.File, filename string) (string, error) {
+	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrProfileNotFound
+		}
+		return "", ErrInternal
+	}
+
+	newURL, err := utils.UploadPDFToCloudinary(file, filename)
+	if err != nil {
+		if errors.Is(err, utils.ErrInvalidFileType) {
+			return "", fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+		log.Printf("UploadAndSaveResume: cloudinary upload failed for user=%s: %v", userID, err)
+		return "", fmt.Errorf("%w: failed to upload resume", ErrInternal)
+	}
+
+	oldURL := profile.ResumeURL
+	profile.ResumeURL = newURL
+
+	if err := s.userRepo.UpdateIndividualProfile(profile); err != nil {
+		if publicID := extractCloudinaryPublicID(newURL); publicID != "" {
+			_ = utils.DeleteFromCloudinary(publicID, "raw")
+		}
+		log.Printf("UploadAndSaveResume: db save failed for user=%s: %v", userID, err)
+		return "", ErrInternal
+	}
+
+	if oldURL != "" && oldURL != newURL {
+		if oldID := extractCloudinaryPublicID(oldURL); oldID != "" {
+			_ = utils.DeleteFromCloudinary(oldID, "raw")
+		}
+	}
+
+	return newURL, nil
 }
