@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"techguild-backend/src/config"
+	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
@@ -33,6 +35,8 @@ var ErrAccountTypeNotSet = errors.New("account type not set")
 var ErrInvalidAccountType = errors.New("invalid account type")
 var ErrInvalidPassword = errors.New("invalid password")
 var ErrSessionNotFound = errors.New("session not found")
+var ErrPasswordNotSet = errors.New("password not set for this account")
+var ErrProfilePrivate = errors.New("this profile is private")
 
 const maxSlugRetries = 3
 
@@ -45,6 +49,30 @@ func NewProfileService(cfg *config.Config) *ProfileService {
 	return &ProfileService{
 		cfg:      cfg,
 		userRepo: repository.NewUserRepository(),
+	}
+}
+
+// revokeSessionsInRedis marks sessions as revoked so middleware rejects their
+// access tokens immediately. Key/value/TTL match auth_service.go.
+func revokeSessionsInRedis(ids []uuid.UUID) {
+	if postgres.RedisDB == nil {
+		return
+	}
+	for _, id := range ids {
+		if err := postgres.RedisDB.Set(context.Background(), "session_revoked:"+id.String(), "1", utils.AccessTokenTTL).Err(); err != nil {
+			log.Printf("profile: failed to set session_revoked for session=%s: %v", id, err)
+		}
+	}
+}
+
+// revokeUserInRedis invalidates every access token issued before now for the
+// user. middleware/auth.go compares this timestamp against claims.IssuedAt.
+func revokeUserInRedis(userID string) {
+	if postgres.RedisDB == nil {
+		return
+	}
+	if err := postgres.RedisDB.Set(context.Background(), "user_revoked_before:"+userID, time.Now().Unix(), utils.AccessTokenTTL).Err(); err != nil {
+		log.Printf("profile: failed to set user_revoked_before for user=%s: %v", userID, err)
 	}
 }
 
@@ -67,8 +95,8 @@ func (s *ProfileService) CreateIndividualProfile(userID string, req dto.CreateIn
 		return "", err
 	}
 
-	profile := &models.IndividualProfile{UserID: user.ID}
-	profile.Phone = req.Phone
+	profile := &models.IndividualProfile{UserID: user.ID, ProfileVisibility: "public"}
+	profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 
 	if err := applyIndividualFields(profile, dto.UpdateIndividualProfileRequest{
 		Country:           req.Country,
@@ -163,7 +191,7 @@ func (s *ProfileService) UpdateIndividualProfile(userID string, req dto.UpdateIn
 // applyIndividualFields selectively updates only the fields present (non-nil) in req.
 func applyIndividualFields(profile *models.IndividualProfile, req dto.UpdateIndividualProfileRequest) error {
 	if req.Phone != nil {
-		profile.Phone = req.Phone
+		profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 	}
 	if req.DateOfBirth != nil {
 		t, err := time.Parse("2006-01-02", *req.DateOfBirth)
@@ -249,13 +277,14 @@ func (s *ProfileService) CreateAgencyProfile(userID string, req dto.CreateAgency
 		return "", err
 	}
 
+	req.AgencyName = utils.NormalizeName(req.AgencyName)
 	if req.AgencyName == "" {
 		return "", fmt.Errorf("%w: agency_name is required to create a profile", ErrValidation)
 	}
 
-	profile := &models.AgencyProfile{UserID: user.ID}
+	profile := &models.AgencyProfile{UserID: user.ID, ProfileVisibility: "public"}
 	profile.AgencyName = req.AgencyName
-	profile.Phone = req.Phone
+	profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 
 	applyAgencyFields(profile, dto.UpdateAgencyProfileRequest{
 		LogoURL:         req.LogoURL,
@@ -336,10 +365,12 @@ func (s *ProfileService) UpdateAgencyProfile(userID string, req dto.UpdateAgency
 
 func applyAgencyFields(profile *models.AgencyProfile, req dto.UpdateAgencyProfileRequest) {
 	if req.Phone != nil {
-		profile.Phone = req.Phone
+		profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 	}
 	if req.AgencyName != nil {
-		profile.AgencyName = *req.AgencyName
+		if trimmed := utils.NormalizeName(*req.AgencyName); trimmed != "" {
+			profile.AgencyName = trimmed
+		}
 	}
 	if req.LogoURL != nil {
 		profile.LogoURL = *req.LogoURL
@@ -393,13 +424,14 @@ func (s *ProfileService) CreateClientProfile(userID string, req dto.CreateClient
 		return "", err
 	}
 
+	req.CompanyName = utils.NormalizeName(req.CompanyName)
 	if req.CompanyName == "" {
 		return "", fmt.Errorf("%w: company_name is required to create a profile", ErrValidation)
 	}
 
-	profile := &models.ClientProfile{UserID: user.ID}
+	profile := &models.ClientProfile{UserID: user.ID, ProfileVisibility: "public"}
 	profile.CompanyName = req.CompanyName
-	profile.Phone = req.Phone
+	profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 
 	applyClientFields(profile, dto.UpdateClientProfileRequest{
 		LogoURL:      req.LogoURL,
@@ -479,10 +511,12 @@ func (s *ProfileService) UpdateClientProfile(userID string, req dto.UpdateClient
 
 func applyClientFields(profile *models.ClientProfile, req dto.UpdateClientProfileRequest) {
 	if req.Phone != nil {
-		profile.Phone = req.Phone
+		profile.Phone = utils.NormalizeOptionalPhone(req.Phone)
 	}
 	if req.CompanyName != nil {
-		profile.CompanyName = *req.CompanyName
+		if trimmed := utils.NormalizeName(*req.CompanyName); trimmed != "" {
+			profile.CompanyName = trimmed
+		}
 	}
 	if req.LogoURL != nil {
 		profile.LogoURL = *req.LogoURL
@@ -681,45 +715,48 @@ func (s *ProfileService) buildMyIndividualProfile(profile *models.IndividualProf
 		GithubURL:         profile.GithubURL,
 		LinkedinURL:       profile.LinkedinURL,
 		ResumeURL:         profile.ResumeURL,
+		ProfileVisibility: profile.ProfileVisibility,
 	}
 }
 
 func (s *ProfileService) buildMyAgencyProfile(profile *models.AgencyProfile) *dto.MyAgencyProfile {
 	return &dto.MyAgencyProfile{
-		PublicUrlSlug:   profile.PublicUrlSlug,
-		AgencyName:      profile.AgencyName,
-		LogoURL:         profile.LogoURL,
-		Description:     profile.Description,
-		WebsiteURL:      profile.WebsiteURL,
-		ServicesOffered: profile.ServicesOffered,
-		Industries:      profile.Industries,
-		TeamSize:        profile.TeamSize,
-		ContactName:     profile.ContactName,
-		Phone:           profile.Phone,
-		RegistrationNo:  profile.RegistrationNo,
-		Country:         profile.Country,
-		City:            profile.City,
-		TimeZone:        profile.TimeZone,
-		CountryCode:     profile.CountryCode,
+		PublicUrlSlug:     profile.PublicUrlSlug,
+		AgencyName:        profile.AgencyName,
+		LogoURL:           profile.LogoURL,
+		Description:       profile.Description,
+		WebsiteURL:        profile.WebsiteURL,
+		ServicesOffered:   profile.ServicesOffered,
+		Industries:        profile.Industries,
+		TeamSize:          profile.TeamSize,
+		ContactName:       profile.ContactName,
+		Phone:             profile.Phone,
+		RegistrationNo:    profile.RegistrationNo,
+		Country:           profile.Country,
+		City:              profile.City,
+		TimeZone:          profile.TimeZone,
+		CountryCode:       profile.CountryCode,
+		ProfileVisibility: profile.ProfileVisibility,
 	}
 }
 
 func (s *ProfileService) buildMyClientProfile(profile *models.ClientProfile) *dto.MyClientProfile {
 	return &dto.MyClientProfile{
-		PublicUrlSlug: profile.PublicUrlSlug,
-		CompanyName:   profile.CompanyName,
-		LogoURL:       profile.LogoURL,
-		Industry:      profile.Industry,
-		WebsiteURL:    profile.WebsiteURL,
-		ProjectTypes:  profile.ProjectTypes,
-		BudgetRange:   profile.BudgetRange,
-		TeamSize:      profile.TeamSize,
-		ContactName:   profile.ContactName,
-		Phone:         profile.Phone,
-		Country:       profile.Country,
-		City:          profile.City,
-		TimeZone:      profile.TimeZone,
-		CountryCode:   profile.CountryCode,
+		PublicUrlSlug:     profile.PublicUrlSlug,
+		CompanyName:       profile.CompanyName,
+		LogoURL:           profile.LogoURL,
+		Industry:          profile.Industry,
+		WebsiteURL:        profile.WebsiteURL,
+		ProjectTypes:      profile.ProjectTypes,
+		BudgetRange:       profile.BudgetRange,
+		TeamSize:          profile.TeamSize,
+		ContactName:       profile.ContactName,
+		Phone:             profile.Phone,
+		Country:           profile.Country,
+		City:              profile.City,
+		TimeZone:          profile.TimeZone,
+		CountryCode:       profile.CountryCode,
+		ProfileVisibility: profile.ProfileVisibility,
 	}
 }
 
@@ -733,6 +770,14 @@ func formatDate(t *time.Time) string {
 }
 
 func (s *ProfileService) DeleteAvatar(userID string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	if user.AccountType == nil || *user.AccountType != models.AccountTypeIndividual {
+		return ErrForbidden
+	}
+
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -800,6 +845,14 @@ func (s *ProfileService) DeleteLogo(userID string) error {
 }
 
 func (s *ProfileService) DeleteResume(userID string) error {
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	if user.AccountType == nil || *user.AccountType != models.AccountTypeIndividual {
+		return ErrForbidden
+	}
+
 	profile, err := s.userRepo.GetIndividualProfileByUserID(userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -890,7 +943,7 @@ func (s *ProfileService) GetPublicProfile(slug string) (*dto.GetPublicProfileRes
 
 func (s *ProfileService) buildIndividualPublicProfileResponse(profile *models.IndividualProfile) (*dto.PublicIndividualProfile, error) {
 	if profile.ProfileVisibility != "public" {
-		return nil, errors.New("this profile is private")
+		return nil, ErrProfilePrivate
 	}
 
 	user, err := s.userRepo.GetUserByID(profile.UserID.String())
@@ -924,7 +977,7 @@ func (s *ProfileService) buildIndividualPublicProfileResponse(profile *models.In
 
 func (s *ProfileService) buildAgencyPublicProfileResponse(profile *models.AgencyProfile) (*dto.PublicAgencyProfile, error) {
 	if profile.ProfileVisibility != "public" { // ADDED — was missing, agency privacy leak
-		return nil, errors.New("this profile is private")
+		return nil, ErrProfilePrivate
 	}
 
 	user, err := s.userRepo.GetUserByID(profile.UserID.String())
@@ -951,7 +1004,7 @@ func (s *ProfileService) buildAgencyPublicProfileResponse(profile *models.Agency
 
 func (s *ProfileService) buildClientPublicProfileResponse(profile *models.ClientProfile) (*dto.PublicClientProfile, error) {
 	if profile.ProfileVisibility != "public" { // ADDED — was missing, client privacy leak
-		return nil, errors.New("this profile is private")
+		return nil, ErrProfilePrivate
 	}
 
 	user, err := s.userRepo.GetUserByID(profile.UserID.String())
@@ -1140,30 +1193,64 @@ func (s *ProfileService) isSlugTaken(slug string) (bool, error) {
 	return false, nil
 }
 
-func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAccountRequest) error {
+func (s *ProfileService) UpdateAccountSettings(userID string, req dto.UpdateAccountRequest, currentSessionID uuid.UUID) error {
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return ErrUserNotFound
 	}
 
-	if req.NewPassword != "" {
-		if !utils.CheckPassword(req.Password, user.PasswordHash) {
-			return ErrInvalidPassword
-		}
-		if req.NewPassword != req.ConfirmPassword {
-			return fmt.Errorf("%w: new password and confirm password do not match", ErrValidation)
-		}
-		if req.Password == req.NewPassword {
-			return fmt.Errorf("%w: new password must be different from current password", ErrValidation)
-		}
-		hashed, err := utils.HashPassword(req.NewPassword)
-		if err != nil {
-			return errors.New("failed to hash password")
-		}
-		user.PasswordHash = hashed
+	if req.NewPassword == "" {
+		return s.userRepo.UpdateUser(user)
 	}
 
-	return s.userRepo.UpdateUser(user)
+	if user.PasswordHash == "" {
+		return ErrPasswordNotSet
+	}
+	if !utils.CheckPassword(req.Password, user.PasswordHash) {
+		return ErrInvalidPassword
+	}
+	// bcrypt silently truncates at 72 bytes; Huma's maxLength counts runes, so
+	// enforce the byte limit here as well.
+	if len(req.NewPassword) > 72 || len(req.ConfirmPassword) > 72 {
+		return fmt.Errorf("%w: password must be at most 72 bytes", ErrValidation)
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		return fmt.Errorf("%w: new password and confirm password do not match", ErrValidation)
+	}
+	if req.Password == req.NewPassword {
+		return fmt.Errorf("%w: new password must be different from current password", ErrValidation)
+	}
+	hashed, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		log.Printf("UpdateAccountSettings: failed to hash password user=%s: %v", userID, err)
+		return ErrInternal
+	}
+	user.PasswordHash = hashed
+
+	// Same convention as ChangePassword: the current session survives, every
+	// other session is revoked in the DB and marked in Redis immediately.
+	var revoked []uuid.UUID
+	if err := s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+		sessions, err := txRepo.GetSessionsByUserID(userID)
+		if err != nil {
+			return err
+		}
+		for _, session := range sessions {
+			if session.ID != currentSessionID {
+				revoked = append(revoked, session.ID)
+			}
+		}
+		if err := txRepo.UpdateUser(user); err != nil {
+			return err
+		}
+		return txRepo.RevokeOtherSessions(userID, currentSessionID)
+	}); err != nil {
+		log.Printf("UpdateAccountSettings: transaction failed user=%s: %v", userID, err)
+		return ErrInternal
+	}
+
+	revokeSessionsInRedis(revoked)
+	return nil
 }
 
 func (s *ProfileService) UpdateNotifications(userID string, req dto.UpdateNotificationsRequest) error {
@@ -1172,7 +1259,11 @@ func (s *ProfileService) UpdateNotifications(userID string, req dto.UpdateNotifi
 		return ErrUserNotFound
 	}
 
-	b, _ := json.Marshal(req.Preferences)
+	b, err := json.Marshal(req.Preferences)
+	if err != nil {
+		log.Printf("UpdateNotifications: marshal failed user=%s: %v", userID, err)
+		return ErrInternal
+	}
 	user.NotificationPreferences = datatypes.JSON(b)
 
 	return s.userRepo.UpdateUser(user)
@@ -1238,7 +1329,11 @@ func (s *ProfileService) UpdatePrivacySettings(userID string, req dto.UpdatePriv
 	}
 
 	pref := map[string]interface{}{"profile_visibility": req.ProfileVisibility}
-	b, _ := json.Marshal(pref)
+	b, err := json.Marshal(pref)
+	if err != nil {
+		log.Printf("UpdatePrivacySettings: marshal failed user=%s: %v", userID, err)
+		return ErrInternal
+	}
 	user.PrivacySettings = datatypes.JSON(b)
 	return s.userRepo.UpdateUser(user)
 }
@@ -1310,11 +1405,18 @@ func (s *ProfileService) GetPrivacySettings(userID string) (*dto.GetPrivacySetti
 }
 
 func (s *ProfileService) DeactivateAccount(userID string, req dto.DeactivateAccountRequest) error {
+	if !req.Confirmation {
+		return fmt.Errorf("%w: confirmation must be true", ErrValidation)
+	}
+
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
 		return ErrUserNotFound
 	}
 
+	if user.PasswordHash == "" {
+		return ErrPasswordNotSet
+	}
 	if !utils.CheckPassword(req.Password, user.PasswordHash) {
 		return ErrInvalidPassword
 	}
@@ -1323,16 +1425,23 @@ func (s *ProfileService) DeactivateAccount(userID string, req dto.DeactivateAcco
 	deletionDate := time.Now().Add(30 * 24 * time.Hour)
 	user.ScheduledDeletionDate = &deletionDate
 
-	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+	if err := s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
 		if err := txRepo.UpdateUser(user); err != nil {
 			return err
 		}
 		return txRepo.RevokeAllSessions(userID)
-	})
+	}); err != nil {
+		log.Printf("DeactivateAccount: transaction failed user=%s: %v", userID, err)
+		return ErrInternal
+	}
+
+	revokeUserInRedis(userID)
+	return nil
 }
 
 func (s *ProfileService) GetSessions(
 	userID string,
+	currentSessionID uuid.UUID,
 ) (*dto.GetSessionsResponse, error) {
 
 	_, err := s.userRepo.GetUserByID(userID)
@@ -1362,7 +1471,7 @@ func (s *ProfileService) GetSessions(
 			UserAgent:    session.UserAgent,
 			LastActiveAt: session.UpdatedAt,
 			CreatedAt:    session.CreatedAt,
-			IsCurrent:    false,
+			IsCurrent:    session.ID == currentSessionID,
 		})
 	}
 
@@ -1403,6 +1512,7 @@ func (s *ProfileService) RevokeSession(userID string, sessionID string) error {
 		return ErrInternal
 	}
 
+	revokeSessionsInRedis([]uuid.UUID{sessionUUID})
 	return nil
 }
 
@@ -1412,11 +1522,24 @@ func (s *ProfileService) SignOutOtherSessions(userID string, currentSessionID uu
 		return ErrUserNotFound
 	}
 
+	sessions, err := s.userRepo.GetSessionsByUserID(userID)
+	if err != nil {
+		log.Printf("SignOutOtherSessions: failed to list sessions user=%s: %v", userID, err)
+		return ErrInternal
+	}
+	var revoked []uuid.UUID
+	for _, session := range sessions {
+		if session.ID != currentSessionID {
+			revoked = append(revoked, session.ID)
+		}
+	}
+
 	if err := s.userRepo.RevokeOtherSessions(userID, currentSessionID); err != nil {
 		log.Printf("SignOutOtherSessions: failed for user=%s: %v", userID, err)
 		return ErrInternal
 	}
 
+	revokeSessionsInRedis(revoked)
 	return nil
 }
 
@@ -1426,16 +1549,25 @@ func (s *ProfileService) DeleteAccountPermanently(userID string, password string
 		return ErrUserNotFound
 	}
 
+	if user.PasswordHash == "" {
+		return ErrPasswordNotSet
+	}
 	if !utils.CheckPassword(password, user.PasswordHash) {
 		return ErrInvalidPassword
 	}
 
-	return s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
+	if err := s.userRepo.WithTransaction(func(txRepo repository.UserRepository) error {
 		if err := txRepo.RevokeAllSessions(userID); err != nil {
 			return err
 		}
 		return txRepo.DeleteUser(userID)
-	})
+	}); err != nil {
+		log.Printf("DeleteAccountPermanently: transaction failed user=%s: %v", userID, err)
+		return ErrInternal
+	}
+
+	revokeUserInRedis(userID)
+	return nil
 }
 
 // ================= UPLOAD + SAVE (ATOMIC) =================

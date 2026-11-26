@@ -28,7 +28,8 @@ func (r *PartyRepository) UpdateParty(party *models.Party) error {
 func (r *PartyRepository) DeleteParty(party *models.Party) error {
 	return postgres.DB.Delete(party).Error
 }
-//finding the party by ID
+
+// finding the party by ID
 func (r *PartyRepository) FindByID(
 	partyID uuid.UUID,
 ) (*models.Party, error) {
@@ -50,7 +51,8 @@ func (r *PartyRepository) FindByID(
 
 	return &party, nil
 }
-//by uuid
+
+// by uuid
 func (r *PartyRepository) FindByUUID(
 	partyID string,
 ) (*models.Party, error) {
@@ -62,7 +64,8 @@ func (r *PartyRepository) FindByUUID(
 
 	return r.FindByID(id)
 }
-//finding party by leader
+
+// finding party by leader
 func (r *PartyRepository) FindByLeader(
 	leaderID uuid.UUID,
 ) ([]models.Party, error) {
@@ -78,19 +81,19 @@ func (r *PartyRepository) FindByLeader(
 }
 
 func (r *PartyRepository) FindAvailableForUser(
-    userID uuid.UUID,
-    search string,
-    offset int,
-    limit int,
+	userID uuid.UUID,
+	search string,
+	offset int,
+	limit int,
 ) ([]models.Party, int64, error) {
-    var parties []models.Party
-    var total int64
+	var parties []models.Party
+	var total int64
 
-    query := postgres.DB.
-        Model(&models.Party{}).
-        // Where("parties.status = ?", models.PartyActive).
-        Where("parties.is_hiring = ?", true).
-        Where(`
+	query := postgres.DB.
+		Model(&models.Party{}).
+		// Where("parties.status = ?", models.PartyActive).
+		Where("parties.is_hiring = ?", true).
+		Where(`
             NOT EXISTS (
                 SELECT 1
                 FROM party_members
@@ -99,7 +102,7 @@ func (r *PartyRepository) FindAvailableForUser(
                 AND party_members.status = ?
             )
         `, userID, models.MemberActive).
-        Where(`
+		Where(`
             NOT EXISTS (
                 SELECT 1
                 FROM party_invitations
@@ -110,32 +113,33 @@ func (r *PartyRepository) FindAvailableForUser(
             )
         `, userID, models.InvitationPending)
 
-    if search != "" {
-        pattern := "%" + search + "%"
+	if search != "" {
+		pattern := "%" + search + "%"
 
-        query = query.Where(
-            "(parties.name ILIKE ? OR parties.slug ILIKE ? OR parties.description ILIKE ?)",
-            pattern,
-            pattern,
-            pattern,
-        )
-    }
+		query = query.Where(
+			"(parties.name ILIKE ? OR parties.slug ILIKE ? OR parties.description ILIKE ?)",
+			pattern,
+			pattern,
+			pattern,
+		)
+	}
 
-    if err := query.Count(&total).Error; err != nil {
-        return nil, 0, err
-    }
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
-    if err := query.
-        Order("parties.created_at DESC").
-        Offset(offset).
-        Limit(limit).
-        Find(&parties).Error; err != nil {
-        return nil, 0, err
-    }
+	if err := query.
+		Order("parties.created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&parties).Error; err != nil {
+		return nil, 0, err
+	}
 
-    return parties, total, nil
+	return parties, total, nil
 }
-//memeber functions 
+
+// memeber functions
 func (r *PartyRepository) AddMember(
 	member *models.PartyMember,
 ) error {
@@ -188,7 +192,24 @@ func (r *PartyRepository) GetMembers(
 
 	return members, err
 }
-//invitation function
+
+// GetActiveMembersForParty returns only active members with their user preloaded.
+func (r *PartyRepository) GetActiveMembersForParty(
+	partyID uuid.UUID,
+) ([]models.PartyMember, error) {
+
+	var members []models.PartyMember
+
+	err := postgres.DB.
+		Where("party_id = ? AND status = ?", partyID, models.MemberActive).
+		Preload("User").
+		Order("created_at ASC").
+		Find(&members).Error
+
+	return members, err
+}
+
+// invitation function
 func (r *PartyRepository) CreateInvitation(
 	invitation *models.PartyInvitation,
 ) error {
@@ -256,7 +277,8 @@ func (r *PartyRepository) DeletePortfolio(
 
 	return postgres.DB.Delete(portfolio).Error
 }
-//to update and add portifolio and skill of party 
+
+// to update and add portifolio and skill of party
 func (r *PartyRepository) GetPortfolio(
 	partyID uuid.UUID,
 ) ([]models.PartyPortfolio, error) {

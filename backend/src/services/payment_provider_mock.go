@@ -157,6 +157,13 @@ func (m *MockPaymentProvider) CapturePayment(providerPaymentID string, amount in
 	}, nil
 }
 
+// GetPayment — the mock is synchronous and holds no provider-side payment
+// state, so there is nothing to verify against. The funding service only calls
+// this when Name() == "razorpay", so this stub is never reached in practice.
+func (m *MockPaymentProvider) GetPayment(providerPaymentID string) (*PaymentResult, error) {
+	return nil, ErrProviderUnsupported
+}
+
 // ============================================================
 // Escrow
 // ============================================================

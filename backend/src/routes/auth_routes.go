@@ -154,7 +154,7 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 
 	// Protected routes
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "change-password",
 		Method:      "POST",
 		Path:        "/auth/change-password",
@@ -196,7 +196,7 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 
 	// ---------- for oauth ----------
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "set-account-type-authenticated",
 		Method:      "POST",
 		Path:        "/auth/account-type",

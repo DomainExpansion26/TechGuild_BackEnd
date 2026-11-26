@@ -76,7 +76,8 @@ func (c *MilestoneFundingController) GetMilestonePaymentHandler(
 func mapFundingError(err error) error {
 	switch {
 	case errors.Is(err, services.ErrFundQuestNotFound),
-		errors.Is(err, services.ErrFundMilestoneNotFound):
+		errors.Is(err, services.ErrFundMilestoneNotFound),
+		errors.Is(err, services.ErrFundPaymentNotFound):
 		return huma.Error404NotFound(err.Error())
 
 	case errors.Is(err, services.ErrFundUnauthorized):
@@ -85,7 +86,9 @@ func mapFundingError(err error) error {
 	case errors.Is(err, services.ErrFundMilestoneNotAgreed),
 		errors.Is(err, services.ErrFundQuestNotInProgress),
 		errors.Is(err, services.ErrFundNoPaymentMethod),
-		errors.Is(err, services.ErrFundNotPending):
+		errors.Is(err, services.ErrFundNotPending),
+		errors.Is(err, services.ErrFundPaymentMismatch),
+		errors.Is(err, services.ErrFundOrderMismatch):
 		return huma.Error400BadRequest(err.Error())
 
 	case errors.Is(err, services.ErrFundInvalidSignature):
@@ -95,6 +98,7 @@ func mapFundingError(err error) error {
 		return huma.Error409Conflict(err.Error())
 
 	case errors.Is(err, services.ErrFundProviderFailed),
+		errors.Is(err, services.ErrFundProviderVerifyFailed),
 		errors.Is(err, services.ErrProviderUnavailable):
 		return huma.Error502BadGateway(err.Error())
 

@@ -13,7 +13,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// fetch account settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-account-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/account",
@@ -24,7 +24,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// edit account settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-account-settings",
 		Method:      "PATCH",
 		Path:        "/v1/settings/account",
@@ -46,7 +46,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// fetch notification settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-notifications",
 		Method:      "GET",
 		Path:        "/v1/settings/notifications",
@@ -57,18 +57,31 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// edit notification settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-notifications",
 		Method:      "PATCH",
 		Path:        "/v1/settings/notifications",
 		Tags:        []string{"Settings"},
 		Summary:     "Update notification settings",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateNotificationsRequest{
+						Preferences: dto.NotificationPreference{
+							Email: true,
+							Push:  true,
+						},
+					},
+				},
+			},
+		},
 	}, c.UpdateNotificationsHandler)
 
 	// fetch privacy settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-privacy-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/privacy",
@@ -79,7 +92,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// edit privacy settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-privacy-settings",
 		Method:      "PATCH",
 		Path:        "/v1/settings/privacy",
@@ -99,7 +112,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// fetch billing settings info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-billing-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/billing",
@@ -110,40 +123,71 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// setup payout method info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-payout-method",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payout-method",
 		Tags:        []string{"Settings"},
 		Summary:     "Update billing settings",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdatePayoutMethodRequest{
+						PayoutMethod: "paypal",
+					},
+				},
+			},
+		},
 	}, c.UpdatePayoutMethodHandler)
 
 	// edit payout schedule info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-payout-schedule",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payout-schedule",
 		Tags:        []string{"Settings"},
 		Summary:     "Update billing settings",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdatePayoutScheduleRequest{
+						PayoutSchedule: "weekly",
+					},
+				},
+			},
+		},
 	}, c.UpdatePayoutScheduleHandler)
 
 	// deactivate account
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "deactivate-account",
 		Method:      "POST",
 		Path:        "/v1/settings/account/deactivate",
 		Tags:        []string{"Settings"},
 		Summary:     "Deactivate account",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.DeactivateAccountRequest{
+						Password:     "test@123",
+						Confirmation: true,
+					},
+				},
+			},
+		},
 	}, c.DeactivateAccountHandler)
 
 	// delete account
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-settings-account",
 		Method:      "DELETE",
 		Path:        "/v1/settings/account",
@@ -151,6 +195,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		Summary:     "Delete account",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
+			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.DeleteAccountRequest{
@@ -163,7 +208,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// fetch session info
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-sessions",
 		Method:      "GET",
 		Path:        "/v1/settings/sessions",
@@ -174,7 +219,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// revoke specific session
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "revoke-session",
 		Method:      "DELETE",
 		Path:        "/v1/settings/sessions/{id}",
@@ -185,7 +230,7 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 
 	// sign out of all other sessions
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "sign-out-other-sessions",
 		Method:      "DELETE",
 		Path:        "/v1/settings/sessions/others",

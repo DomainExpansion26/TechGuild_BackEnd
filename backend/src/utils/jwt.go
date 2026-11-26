@@ -2,7 +2,9 @@ package utils
 
 import (
 	"errors"
+	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,6 +23,10 @@ func loadSecret(envKey string) []byte {
 		v = os.Getenv(envKey)
 	}
 	if v == "" {
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") ||
+			strings.EqualFold(strings.TrimSpace(os.Getenv("GIN_MODE")), "release") {
+			log.Fatalf("%s must be set in production", envKey)
+		}
 		return []byte("temporary-default-secret-for-test-environments")
 	}
 	return []byte(v)
@@ -40,10 +46,12 @@ func GenerateRefreshToken(userID string) (string, error) {
 }
 
 func GenerateAccessToken(userID string, sessionID string) (string, error) {
+	now := time.Now()
 	claims := jwt.MapClaims{
 		"user_id":    userID,
-		"session_id": sessionID, // Assuming you have a session ID to include
-		"exp":        time.Now().Add(AccessTokenTTL).Unix(),
+		"session_id": sessionID,
+		"iat":        now.Unix(),
+		"exp":        now.Add(AccessTokenTTL).Unix(),
 		"type":       "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

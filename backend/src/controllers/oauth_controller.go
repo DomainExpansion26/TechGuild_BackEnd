@@ -89,9 +89,9 @@ func (c *OAuthController) getFrontendURL() string {
 func (c *OAuthController) storeExchangeCode(ctx context.Context, code string, data *OAuthExchangeData) {
 	data.CreatedAt = time.Now()
 	if postgres.RedisDB != nil {
-		bytes, err := json.Marshal(data)
-		if err == nil {
+		if bytes, err := json.Marshal(data); err == nil {
 			_ = postgres.RedisDB.Set(ctx, "oauth_exchange:"+code, string(bytes), 60*time.Second).Err()
+			return
 		}
 	}
 	c.cache.Store(code, data)
@@ -102,27 +102,20 @@ func (c *OAuthController) consumeExchangeCode(ctx context.Context, code string) 
 		return nil, false
 	}
 
-	// 1. Check in-memory cache first (atomic read + delete)
-	if val, ok := c.cache.LoadAndDelete(code); ok {
-		if data, ok := val.(*OAuthExchangeData); ok {
-			if postgres.RedisDB != nil {
-				_ = postgres.RedisDB.Del(ctx, "oauth_exchange:"+code).Err()
-			}
-			if time.Since(data.CreatedAt) < 2*time.Minute {
-				return data, true
-			}
-		}
-	}
-
-	// 2. Check Redis
 	if postgres.RedisDB != nil {
-		val, err := postgres.RedisDB.Get(ctx, "oauth_exchange:"+code).Result()
+		val, err := postgres.RedisDB.GetDel(ctx, "oauth_exchange:"+code).Result()
 		if err == nil && val != "" {
-			_ = postgres.RedisDB.Del(ctx, "oauth_exchange:"+code).Err()
 			var data OAuthExchangeData
 			if err := json.Unmarshal([]byte(val), &data); err == nil {
 				return &data, true
 			}
+		}
+		return nil, false
+	}
+
+	if val, ok := c.cache.LoadAndDelete(code); ok {
+		if data, ok := val.(*OAuthExchangeData); ok && time.Since(data.CreatedAt) < 2*time.Minute {
+			return data, true
 		}
 	}
 
@@ -197,7 +190,8 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 
 	// Helper for safe error redirects
 	errorRedirect := func(reason string) (*dto.GoogleCallbackOutput, error) {
-		isBrowser := strings.Contains(input.Accept, "text/html") || !strings.Contains(input.Accept, "application/json")
+		accept := strings.ToLower(input.Accept)
+		isBrowser := strings.Contains(accept, "text/html") || !strings.Contains(accept, "application/json")
 		if isBrowser {
 			return &dto.GoogleCallbackOutput{
 				Status:   http.StatusFound,
@@ -243,7 +237,7 @@ func (c *OAuthController) GoogleCallbackHandler(ctx context.Context, input *dto.
 		return errorRedirect("oauth_decode_failed")
 	}
 
-	if !googleUser.VerifiedEmail {
+	if googleUser.Email == "" || !googleUser.VerifiedEmail {
 		return errorRedirect("email_not_verified")
 	}
 
@@ -386,7 +380,8 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 	}
 
 	errorRedirect := func(reason string) (*dto.GitHubCallbackOutput, error) {
-		isBrowser := strings.Contains(input.Accept, "text/html") || !strings.Contains(input.Accept, "application/json")
+		accept := strings.ToLower(input.Accept)
+		isBrowser := strings.Contains(accept, "text/html") || !strings.Contains(accept, "application/json")
 		if isBrowser {
 			return &dto.GitHubCallbackOutput{
 				Status:   http.StatusFound,
@@ -431,33 +426,32 @@ func (c *OAuthController) GitHubCallbackHandler(ctx context.Context, input *dto.
 		return errorRedirect("oauth_decode_failed")
 	}
 
-	if githubUser.Email == "" {
-		emailResp, err := client.Get("https://api.github.com/user/emails")
-		if err != nil {
-			return errorRedirect("oauth_email_failed")
-		}
-		defer emailResp.Body.Close()
+	emailResp, err := client.Get("https://api.github.com/user/emails")
+	if err != nil {
+		return errorRedirect("oauth_email_failed")
+	}
+	defer emailResp.Body.Close()
 
-		if emailResp.StatusCode != http.StatusOK {
-			return errorRedirect("oauth_email_failed")
-		}
+	if emailResp.StatusCode != http.StatusOK {
+		return errorRedirect("oauth_email_failed")
+	}
 
-		var emails []GitHubEmail
-		if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
-			return errorRedirect("oauth_decode_failed")
-		}
+	var emails []GitHubEmail
+	if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
+		return errorRedirect("oauth_decode_failed")
+	}
 
-		for _, e := range emails {
-			if e.Primary && e.Verified {
-				githubUser.Email = e.Email
-				break
-			}
-		}
-
-		if githubUser.Email == "" {
-			return errorRedirect("email_not_verified")
+	verifiedEmail := ""
+	for _, e := range emails {
+		if e.Primary && e.Verified {
+			verifiedEmail = e.Email
+			break
 		}
 	}
+	if verifiedEmail == "" {
+		return errorRedirect("email_not_verified")
+	}
+	githubUser.Email = verifiedEmail
 
 	oauthService := services.NewOAuthService(postgres.RedisDB)
 

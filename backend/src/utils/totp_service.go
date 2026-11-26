@@ -5,11 +5,13 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pquerna/otp"
@@ -113,13 +115,21 @@ func (s *TOTPService) DecryptSecret(encoded string) (string, error) {
 	return string(plain), nil
 }
 
+func normalizeRecoveryCode(code string) string {
+	code = strings.TrimSpace(code)
+	code = strings.ReplaceAll(code, "-", "")
+	code = strings.ReplaceAll(code, " ", "")
+	return strings.ToUpper(code)
+}
+
 func (s *TOTPService) GenerateRecoveryCodes(n int) (plainCodes []string, hashes []string, err error) {
 	for i := 0; i < n; i++ {
 		code, err := randomRecoveryCode()
 		if err != nil {
 			return nil, nil, err
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+		normalized := normalizeRecoveryCode(code)
+		hash, err := bcrypt.GenerateFromPassword([]byte(normalized), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -130,7 +140,12 @@ func (s *TOTPService) GenerateRecoveryCodes(n int) (plainCodes []string, hashes 
 }
 
 func (s *TOTPService) VerifyRecoveryCode(code, hash string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(code)) == nil
+	normalized := normalizeRecoveryCode(code)
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(normalized)) == nil {
+		return true
+	}
+	// Fallback for legacy recovery codes hashed before normalization (mixed-case / with dash)
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(strings.TrimSpace(code))) == nil
 }
 
 func randomRecoveryCode() (string, error) {
@@ -139,7 +154,7 @@ func randomRecoveryCode() (string, error) {
 		return "", err
 	}
 	sum := sha256.Sum256(b)
-	code := base64.RawURLEncoding.EncodeToString(sum[:])[:8]
+	code := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:])[:8]
 	return fmt.Sprintf("%s-%s", code[:4], code[4:]), nil
 }
 

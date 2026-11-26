@@ -8,12 +8,12 @@ import "time"
 
 type RequestWithdrawalBody struct {
 	// Amount in rupees (float for frontend)
-	Amount float64 `json:"amount" huma:"required,minimum=1" example:"5000" doc:"Withdrawal amount in rupees"`
+	Amount float64 `json:"amount" required:"true" minimum:"1" example:"5000" doc:"Withdrawal amount in rupees"`
 
 	// Which payout method to use (must be verified + active)
-	PayoutMethodID string `json:"payout_method_id" huma:"required,uuid" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PayoutMethodID string `json:"payout_method_id" required:"true" format:"uuid" example:"550e8400-e29b-41d4-a716-446655440000"`
 
-	IdempotencyKey string `json:"idempotency_key" huma:"required,minLength=5,maxLength=255" example:"wd-2026-abc123"`
+	IdempotencyKey string `json:"idempotency_key" required:"true" minLength:"5" maxLength:"255" example:"wd-2026-abc123"`
 }
 
 type RequestWithdrawalInput struct {
@@ -48,8 +48,8 @@ type RequestWithdrawalOutput struct {
 // ============================================================
 
 type ListWithdrawalsInput struct {
-	Limit  int `query:"limit" default:"20" doc:"Max items (default 20, max 100)"`
-	Offset int `query:"offset" default:"0" doc:"Offset items"`
+	Limit  int `query:"limit" default:"20" minimum:"1" maximum:"100" doc:"Max items (default 20, max 100)"`
+	Offset int `query:"offset" default:"0" minimum:"0" doc:"Offset items"`
 }
 
 type WithdrawalItem struct {
@@ -86,7 +86,7 @@ type ListWithdrawalsOutput struct {
 // ============================================================
 
 type GetWithdrawalInput struct {
-	PayoutID string `path:"payout_id" doc:"Payout (withdrawal) ID"`
+	PayoutID string `path:"payout_id" format:"uuid" doc:"Payout (withdrawal) ID"`
 }
 
 type GetWithdrawalOutput struct {

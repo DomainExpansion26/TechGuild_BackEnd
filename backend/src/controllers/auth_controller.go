@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -46,6 +47,9 @@ func (c *AuthController) LoginHandler(ctx context.Context, input *dto.LoginInput
 	device := input.UserAgent
 	res, refreshToken, err := authService.Login(input.Body, device, ip, input.UserAgent)
 	if err != nil {
+		if errors.Is(err, services.ErrRateLimited) {
+			return nil, huma.Error429TooManyRequests(err.Error())
+		}
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
@@ -136,8 +140,10 @@ func (c *AuthController) LogoutHandler(ctx context.Context, input *dto.LogoutInp
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 
-	if accessToken := strings.TrimPrefix(input.Authorization, "Bearer "); accessToken != "" {
-		_ = authService.BlacklistAccessToken(accessToken)
+	if len(input.Authorization) > 7 && strings.EqualFold(input.Authorization[:7], "Bearer ") {
+		if accessToken := strings.TrimSpace(input.Authorization[7:]); accessToken != "" {
+			_ = authService.BlacklistAccessToken(accessToken)
+		}
 	}
 
 	clearCookie := &http.Cookie{

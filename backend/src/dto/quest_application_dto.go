@@ -5,15 +5,15 @@ import "time"
 // ============ Apply / Bid ============
 
 type ApplyQuestBody struct {
-	CoverLetter       string  `json:"cover_letter" huma:"required,minLength=20,maxLength=5000" example:"I have 5+ years in UI/UX and shipped multiple FinTech dashboards."`
-	ProposedBudget    float64 `json:"proposed_budget" huma:"required,minimum=0.01" doc:"Proposed budget in INR" example:"72000"`
-	Currency          string  `json:"currency,omitempty" example:"INR"`
-	EstimatedDuration string  `json:"estimated_duration,omitempty" example:"18 days"`
-	PartyID           string  `json:"party_id,omitempty" doc:"Optional: apply as agency (party UUID). Omit for individual."`
+	CoverLetter       string  `json:"cover_letter,omitempty" maxLength:"5000" doc:"Optional. Empty is allowed for 1-click apply." example:"I have 5+ years in UI/UX and shipped multiple FinTech dashboards."`
+	ProposedBudget    float64 `json:"proposed_budget,omitempty" minimum:"0" doc:"Proposed budget in INR. Omit or send 0 to accept the full quest budget." example:"72000"`
+	Currency          string  `json:"currency,omitempty" maxLength:"10" example:"INR"`
+	EstimatedDuration string  `json:"estimated_duration,omitempty" maxLength:"100" example:"18 days"`
+	PartyID           string  `json:"party_id,omitempty" maxLength:"36" doc:"Optional: apply as agency (party UUID). Omit for individual."`
 }
 
 type ApplyQuestInput struct {
-	ID   string         `path:"id" doc:"Quest UUID"`
+	ID   string         `path:"id" format:"uuid" doc:"Quest UUID"`
 	Body ApplyQuestBody `json:"body"`
 }
 
@@ -35,8 +35,8 @@ type ApplyQuestOutput struct {
 // ============ List Applications (Client view) ============
 
 type ListApplicationsInput struct {
-	ID     string `path:"id" doc:"Quest UUID"`
-	Status string `query:"status" doc:"Filter by status (pending, accepted, rejected, withdrawn)"`
+	ID     string `path:"id" format:"uuid" doc:"Quest UUID"`
+	Status string `query:"status" maxLength:"50" doc:"Filter by status (pending, accepted, rejected, withdrawn)"`
 }
 
 type ApplicationItem struct {
@@ -67,8 +67,8 @@ type ListApplicationsOutput struct {
 // ============ Accept Application (Client picks winner) ============
 
 type AcceptApplicationInput struct {
-	ID            string `path:"id" doc:"Quest UUID"`
-	ApplicationID string `path:"application_id" doc:"Application UUID"`
+	ID            string `path:"id" format:"uuid" doc:"Quest UUID"`
+	ApplicationID string `path:"application_id" format:"uuid" doc:"Application UUID"`
 }
 
 type AcceptApplicationResponse struct {
@@ -95,12 +95,12 @@ type AcceptApplicationOutput struct {
 // ============ Reject Application ============
 
 type RejectApplicationBody struct {
-	Reason string `json:"reason,omitempty" example:"Looking for more React experience"`
+	Reason string `json:"reason,omitempty" maxLength:"1000" example:"Looking for more React experience"`
 }
 
 type RejectApplicationInput struct {
-	ID            string                `path:"id"`
-	ApplicationID string                `path:"application_id"`
+	ID            string                `path:"id" format:"uuid"`
+	ApplicationID string                `path:"application_id" format:"uuid"`
 	Body          RejectApplicationBody `json:"body,omitempty"`
 }
 
@@ -117,8 +117,8 @@ type RejectApplicationOutput struct {
 // ============ Withdraw Application (Freelancer) ============
 
 type WithdrawApplicationInput struct {
-	ID            string `path:"id"`
-	ApplicationID string `path:"application_id"`
+	ID            string `path:"id" format:"uuid"`
+	ApplicationID string `path:"application_id" format:"uuid"`
 }
 
 type WithdrawApplicationResponse struct {
@@ -134,7 +134,7 @@ type WithdrawApplicationOutput struct {
 // ============ My Work (Freelancer task-management) ============
 
 type MyWorkInput struct {
-	Status string `query:"status" doc:"Filter by quest status (default: in_progress)"`
+	Status string `query:"status" maxLength:"50" doc:"Filter by quest status (default: in_progress)"`
 }
 
 type MyWorkItem struct {

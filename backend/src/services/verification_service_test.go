@@ -179,8 +179,6 @@ func newTestRedis(t *testing.T) *redis.Client {
 	return client
 }
 
-func ptrTime(t time.Time) *time.Time { return &t }
-
 // ---------------------------------------------------------------------------
 // UploadDocument
 // ---------------------------------------------------------------------------

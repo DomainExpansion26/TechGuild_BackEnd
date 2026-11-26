@@ -23,6 +23,7 @@ func GenerateTemporary2FAToken(userID string) (string, error) {
 		UserID: userID,
 		Scope:  "2fa_pending",
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(Temporary2FATokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -31,20 +32,34 @@ func GenerateTemporary2FAToken(userID string) (string, error) {
 	return token.SignedString(temp2FATokenSecret)
 }
 
-func ValidateTemporary2FAToken(tokenStr string) (uuid.UUID, error) {
+func ValidateTemporary2FATokenWithJTI(tokenStr string) (uuid.UUID, string, time.Time, error) {
 	claims := &temp2FAClaims{}
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		return temp2FATokenSecret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		claims,
+		func(t *jwt.Token) (interface{}, error) {
+			return temp2FATokenSecret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	)
 	if err != nil || !token.Valid {
-		return uuid.Nil, errors.New("invalid or expired token")
+		return uuid.Nil, "", time.Time{}, errors.New("invalid or expired token")
 	}
 	if claims.Scope != "2fa_pending" {
-		return uuid.Nil, errors.New("invalid token scope")
+		return uuid.Nil, "", time.Time{}, errors.New("invalid token scope")
 	}
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		return uuid.Nil, errors.New("invalid token payload")
+		return uuid.Nil, "", time.Time{}, errors.New("invalid token payload")
 	}
-	return userID, nil
+	var expiresAt time.Time
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time
+	}
+	return userID, claims.ID, expiresAt, nil
+}
+
+func ValidateTemporary2FAToken(tokenStr string) (uuid.UUID, error) {
+	userID, _, _, err := ValidateTemporary2FATokenWithJTI(tokenStr)
+	return userID, err
 }

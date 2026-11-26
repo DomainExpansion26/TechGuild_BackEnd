@@ -59,6 +59,7 @@ const (
 	ActivityMilestoneApprovalCancelled ActivityActionType = "milestone_approval_cancelled"
 	ActivityQuestApproved              ActivityActionType = "quest_approved"
 	ActivityQuestApprovalCancelled     ActivityActionType = "quest_approval_cancelled"
+	ActivityQuestSaved                 ActivityActionType = "quest_saved"
 
 	// NEW — Milestone negotiation flow (freelancer ↔ client)
 	ActivityMilestoneSentForReview       ActivityActionType = "milestone_sent_for_review"
@@ -68,7 +69,12 @@ const (
 	ActivityMilestoneAgreed              ActivityActionType = "milestone_agreed"
 	ActivityMilestoneFunded              ActivityActionType = "milestone_funded"
 	ActivityMilestoneSubmittedForRelease ActivityActionType = "milestone_submitted_for_release"
-	ActivityMilestoneReleased            ActivityActionType = "milestone_released"
+
+	// NEW — Party collaboration (team assignment + deliverables)
+	ActivityMilestoneAssigned          ActivityActionType = "milestone_assigned"
+	ActivityMilestoneAttachmentAdded   ActivityActionType = "milestone_attachment_added"
+	ActivityMilestoneAttachmentDeleted ActivityActionType = "milestone_attachment_deleted"
+	ActivityMilestoneReleased          ActivityActionType = "milestone_released"
 	// Refund flow
 	ActivityMilestoneRefundRequested ActivityActionType = "milestone_refund_requested"
 	ActivityMilestoneRefunded        ActivityActionType = "milestone_refunded"

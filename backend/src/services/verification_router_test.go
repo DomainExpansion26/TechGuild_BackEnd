@@ -48,28 +48,6 @@ func routerTestPolicy(shadowMode bool, cohortPct int) config.KYCPolicy {
 	}
 }
 
-// routerEvidenceJSON mirrors the worker's face_match_result shape: face_similarity
-// is the multi-reference winner, aadhaar_similarity carries the QR-anchor score
-// (nil when no usable Aadhaar photo existed), second_reference_divergence is the
-// Python-side guardrail flag, and the document_in_selfie_* fields carry the
-// Phase B document-in-selfie verdict the router now gates on.
-//
-// Tests that only care about face/liveness/OCR use the healthy defaults through
-// routerEvidenceJSONSimple; the Phase 5 divergence test calls this directly.
-func routerEvidenceJSON(
-	faceSim float64,
-	aadhaarSim *float64,
-	divergence bool,
-	isLive bool,
-	liveScore float64,
-) (face, live, ocr datatypes.JSON) {
-	return routerEvidenceJSONWithDocInSelfie(
-		faceSim, aadhaarSim, divergence,
-		docInSelfieApprove, ptrRouterInt(100), true,
-		isLive, liveScore,
-	)
-}
-
 // routerEvidenceJSONWithDocInSelfie is the Phase B-aware form: decision/score
 // describe the worker's document-in-selfie verdict so tests can drive the gate.
 func routerEvidenceJSONWithDocInSelfie(
@@ -472,7 +450,7 @@ func healthyBusinessOpts() routerRecordOpts {
 	}
 }
 
-func setupRouterService(db *gorm.DB, shadowMode bool, cohortPct int) *VerificationService {
+func setupRouterService(_ *gorm.DB, shadowMode bool, cohortPct int) *VerificationService {
 	svc := &VerificationService{
 		verificationRecordsRepo: repository.NewVerificationRecordsRepository(),
 	}
@@ -1012,7 +990,7 @@ func TestRouterDoesNotRejectOnFaceAlone(t *testing.T) {
 // setupRouterServiceWithPolicy is setupRouterService with a caller-adjusted
 // policy, so a test can flip a Phase B knob (QR requirement, reject-on-mismatch)
 // without rebuilding the whole service.
-func setupRouterServiceWithPolicy(db *gorm.DB, mutate func(p *config.KYCPolicy)) *VerificationService {
+func setupRouterServiceWithPolicy(_ *gorm.DB, mutate func(p *config.KYCPolicy)) *VerificationService {
 	svc := &VerificationService{
 		verificationRecordsRepo: repository.NewVerificationRecordsRepository(),
 	}

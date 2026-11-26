@@ -6,23 +6,23 @@ package dto
 // Sensitive fields (AccountNumber, VPA, etc.) are sent to the provider
 // for tokenization and MUST NOT be persisted by TechGuild.
 type AddPayoutMethodRequest struct {
-	Provider string `json:"provider" huma:"required,enum=razorpay;stripe;payoneer" example:"razorpay"`
+	Provider string `json:"provider" required:"true" enum:"razorpay,stripe,payoneer" example:"razorpay"`
 
-	Type    string `json:"type" huma:"required,enum=bank;upi;card;wallet" example:"bank"`
-	Purpose string `json:"purpose" huma:"required,enum=payout" example:"payout"`
+	Type    string `json:"type" required:"true" enum:"bank,upi,card,wallet" example:"bank"`
+	Purpose string `json:"purpose" required:"true" enum:"payout" example:"payout"`
 
 	// Bank fields (used when type = "bank")
-	BankName      *string `json:"bank_name,omitempty" example:"HDFC Bank"`
-	AccountHolder *string `json:"account_holder,omitempty" example:"John Doe"`
-	AccountNumber *string `json:"account_number,omitempty" example:"1234567890123456"` // never stored
-	IFSC          *string `json:"ifsc,omitempty" example:"HDFC0001234"`
+	BankName      *string `json:"bank_name,omitempty" maxLength:"150" example:"HDFC Bank"`
+	AccountHolder *string `json:"account_holder,omitempty" maxLength:"150" example:"John Doe"`
+	AccountNumber *string `json:"account_number,omitempty" maxLength:"34" example:"1234567890123456"` // never stored
+	IFSC          *string `json:"ifsc,omitempty" maxLength:"20" example:"HDFC0001234"`
 
 	// UPI fields (used when type = "upi")
-	VPA *string `json:"vpa,omitempty" example:"johndoe@okhdfc"`
+	VPA *string `json:"vpa,omitempty" maxLength:"100" example:"johndoe@okhdfc"`
 
 	// Card/wallet fields (used when type = "card" or "wallet")
-	Last4 *string `json:"last4,omitempty" example:"4242"`
-	Brand *string `json:"brand,omitempty" example:"visa"`
+	Last4 *string `json:"last4,omitempty" maxLength:"4" example:"4242"`
+	Brand *string `json:"brand,omitempty" maxLength:"50" example:"visa"`
 
 	SetPrimary bool `json:"set_primary" example:"false"`
 }
@@ -77,14 +77,14 @@ type ListPayoutMethodsOutput struct {
 }
 
 type SetPrimaryPayoutMethodInput struct {
-	ID string `path:"id" doc:"Payout method ID"`
+	ID string `path:"id" format:"uuid" doc:"Payout method ID"`
 }
 type SetPrimaryPayoutMethodOutput struct {
 	Body PayoutMethodResponse
 }
 
 type DeletePayoutMethodInput struct {
-	ID string `path:"id" doc:"Payout method ID"`
+	ID string `path:"id" format:"uuid" doc:"Payout method ID"`
 }
 type DeletePayoutMethodOutput struct {
 	Body DeletePayoutMethodResponse

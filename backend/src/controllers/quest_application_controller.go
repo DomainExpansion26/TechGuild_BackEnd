@@ -64,8 +64,7 @@ func AcceptApplicationHandler(ctx context.Context, input *dto.AcceptApplicationI
 		case errors.Is(err, services.ErrOnlyClientCanReview):
 			return nil, huma.Error403Forbidden(err.Error())
 		case errors.Is(err, services.ErrApplicationNotPending),
-			errors.Is(err, services.ErrQuestNotOpenForApplications),
-			errors.Is(err, services.ErrEscrowNotFunded):
+			errors.Is(err, services.ErrQuestNotOpenForApplications):
 			return nil, huma.Error400BadRequest(err.Error())
 		}
 		return nil, huma.Error400BadRequest(err.Error())

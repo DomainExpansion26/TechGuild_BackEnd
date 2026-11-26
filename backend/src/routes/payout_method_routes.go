@@ -10,7 +10,7 @@ import (
 
 func RegisterPayoutMethodRoutes(api huma.API, c *controllers.PayoutMethodController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
-	bearer := []map[string][]string{{"bearerAuth": {}}}
+	bearer := []map[string][]string{{"BearerAuth": {}}}
 
 	// ============================================================
 	// Payout Methods (money OUT)

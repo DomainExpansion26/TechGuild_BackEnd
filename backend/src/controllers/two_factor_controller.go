@@ -3,6 +3,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -38,8 +39,11 @@ func VerifySetup2FAHandler(ctx context.Context, input *dto.VerifySetup2FAInput) 
 		return nil, huma.Error401Unauthorized("invalid user")
 	}
 
-	res, err := services.NewTwoFactorService().VerifySetup(userID, input.Body.Code)
+	res, err := services.NewTwoFactorService().VerifySetup(ctx, userID, input.Body.Code)
 	if err != nil {
+		if errors.Is(err, services.ErrRateLimited) {
+			return nil, huma.Error429TooManyRequests(err.Error())
+		}
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 	return &dto.VerifySetup2FAOutput{Body: *res}, nil
@@ -48,8 +52,11 @@ func VerifySetup2FAHandler(ctx context.Context, input *dto.VerifySetup2FAInput) 
 // ---------- VerifyLogin ----------
 
 func VerifyLogin2FAHandler(ctx context.Context, input *dto.VerifyLogin2FAInput) (*dto.VerifyLogin2FAOutput, error) {
-	res, refreshToken, err := services.NewTwoFactorService().VerifyLogin(input.Body.TemporaryToken, input.Body.Code, input.UserAgent, utils.GetClientIP(input.ForwardedFor), input.UserAgent)
+	res, refreshToken, err := services.NewTwoFactorService().VerifyLogin(ctx, input.Body.TemporaryToken, input.Body.Code, input.UserAgent, utils.GetClientIP(input.ForwardedFor), input.UserAgent)
 	if err != nil {
+		if errors.Is(err, services.ErrRateLimited) {
+			return nil, huma.Error429TooManyRequests(err.Error())
+		}
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
@@ -73,6 +80,7 @@ func VerifyLogin2FAHandler(ctx context.Context, input *dto.VerifyLogin2FAInput) 
 
 func VerifyRecoveryCodeHandler(ctx context.Context, input *dto.VerifyRecoveryCodeInput) (*dto.VerifyRecoveryCodeOutput, error) {
 	res, refreshToken, err := services.NewTwoFactorService().VerifyRecoveryCode(
+		ctx,
 		input.Body.TemporaryToken,
 		input.Body.Code,
 		input.UserAgent,
@@ -80,6 +88,9 @@ func VerifyRecoveryCodeHandler(ctx context.Context, input *dto.VerifyRecoveryCod
 		input.UserAgent,
 	)
 	if err != nil {
+		if errors.Is(err, services.ErrRateLimited) {
+			return nil, huma.Error429TooManyRequests(err.Error())
+		}
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
@@ -126,8 +137,11 @@ func RegenerateRecoveryCodesHandler(ctx context.Context, input *dto.RegenerateRe
 		return nil, huma.Error401Unauthorized("invalid user")
 	}
 
-	codes, err := services.NewTwoFactorService().RegenerateRecoveryCodes(userID, input.Body.Password, input.Body.Code)
+	codes, err := services.NewTwoFactorService().RegenerateRecoveryCodes(ctx, userID, input.Body.Password, input.Body.Code)
 	if err != nil {
+		if errors.Is(err, services.ErrRateLimited) {
+			return nil, huma.Error429TooManyRequests(err.Error())
+		}
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 

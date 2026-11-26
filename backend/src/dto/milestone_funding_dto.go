@@ -8,15 +8,15 @@ import "time"
 
 type FundMilestoneBody struct {
 	// Optional: specific saved payment method to use.
-	PaymentMethodID string `json:"payment_method_id,omitempty" example:"550e8400-e29b-41d4-a716-446655440000"`
+	PaymentMethodID string `json:"payment_method_id,omitempty" maxLength:"36" example:"550e8400-e29b-41d4-a716-446655440000"`
 
 	// Required: idempotency key to prevent double-charge
-	IdempotencyKey string `json:"idempotency_key" huma:"required,minLength=5,maxLength=255" example:"fund-ms-42-abc123"`
+	IdempotencyKey string `json:"idempotency_key" required:"true" minLength:"5" maxLength:"255" example:"fund-ms-42-abc123"`
 }
 
 type FundMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        FundMilestoneBody
 }
 
@@ -72,14 +72,14 @@ type FundMilestoneOutput struct {
 // ============================================================
 
 type ConfirmFundingBody struct {
-	RazorpayPaymentID string `json:"razorpay_payment_id" huma:"required" example:"pay_xxx"`
-	RazorpayOrderID   string `json:"razorpay_order_id" huma:"required" example:"order_xxx"`
-	RazorpaySignature string `json:"razorpay_signature" huma:"required" example:"<hmac>"`
+	RazorpayPaymentID string `json:"razorpay_payment_id" required:"true" minLength:"1" maxLength:"100" example:"pay_xxx"`
+	RazorpayOrderID   string `json:"razorpay_order_id" required:"true" minLength:"1" maxLength:"100" example:"order_xxx"`
+	RazorpaySignature string `json:"razorpay_signature" required:"true" minLength:"1" maxLength:"256" example:"<hmac>"`
 }
 
 type ConfirmFundingInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        ConfirmFundingBody
 }
 
@@ -92,8 +92,8 @@ type ConfirmFundingOutput struct {
 // ============================================================
 
 type GetMilestonePaymentInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type MilestonePaymentDetailResponse struct {

@@ -7,24 +7,25 @@ import "time"
 // ============================================================
 
 type MilestoneTaskInput struct {
-	Title       string     `json:"title" huma:"required,minLength=2,maxLength=255" example:"Navbar Wireframe"`
-	Description string     `json:"description,omitempty" example:"Design responsive navigation component"`
+	Title       string     `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Navbar Wireframe"`
+	Description string     `json:"description,omitempty" maxLength:"5000" example:"Design responsive navigation component"`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	EndDate     *time.Time `json:"end_date,omitempty"`
+	AssigneeID  *string    `json:"assignee_id,omitempty" format:"uuid" doc:"Lead or active party member (defaults to the lead)"`
 }
 
 type CreateQuestMilestoneBody struct {
-	Title       string               `json:"title" huma:"required,minLength=2,maxLength=255" example:"Research & Wireframes"`
-	Description string               `json:"description,omitempty" example:"User research and low-fidelity wireframes"`
-	Amount      float64              `json:"amount" huma:"required,minimum=0.01" example:"10000" doc:"Milestone amount in INR (rupees)"`
+	Title       string               `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Research & Wireframes"`
+	Description string               `json:"description,omitempty" maxLength:"5000" example:"User research and low-fidelity wireframes"`
+	Amount      float64              `json:"amount" required:"true" minimum:"0.01" example:"10000" doc:"Milestone amount in INR (rupees)"`
 	StartDate   *time.Time           `json:"start_date,omitempty"`
 	DueDate     *time.Time           `json:"due_date,omitempty"`
-	DueDays     int                  `json:"due_days,omitempty" example:"7"`
-	Tasks       []MilestoneTaskInput `json:"tasks,omitempty" doc:"Optional initial tasks"`
+	DueDays     int                  `json:"due_days,omitempty" minimum:"1" example:"7"`
+	Tasks       []MilestoneTaskInput `json:"tasks,omitempty" maxItems:"50" doc:"Optional initial tasks"`
 }
 
 type CreateMilestoneInput struct {
-	QuestID string `path:"id" doc:"Quest ID"`
+	QuestID string `path:"id" format:"uuid" doc:"Quest ID"`
 	Body    CreateQuestMilestoneBody
 }
 
@@ -38,17 +39,31 @@ type CreateQuestMilestoneOutput struct {
 // ============================================================
 
 type UpdateQuestMilestoneBody struct {
-	Title       *string    `json:"title,omitempty" huma:"minLength=2,maxLength=255"`
-	Description *string    `json:"description,omitempty"`
-	Amount      *float64   `json:"amount,omitempty" huma:"minimum=0.01" doc:"Amount in INR rupees"`
+	Title       *string    `json:"title,omitempty" minLength:"2" maxLength:"255"`
+	Description *string    `json:"description,omitempty" maxLength:"5000"`
+	Amount      *float64   `json:"amount,omitempty" minimum:"0.01" doc:"Amount in INR rupees"`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
-	DueDays     *int       `json:"due_days,omitempty"`
+	DueDays     *int       `json:"due_days,omitempty" minimum:"1"`
+	// Additive task patch: omit a task to leave it untouched.
+	Tasks         []MilestoneTaskPatchInput `json:"tasks,omitempty" maxItems:"50" doc:"Create (no id) or partially update (with id) tasks"`
+	DeleteTaskIDs []string                  `json:"delete_task_ids,omitempty" maxItems:"50" doc:"Task IDs to delete; must belong to this milestone"`
+}
+
+// MilestoneTaskPatchInput patches one task. Only non-nil fields are written.
+type MilestoneTaskPatchInput struct {
+	ID          *string    `json:"id,omitempty" format:"uuid" doc:"Omit to create a new task"`
+	Title       *string    `json:"title,omitempty" minLength:"2" maxLength:"255"`
+	Description *string    `json:"description,omitempty" maxLength:"5000"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+	AssigneeID  *string    `json:"assignee_id,omitempty" format:"uuid"`
+	Status      *string    `json:"status,omitempty" enum:"todo,in_progress,completed"`
 }
 
 type UpdateQuestMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        UpdateQuestMilestoneBody
 }
 
@@ -61,8 +76,8 @@ type UpdateQuestMilestoneOutput struct {
 // ============================================================
 
 type DeleteQuestMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type DeleteQuestMilestoneResponse struct {
@@ -79,12 +94,12 @@ type DeleteQuestMilestoneOutput struct {
 // ============================================================
 
 type SendForReviewBody struct {
-	Note string `json:"note,omitempty" example:"Please review the deliverables"`
+	Note string `json:"note,omitempty" maxLength:"2000" example:"Please review the deliverables"`
 }
 
 type SendForReviewInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        SendForReviewBody
 }
 
@@ -97,12 +112,12 @@ type SendForReviewOutput struct {
 // ============================================================
 
 type ApproveMilestoneBody struct {
-	Feedback string `json:"feedback,omitempty" example:"Looks great, approved!"`
+	Feedback string `json:"feedback,omitempty" maxLength:"2000" example:"Looks great, approved!"`
 }
 
 type ApproveMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        ApproveMilestoneBody
 }
 
@@ -111,13 +126,13 @@ type ApproveMilestoneOutput struct {
 }
 
 type RequestMilestoneRevisionBody struct {
-	Note          string `json:"note" huma:"required,minLength=5" example:"Please adjust the color scheme to match brand guidelines"`
-	AttachmentURL string `json:"attachment_url,omitempty"`
+	Note          string `json:"note" required:"true" minLength:"5" maxLength:"2000" example:"Please adjust the color scheme to match brand guidelines"`
+	AttachmentURL string `json:"attachment_url,omitempty" format:"uri" maxLength:"2048"`
 }
 
 type RequestMilestoneRevisionInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        RequestMilestoneRevisionBody
 }
 
@@ -130,8 +145,8 @@ type RequestMilestoneRevisionOutput struct {
 // ============================================================
 
 type GetQuestMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type GetQuestMilestoneOutput struct {
@@ -139,7 +154,7 @@ type GetQuestMilestoneOutput struct {
 }
 
 type ListQuestMilestonesInput struct {
-	QuestID string `path:"id" doc:"Quest ID"`
+	QuestID string `path:"id" format:"uuid" doc:"Quest ID"`
 }
 
 type ListQuestMilestonesResponse struct {
@@ -157,8 +172,8 @@ type ListQuestMilestonesOutput struct {
 // ============================================================
 
 type GetMilestoneRevisionsInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type RevisionItem struct {
@@ -249,20 +264,20 @@ type MilestoneDetailResponse struct {
 // ---------- Roadmap Bulk Actions ----------
 
 type SubmitRoadmapBody struct {
-	Note string `json:"note,omitempty" example:"Here is the complete project roadmap. Please review."`
+	Note string `json:"note,omitempty" maxLength:"2000" example:"Here is the complete project roadmap. Please review."`
 }
 
 type SubmitRoadmapInput struct {
-	ID   string            `path:"id" doc:"Quest UUID"`
+	ID   string            `path:"id" format:"uuid" doc:"Quest UUID"`
 	Body SubmitRoadmapBody `json:"body,omitempty"`
 }
 
 type ApproveRoadmapBody struct {
-	Feedback string `json:"feedback,omitempty" example:"Roadmap looks perfect. Let's start with Milestone 1."`
+	Feedback string `json:"feedback,omitempty" maxLength:"2000" example:"Roadmap looks perfect. Let's start with Milestone 1."`
 }
 
 type ApproveRoadmapInput struct {
-	ID   string             `path:"id" doc:"Quest UUID"`
+	ID   string             `path:"id" format:"uuid" doc:"Quest UUID"`
 	Body ApproveRoadmapBody `json:"body,omitempty"`
 }
 

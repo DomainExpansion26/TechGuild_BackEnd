@@ -134,8 +134,11 @@ type Quest struct {
 	Status      QuestStatus `gorm:"type:varchar(30);default:'draft'"`
 	PublishedAt *time.Time
 
+	// Engagement (incremented on detail view by a non-owner)
+	ViewsCount int64 `gorm:"default:0;not null"`
+
 	// Escrow & Funding
-	IsEscrowFunded   bool       `gorm:"default:false"`
+	IsEscrowFunded   bool `gorm:"default:false"`
 	EscrowFundedAt   *time.Time
 	EscrowRefundedAt *time.Time
 
@@ -251,4 +254,3 @@ func (c *QuestChatChannel) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
-

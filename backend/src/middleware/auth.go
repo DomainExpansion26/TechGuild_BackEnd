@@ -3,7 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
 
 	"techguild-backend/src/database/postgres"
@@ -12,20 +12,13 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 )
-
-func getJwtSecret() []byte {
-	secret := os.Getenv("JWT_ACCESS_SECRET")
-	if secret == "" {
-		fmt.Println("JWT ERROR: JWT_ACCESS_SECRET is not set")
-		return nil
-	}
-	return []byte(secret)
-}
 
 type Claims struct {
 	UserID    string `json:"user_id"`
 	SessionID string `json:"session_id"`
+	Type      string `json:"type"`
 	jwt.RegisteredClaims
 }
 
@@ -40,22 +33,33 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// ✅ NEW: Blacklist check — logout kiye hue tokens reject karo
+		// ✅ Blacklist check — logout kiye hue tokens reject karo.
+		// Fail-closed (C2): Redis unavailable hone par 503 do, token ko
+		// blindly accept mat karo.
 		if postgres.RedisDB != nil {
 			tokenHash := utils.HashToken(tokenString)
 			blacklisted, err := postgres.RedisDB.Exists(
 				ctx.Context(),
 				"blacklist:"+tokenHash,
 			).Result()
-			if err == nil && blacklisted > 0 {
+			if err != nil {
+				huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "Service temporarily unavailable")
+				return
+			}
+			if blacklisted > 0 {
 				huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token has been revoked")
 				return
 			}
 		}
 
-		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-			return getJwtSecret(), nil
-		})
+		token, err := jwt.ParseWithClaims(
+			tokenString,
+			&Claims{},
+			func(t *jwt.Token) (interface{}, error) {
+				return utils.GetAccessSecret(), nil
+			},
+			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		)
 
 		if err != nil || !token.Valid {
 			fmt.Println("JWT ERROR:", err)
@@ -64,6 +68,39 @@ func AuthMiddlewareHuma(api huma.API) func(ctx huma.Context, next func(huma.Cont
 		}
 
 		claims := token.Claims.(*Claims)
+		if claims.Type != "access" || claims.UserID == "" || claims.SessionID == "" {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "Invalid token claims")
+			return
+		}
+
+		// ✅ Session/account revocation checks — access tokens are invalidated
+		// when the session is revoked (refresh rotation) or when the user's
+		// password is reset (user_revoked_before).
+		// Fail-closed (C2): Redis errors → 503; only redis.Nil / absent key
+		// means "not revoked".
+		if postgres.RedisDB != nil {
+			if revoked, err := postgres.RedisDB.Exists(ctx.Context(), "session_revoked:"+claims.SessionID).Result(); err != nil {
+				huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "Service temporarily unavailable")
+				return
+			} else if revoked > 0 {
+				huma.WriteErr(api, ctx, http.StatusUnauthorized, "Session has been revoked")
+				return
+			}
+			rawTS, err := postgres.RedisDB.Get(ctx.Context(), "user_revoked_before:"+claims.UserID).Result()
+			if err != nil && err != redis.Nil {
+				huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "Service temporarily unavailable")
+				return
+			}
+			if err == nil {
+				if revokedBefore, convErr := strconv.ParseInt(rawTS, 10, 64); convErr == nil {
+					if claims.IssuedAt == nil || claims.IssuedAt.Time.Unix() <= revokedBefore {
+						huma.WriteErr(api, ctx, http.StatusUnauthorized, "Session has been revoked")
+						return
+					}
+				}
+			}
+		}
+
 		newCtx := huma.WithValue(ctx, utils.UserIDKey, claims.UserID)
 		newCtx = huma.WithValue(newCtx, utils.SessionIDKey, claims.SessionID)
 		next(newCtx)

@@ -9,7 +9,7 @@ import (
 )
 
 // RegisterQuestRoutes registers all quest-related routes with Huma.
-func RegisterQuestRoutes(api huma.API) {
+func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 	clientAuthMw := huma.Middlewares{
 		middleware.AuthMiddlewareHuma(api),
 		middleware.ClientMiddlewareHuma(api),
@@ -67,7 +67,7 @@ func RegisterQuestRoutes(api huma.API) {
 		Path:        "/v1/quests/{id}/publish",
 		Tags:        tags,
 		Summary:     "Publish quest (open for acceptance)",
-		Description: "Validates quest is in draft status, verifies client funding method, sets quest status to open, records visibility timestamps, and deposits escrow funds.",
+		Description: "Validates quest is in draft status, sets quest status to open and records the publish timestamp. No payment or escrow movement happens here: escrow is funded per-milestone via POST /v1/quests/{id}/milestones/{milestone_id}/fund once a milestone is agreed.",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
@@ -92,6 +92,30 @@ func RegisterQuestRoutes(api huma.API) {
 		Middlewares: generalAuthMw,
 	}, controllers.ListQuestsHandler)
 
+	// 4a. Saved quests — static path must be registered before /v1/quests/{id}.
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "list-saved-quests",
+		Method:      "GET",
+		Path:        "/v1/quests/saved",
+		Tags:        tags,
+		Summary:     "List bookmarked quests",
+		Description: "Returns every quest the authenticated caller bookmarked, newest first.",
+		Middlewares: generalAuthMw,
+	}, c.ListSavedQuestsHandler)
+
+	// 4b. Freelancer quest board summary — static path, registered before /v1/quests/{id}.
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "get-quest-board-summary",
+		Method:      "GET",
+		Path:        "/v1/quests/board/summary",
+		Tags:        tags,
+		Summary:     "Freelancer quest board summary",
+		Description: "Returns the caller's application KPIs, latest applications and rank-eligible quests ranked by skill match.",
+		Middlewares: generalAuthMw,
+	}, c.BoardSummaryHandler)
+
 	// 4.Get Quest Details
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"BearerAuth": {}}},
@@ -112,7 +136,7 @@ func RegisterQuestRoutes(api huma.API) {
 		Path:        "/v1/quests/{id}/reject",
 		Tags:        tags,
 		Summary:     "Reject / cancel quest (client only)",
-		Description: "Validates quest is open or in_progress, marks quest cancelled, and triggers escrow refund if funds were held.",
+		Description: "Validates quest is not already cancelled/completed, refunds every milestone still in a refundable state (work_in_progress, submitted_for_release) through the escrow refund flow, then marks the quest cancelled. Returns 409 for legacy quest-level escrow, which needs manual reconciliation.",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
@@ -123,26 +147,43 @@ func RegisterQuestRoutes(api huma.API) {
 				},
 			},
 		},
-	}, controllers.RejectQuestHandler)
+	}, c.RejectQuestHandler)
 
-	// 6.Quest Acceptance API (Party Lead)
+	// 6. Update Draft Quest (Client Only)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"BearerAuth": {}}},
-		OperationID: "accept-quest",
-		Method:      "POST",
-		Path:        "/v1/quests/{id}/accept",
+		OperationID: "update-quest",
+		Method:      "PATCH",
+		Path:        "/v1/quests/{id}",
 		Tags:        tags,
-		Summary:     "Accept quest on behalf of party",
-		Description: "Party Lead accepts a quest on behalf of an active, verified party. Runs all 8 validation checks (Party Lead authorization, party rank >= quest required_min_rank, capacity < 5, skill match >= 60%, no client conflict, premium subscription check, escrow funded check) and atomically updates quest to in_progress, sets accepted_party_id, auto-creates quest chat channel, and auto-creates task templates.",
-		Middlewares: generalAuthMw,
+		Summary:     "Update a draft quest",
+		Description: "Partially updates a quest the caller owns. Only drafts are editable (409 otherwise). Changing the budget re-derives the required minimum rank. Providing skills replaces the whole skill set.",
+		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
-					Example: dto.AcceptQuestBody{
-						PartyID: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+					Example: dto.UpdateQuestBody{
+						Title:       strPtr("Website Redesign for FinTech Startup v2"),
+						BudgetMinor: int64Ptr(9000000),
 					},
 				},
 			},
 		},
-	}, controllers.AcceptQuestHandler)
+	}, c.UpdateQuestHandler)
+
+	// 7. Toggle Quest Bookmark
+	huma.Register(api, huma.Operation{
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "save-quest",
+		Method:      "POST",
+		Path:        "/v1/quests/{id}/save",
+		Tags:        tags,
+		Summary:     "Bookmark / unbookmark a quest",
+		Description: "Toggles the caller's bookmark for this quest and returns the resulting state.",
+		Middlewares: generalAuthMw,
+	}, c.SaveQuestHandler)
 }
+
+func strPtr(s string) *string { return &s }
+
+func int64Ptr(v int64) *int64 { return &v }

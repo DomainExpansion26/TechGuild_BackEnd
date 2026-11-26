@@ -49,7 +49,10 @@ const (
 type MilestonePayment struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	QuestMilestoneID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex"`
+	// Not unique: a milestone keeps one LIVE attempt (enforced by the partial
+	// index uniq_mp_live_per_milestone) but failed/refunded attempts stay on
+	// disk as immutable audit history.
+	QuestMilestoneID uuid.UUID `gorm:"type:uuid;not null;index"`
 	QuestID          uuid.UUID `gorm:"type:uuid;not null;index"`
 
 	PaymentID           uuid.UUID  `gorm:"type:uuid;not null;index"`
