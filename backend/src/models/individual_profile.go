@@ -24,7 +24,7 @@ type IndividualProfile struct {
 	Phone             *string `gorm:"type:varchar(20);uniqueIndex"`
 	DateOfBirth       *time.Time
 	Gender            Gender `gorm:"size:20"`
-	AvatarURL         string
+	AvatarURL         string `gorm:"type:varchar(2048)"`
 	Bio               string `gorm:"type:text"`
 	Country           string
 	State             string

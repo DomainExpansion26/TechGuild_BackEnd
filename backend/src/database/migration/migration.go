@@ -49,6 +49,7 @@ func Migrate() {
 		&models.Quest{},
 		&models.QuestMilestone{},
 		&models.QuestApplication{},
+		&models.SavedQuest{},
 		&models.QuestSkill{},
 		&models.QuestChatChannel{},
 		&models.MilestoneRevision{},
@@ -66,10 +67,13 @@ func Migrate() {
 		&models.QuestReview{},
 		&models.MilestoneApprovalLog{},
 
+		// Party collaboration (team assignment + deliverables)
+		&models.MilestoneAssignment{},
+		&models.MilestoneAttachment{},
+
 		// 2FA Authentication
 		&models.UserTwoFactorAuthentication{},
 		&models.UserRecoveryCode{},
-
 
 		// Payment
 		&models.PaymentCustomer{},
@@ -96,7 +100,6 @@ func Migrate() {
 		&models.GuildhallComment{},
 		&models.GuildhallReaction{},
 		&models.GuildhallVote{},
-
 	)
 
 	if err != nil {
@@ -323,6 +326,15 @@ func migrateMilestonePaymentConstraints(db *gorm.DB) error {
 		// Drop old constraints that reference removed fields (gross_amount, platform_fee, freelancer_amount, fee_rate_bps)
 		`ALTER TABLE milestone_payments DROP CONSTRAINT IF EXISTS chk_milestone_amount_split;`,
 		`ALTER TABLE milestone_payments DROP CONSTRAINT IF EXISTS chk_milestone_amounts_nonneg;`,
+
+		// Retry support. The old full unique index on quest_milestone_id made every
+		// failed payment permanent: MarkPaymentFailed resets the milestone to
+		// `agreed` so the client can retry, but FundMilestone saw the leftover
+		// failed row and answered 409. Uniqueness belongs on LIVE attempts only.
+		`DROP INDEX IF EXISTS idx_milestone_payments_quest_milestone_id;`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uniq_mp_live_per_milestone
+			ON milestone_payments (quest_milestone_id)
+			WHERE status NOT IN ('failed','refunded');`,
 
 		`DO $$ BEGIN
 			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_milestone_payment_status') THEN

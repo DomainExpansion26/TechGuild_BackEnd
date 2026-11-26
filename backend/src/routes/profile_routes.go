@@ -4,6 +4,7 @@ import (
 	"techguild-backend/src/controllers"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
+	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -35,45 +36,51 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 
 	// Protected
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "upload-resume",
-		Method:      "POST",
-		Path:        "/v1/profile/upload-resume",
-		Tags:        []string{"Profile"},
-		Middlewares: authMw}, c.UploadResumeHandler)
+		Security:     []map[string][]string{{"BearerAuth": {}}},
+		OperationID:  "upload-resume",
+		Method:       "POST",
+		Path:         "/v1/profile/upload-resume",
+		Tags:         []string{"Profile"},
+		Description:  "Multipart upload with a single `resume` form field. Accepted document type: PDF. Maximum file size: 2 MiB.",
+		MaxBodyBytes: utils.MaxUploadBytes,
+		Middlewares:  authMw}, c.UploadResumeHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "upload-avatar",
-		Method:      "POST",
-		Path:        "/v1/profile/avatar",
-		Tags:        []string{"Profile"},
-		Middlewares: authMw}, c.UploadAvatarHandler)
+		Security:     []map[string][]string{{"BearerAuth": {}}},
+		OperationID:  "upload-avatar",
+		Method:       "POST",
+		Path:         "/v1/profile/avatar",
+		Tags:         []string{"Profile"},
+		Description:  "Multipart upload with a single `avatar` form field. Accepted image types: JPEG, PNG, WebP. Maximum file size: 2 MiB.",
+		MaxBodyBytes: utils.MaxUploadBytes,
+		Middlewares:  authMw}, c.UploadAvatarHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "upload-logo",
-		Method:      "POST",
-		Path:        "/v1/profile/logo",
-		Tags:        []string{"Profile"},
-		Middlewares: authMw}, c.UploadLogoHandler)
+		Security:     []map[string][]string{{"BearerAuth": {}}},
+		OperationID:  "upload-logo",
+		Method:       "POST",
+		Path:         "/v1/profile/logo",
+		Tags:         []string{"Profile"},
+		Description:  "Multipart upload with a single `logo` form field. Accepted image types: JPEG, PNG, WebP. Maximum file size: 2 MiB.",
+		MaxBodyBytes: utils.MaxUploadBytes,
+		Middlewares:  authMw}, c.UploadLogoHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-avatar",
 		Method:      "DELETE",
 		Path:        "/v1/profile/avatar",
 		Tags:        []string{"Profile"},
 		Middlewares: authMw}, c.DeleteAvatarHandler)
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-logo",
 		Method:      "DELETE",
 		Path:        "/v1/profile/logo",
 		Tags:        []string{"Profile"},
 		Middlewares: authMw}, c.DeleteLogoHandler)
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-resume",
 		Method:      "DELETE",
 		Path:        "/v1/profile/resume",
@@ -81,7 +88,7 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 		Middlewares: authMw}, c.DeleteResumeHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-my-profile",
 		Method:      "GET",
 		Path:        "/v1/profile",
@@ -89,14 +96,14 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 		Middlewares: authMw}, c.GetMyProfileHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-user-points",
 		Method:      "GET",
 		Path:        "/v1/profile/points",
 		Tags:        []string{"Profile"},
 		Middlewares: authMw}, c.GetUserPointsHandler)
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "export-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/export",
@@ -104,7 +111,7 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 		Middlewares: authMw}, c.ExportProfileHandler)
 
 	// huma.Register(api, huma.Operation{
-	// 	Security:    []map[string][]string{{"bearerAuth": {}}},
+	// 	Security:    []map[string][]string{{"BearerAuth": {}}},
 	// 	OperationID: "create-profile-deprecated",
 	// 	Method:      "POST",
 	// 	Path:        "/v1/profile",
@@ -115,7 +122,7 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 	// }, c.DeprecatedProfileCreateHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-individual-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/individual",
@@ -153,7 +160,7 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 	}, c.CreateIndividualProfileHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-agency-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/agency",
@@ -184,7 +191,7 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 
 	// client profile creation
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-client-profile",
 		Method:      "POST",
 		Path:        "/v1/profile/client",
@@ -213,32 +220,102 @@ func RegisterProfileRoutes(api huma.API, c *controllers.ProfileController) {
 	}, c.CreateClientProfileHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-individual-profile",
 		Method:      "PATCH",
 		Path:        "/v1/profile/individual",
 		Tags:        []string{"Profile"},
 		Summary:     "Update individual profile",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateIndividualProfileRequest{
+						Phone:             ptr("+919876543210"),
+						DateOfBirth:       ptr("1990-01-15"),
+						Gender:            ptr("male"),
+						AvatarURL:         ptr("https://storage.example.com/avatars/user.png"),
+						Bio:               ptr("Full-stack developer with 5 years of experience"),
+						Country:           ptr("India"),
+						City:              ptr("Mumbai"),
+						Headline:          ptr("Senior Full-Stack Developer"),
+						PreferredLanguage: ptr("en"),
+						TimeZone:          ptr("Asia/Kolkata"),
+						ExperienceLevel:   ptr("senior"),
+						Availability:      ptr("full-time"),
+						Skills:            ptr([]string{"Go", "React", "PostgreSQL"}),
+						ToolsTechnologies: ptr([]string{"Docker", "Kubernetes", "Git"}),
+						ServiceCategories: ptr([]string{"Web Development", "Backend Development"}),
+						PortfolioURL:      ptr("https://portfolio.example.com/johndoe"),
+						GithubURL:         ptr("https://github.com/johndoe"),
+						LinkedinURL:       ptr("https://linkedin.com/in/johndoe"),
+						ResumeURL:         ptr("https://storage.example.com/resumes/johndoe.pdf"),
+						TermsConfirmed:    ptr(true),
+					},
+				},
+			},
+		},
 	}, c.UpdateIndividualProfileHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-agency-profile",
 		Method:      "PATCH",
 		Path:        "/v1/profile/agency",
 		Tags:        []string{"Profile"},
 		Summary:     "Update agency profile",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateAgencyProfileRequest{
+						Phone:           ptr("+919876543210"),
+						AgencyName:      ptr("Acme Digital Agency"),
+						LogoURL:         ptr("https://storage.example.com/logos/acme.png"),
+						Description:     ptr("Digital agency specializing in web and mobile development"),
+						WebsiteURL:      ptr("https://acme.example.com"),
+						ServicesOffered: ptr([]string{"Web Development", "Mobile App Development"}),
+						Industries:      ptr([]string{"Technology", "E-commerce"}),
+						TeamSize:        ptr("10-50"),
+						ContactName:     ptr("Jane Smith"),
+						Country:         ptr("India"),
+						City:            ptr("Mumbai"),
+						TimeZone:        ptr("Asia/Kolkata"),
+					},
+				},
+			},
+		},
 	}, c.UpdateAgencyProfileHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-client-profile",
 		Method:      "PATCH",
 		Path:        "/v1/profile/client",
 		Tags:        []string{"Profile"},
 		Summary:     "Update client profile",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateClientProfileRequest{
+						Phone:        ptr("+919876543210"),
+						CompanyName:  ptr("TechStart Inc"),
+						LogoURL:      ptr("https://storage.example.com/logos/techstart.png"),
+						Industry:     ptr("technology"),
+						WebsiteURL:   ptr("https://techstart.example.com"),
+						ProjectTypes: ptr([]string{"Web Development", "Mobile App"}),
+						BudgetRange:  ptr("$5,000 - $20,000"),
+						TeamSize:     ptr("1-10"),
+						Country:      ptr("United States"),
+						City:         ptr("San Francisco"),
+						TimeZone:     ptr("America/Los_Angeles"),
+					},
+				},
+			},
+		},
 	}, c.UpdateClientProfileHandler)
 }

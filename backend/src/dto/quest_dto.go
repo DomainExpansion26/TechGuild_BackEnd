@@ -2,43 +2,38 @@ package dto
 
 import "time"
 
-// CreateQuestMilestoneInput represents an individual milestone deliverable in a quest creation request.
 type CreateQuestMilestoneInput struct {
-	Title       string  `json:"title" huma:"required,minLength=3,maxLength=255" example:"Research & Wireframes"`
-	Description string  `json:"description,omitempty" example:"User research and low-fidelity wireframes"`
-	Amount      float64 `json:"amount" huma:"required,minimum=0.01" example:"15000"`
-	DueDays     int     `json:"due_days" huma:"required,minimum=1" example:"5"`
-	OrderIndex  int     `json:"order_index" huma:"required,minimum=1" example:"1"`
+	Title       string  `json:"title" required:"true" minLength:"3" maxLength:"255" example:"Research & Wireframes"`
+	Description string  `json:"description,omitempty" maxLength:"5000" example:"User research and low-fidelity wireframes"`
+	Amount      float64 `json:"amount" required:"true" minimum:"0.01" example:"15000"`
+	DueDays     int     `json:"due_days" required:"true" minimum:"1" example:"5"`
+	OrderIndex  int     `json:"order_index" required:"true" minimum:"1" example:"1"`
 }
 
-// CreateQuestSkillInput represents a technical skill requirement in a quest creation request.
 type CreateQuestSkillInput struct {
-	Name             string `json:"name" huma:"required" example:"Figma"`
-	ProficiencyLevel string `json:"proficiency_level,omitempty" example:"expert"`
+	Name             string `json:"name" required:"true" minLength:"1" maxLength:"100" example:"Figma"`
+	ProficiencyLevel string `json:"proficiency_level,omitempty" maxLength:"50" example:"expert"`
 	IsCore           bool   `json:"is_core" example:"true"`
 }
 
-// CreateQuestLanguageInput represents a preferred language requirement in a quest creation request.
 type CreateQuestLanguageInput struct {
-	Name        string `json:"name" huma:"required" example:"English"`
-	Proficiency string `json:"proficiency,omitempty" example:"Native/Bilingual"`
+	Name        string `json:"name" required:"true" minLength:"1" maxLength:"100" example:"English"`
+	Proficiency string `json:"proficiency,omitempty" maxLength:"50" example:"Native/Bilingual"`
 }
 
-// CreateQuestBody contains the payload for creating a quest draft.
 type CreateQuestBody struct {
-	Title           string                     `json:"title" huma:"required,minLength=3,maxLength=100" example:"Website Redesign for FinTech Startup"`
-	Description     string                     `json:"description" huma:"required,minLength=10" example:"Project focuses on modernizing the UI and streamlining the UX for our digital banking dashboard."`
-	Category        string                     `json:"category" huma:"required" example:"UI/UX Design"`
-	Industry        string                     `json:"industry,omitempty" example:"FinTech"`
-	Complexity      string                     `json:"complexity,omitempty" example:"intermediate"`
-	BudgetMinor     int64                      `json:"budget_minor" huma:"required,minimum=100000" doc:"Total quest budget in minor units (paise). ₹1,000 = 100000" example:"7500000"`
-	TimelineDays    int                        `json:"timeline_days" huma:"required,minimum=1" example:"20"`
-	QuestType       string                     `json:"quest_type,omitempty" example:"standard"`
-	ExperienceLevel string                     `json:"experience_level,omitempty" example:"senior"`
-	SoftSkills      []string                   `json:"soft_skills,omitempty"`
-	Languages       []CreateQuestLanguageInput `json:"languages,omitempty"`
-	Skills          []CreateQuestSkillInput    `json:"skills" huma:"required,minItems=1"`
-	// Milestones      []CreateQuestMilestoneInput `json:"milestones" huma:"required,minItems=1"`
+	Title           string                     `json:"title" required:"true" minLength:"3" maxLength:"100" example:"Website Redesign for FinTech Startup"`
+	Description     string                     `json:"description" required:"true" minLength:"10" maxLength:"5000" example:"Project focuses on modernizing the UI and streamlining the UX for our digital banking dashboard."`
+	Category        string                     `json:"category" required:"true" minLength:"1" maxLength:"100" example:"UI/UX Design"`
+	Industry        string                     `json:"industry,omitempty" maxLength:"100" example:"FinTech"`
+	Complexity      string                     `json:"complexity,omitempty" maxLength:"50" example:"intermediate"`
+	BudgetMinor     int64                      `json:"budget_minor" required:"true" minimum:"100000" doc:"Total quest budget in minor units (paise). ₹1,000 = 100000" example:"7500000"`
+	TimelineDays    int                        `json:"timeline_days" required:"true" minimum:"1" example:"20"`
+	QuestType       string                     `json:"quest_type,omitempty" maxLength:"50" example:"standard"`
+	ExperienceLevel string                     `json:"experience_level,omitempty" maxLength:"50" example:"senior"`
+	SoftSkills      []string                   `json:"soft_skills,omitempty" maxItems:"30" maxLength:"100"`
+	Languages       []CreateQuestLanguageInput `json:"languages,omitempty" maxItems:"50"`
+	Skills          []CreateQuestSkillInput    `json:"skills" required:"true" minItems:"1" maxItems:"50"`
 }
 
 // CreateQuestInput wraps the Huma request body.
@@ -65,12 +60,12 @@ type CreateQuestOutput struct {
 // ---------- Publish Quest ----------
 
 type PublishQuestBody struct {
-	FundingMethod string `json:"funding_method,omitempty" doc:"Client funding method (e.g., bank_transfer, escrow_deposit)" example:"escrow_deposit"`
-	FundEscrowNow *bool  `json:"fund_escrow_now,omitempty" doc:"Whether to deposit funds into escrow upon publish (defaults to true)"`
+	FundingMethod string `json:"funding_method,omitempty" maxLength:"50" doc:"DEPRECATED and ignored. Publishing has no funding prerequisite; escrow is funded per-milestone via the milestone fund endpoint." example:"escrow_deposit"`
+	FundEscrowNow *bool  `json:"fund_escrow_now,omitempty" doc:"DEPRECATED and ignored. No funds are moved at publish time."`
 }
 
 type PublishQuestInput struct {
-	ID   string           `path:"id" doc:"Quest UUID"`
+	ID   string           `path:"id" format:"uuid" doc:"Quest UUID"`
 	Body PublishQuestBody `json:"body,omitempty"`
 }
 
@@ -91,13 +86,19 @@ type PublishQuestOutput struct {
 // ---------- List Quests (Tier-Locked) ----------
 
 type ListQuestsInput struct {
-	Cursor     string  `query:"cursor" doc:"Cursor for pagination (UUID or ISO-8601 timestamp)"`
-	Limit      int     `query:"limit" doc:"Number of records to return (default 10, max 50)"`
-	Category   string  `query:"category" doc:"Filter by quest category"`
-	Complexity string  `query:"complexity" doc:"Filter by quest complexity (beginner, intermediate, advanced, enterprise)"`
-	MinBudget  float64 `query:"min_budget" doc:"Filter by minimum budget INR"`
-	MaxBudget  float64 `query:"max_budget" doc:"Filter by maximum budget INR"`
-	Status     string  `query:"status" doc:"Filter by status (open, in_progress, completed, etc.)"`
+	Cursor         string  `query:"cursor" maxLength:"100" doc:"Opaque pagination cursor (pass next_cursor from the previous page)"`
+	Limit          int     `query:"limit" minimum:"1" maximum:"50" doc:"Number of records to return (default 10, max 50)"`
+	Search         string  `query:"search" maxLength:"200" doc:"Case-insensitive match on quest title or description"`
+	Category       string  `query:"category" maxLength:"100" doc:"Filter by quest category"`
+	Complexity     string  `query:"complexity" maxLength:"50" doc:"Filter by quest complexity (beginner, intermediate, advanced, enterprise)"`
+	QuestType      string  `query:"quest_type" maxLength:"50" doc:"Filter by quest type (standard, emergency, long_term, multi_skill)"`
+	Skills         string  `query:"skills" maxLength:"500" doc:"Comma-separated skill names; matches quests requiring ANY of them"`
+	TimelineBucket string  `query:"timeline_bucket" enum:"under_7,7_15,15_30,30_plus" doc:"Filter by timeline bucket"`
+	ClientRank     string  `query:"client_rank" maxLength:"10" doc:"Filter by the posting client's rank"`
+	MinBudget      float64 `query:"min_budget" minimum:"0" doc:"Filter by minimum budget INR"`
+	MaxBudget      float64 `query:"max_budget" minimum:"0" doc:"Filter by maximum budget INR"`
+	Status         string  `query:"status" maxLength:"50" doc:"Filter by status (open, in_progress, completed, etc.)"`
+	Sort           string  `query:"sort" enum:"newest,budget_desc,budget_asc,emergency_first" doc:"Sort order (default newest)"`
 }
 
 type QuestListItem struct {
@@ -106,14 +107,20 @@ type QuestListItem struct {
 	Description     string     `json:"description" example:"Redesign of dashboard"`
 	Category        string     `json:"category" example:"UI/UX Design"`
 	Complexity      string     `json:"complexity" example:"intermediate"`
+	QuestType       string     `json:"quest_type" example:"standard"`
 	BudgetINR       float64    `json:"budget_inr" example:"75000"`
 	TimelineDays    int        `json:"timeline_days" example:"20"`
 	RequiredMinRank string     `json:"required_min_rank" example:"B"`
 	Status          string     `json:"status" example:"open"`
 	ClientID        string     `json:"client_id" example:"11111111-2222-3333-4444-555555555555"`
 	ClientName      string     `json:"client_name" example:"Acme Corp"`
+	ClientRank      string     `json:"client_rank" example:"A"`
 	Skills          []string   `json:"skills" example:"[\"Figma\", \"React\"]"`
 	MilestoneCount  int        `json:"milestone_count" example:"4"`
+	ApplicantsCount int        `json:"applicants_count" example:"12"`
+	ViewsCount      int64      `json:"views_count" example:"340"`
+	IsSaved         bool       `json:"is_saved" example:"false"`
+	MatchPercentage int        `json:"match_percentage" example:"66"`
 	PublishedAt     *time.Time `json:"published_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 }
@@ -132,7 +139,7 @@ type ListQuestsOutput struct {
 // ---------- Get Quest Details ----------
 
 type GetQuestDetailsInput struct {
-	ID string `path:"id" doc:"Quest UUID"`
+	ID string `path:"id" format:"uuid" doc:"Quest UUID"`
 }
 
 type QuestDetailMilestone struct {
@@ -174,6 +181,10 @@ type QuestDetailsResponse struct {
 	AcceptedPartyID *string                `json:"accepted_party_id,omitempty"`
 	Milestones      []QuestDetailMilestone `json:"milestones"`
 	Skills          []QuestDetailSkill     `json:"skills"`
+	ApplicantsCount int                    `json:"applicants_count"`
+	ViewsCount      int64                  `json:"views_count"`
+	IsSaved         bool                   `json:"is_saved"`
+	MatchPercentage int                    `json:"match_percentage"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 }
@@ -185,11 +196,11 @@ type GetQuestDetailsOutput struct {
 // ---------- Reject / Cancel Quest ----------
 
 type RejectQuestBody struct {
-	Reason string `json:"reason,omitempty" example:"Budget re-allocated"`
+	Reason string `json:"reason,omitempty" maxLength:"1000" example:"Budget re-allocated"`
 }
 
 type RejectQuestInput struct {
-	ID   string          `path:"id" doc:"Quest UUID"`
+	ID   string          `path:"id" format:"uuid" doc:"Quest UUID"`
 	Body RejectQuestBody `json:"body,omitempty"`
 }
 
@@ -205,30 +216,87 @@ type RejectQuestOutput struct {
 	Body RejectQuestResponse
 }
 
-// ---------- Accept Quest ----------
+// ---------- Update Quest (draft only) ----------
 
-type AcceptQuestBody struct {
-	PartyID string `json:"party_id,omitempty" doc:"Optional party UUID if Party Lead manages multiple parties"`
+type UpdateQuestBody struct {
+	Title           *string                     `json:"title,omitempty" minLength:"3" maxLength:"100"`
+	Description     *string                     `json:"description,omitempty" minLength:"10" maxLength:"5000"`
+	Category        *string                     `json:"category,omitempty" minLength:"1" maxLength:"100"`
+	Industry        *string                     `json:"industry,omitempty" maxLength:"100"`
+	Complexity      *string                     `json:"complexity,omitempty" maxLength:"50"`
+	BudgetMinor     *int64                      `json:"budget_minor,omitempty" minimum:"100000" doc:"Budget in paise; re-derives required_min_rank"`
+	TimelineDays    *int                        `json:"timeline_days,omitempty" minimum:"1"`
+	QuestType       *string                     `json:"quest_type,omitempty" maxLength:"50"`
+	ExperienceLevel *string                     `json:"experience_level,omitempty" maxLength:"50"`
+	SoftSkills      *[]string                   `json:"soft_skills,omitempty" maxItems:"30"`
+	Languages       *[]CreateQuestLanguageInput `json:"languages,omitempty" maxItems:"50"`
+	Skills          *[]CreateQuestSkillInput    `json:"skills,omitempty" maxItems:"50" doc:"When present, replaces the quest's skill list"`
 }
 
-type AcceptQuestInput struct {
-	ID   string          `path:"id" doc:"Quest UUID"`
-	Body AcceptQuestBody `json:"body,omitempty"`
+type UpdateQuestInput struct {
+	ID   string `path:"id" format:"uuid" doc:"Quest UUID"`
+	Body UpdateQuestBody
 }
 
-type AcceptQuestResponse struct {
-	QuestID       string    `json:"quest_id"`
-	PartyID       string    `json:"party_id"`
-	PartyName     string    `json:"party_name"`
-	Status        string    `json:"status"`
-	ChatChannelID string    `json:"chat_channel_id"`
-	TasksCreated  int       `json:"tasks_created"`
-	AcceptedAt    time.Time `json:"accepted_at"`
-	Message       string    `json:"message"`
+type UpdateQuestResponse struct {
+	QuestID         string    `json:"quest_id"`
+	Title           string    `json:"title"`
+	Status          string    `json:"status"`
+	BudgetMinor     int64     `json:"budget_minor"`
+	RequiredMinRank string    `json:"required_min_rank"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-type AcceptQuestOutput struct {
-	Status int `json:"-" huma:"status:200"`
-	Body   AcceptQuestResponse
+type UpdateQuestOutput struct {
+	Body UpdateQuestResponse
 }
 
+// ---------- Save / Bookmark Quest ----------
+
+type SaveQuestInput struct {
+	ID string `path:"id" format:"uuid" doc:"Quest UUID"`
+}
+
+type SaveQuestResponse struct {
+	QuestID string `json:"quest_id"`
+	Saved   bool   `json:"saved"`
+}
+
+type SaveQuestOutput struct {
+	Body SaveQuestResponse
+}
+
+type ListSavedQuestsInput struct{}
+
+type ListSavedQuestsOutput struct {
+	Body ListQuestsResponse
+}
+
+// ---------- Freelancer Quest Board Summary ----------
+
+type QuestBoardSummaryInput struct{}
+
+type QuestBoardKPIs struct {
+	AppliedCount      int `json:"applied_count"`
+	UnderReviewCount  int `json:"under_review_count"`
+	ShortlistedCount  int `json:"shortlisted_count"`
+	ActiveQuestsCount int `json:"active_quests_count"`
+}
+
+type QuestBoardApplicationItem struct {
+	QuestID    string    `json:"quest_id"`
+	QuestTitle string    `json:"quest_title"`
+	BudgetINR  float64   `json:"budget_inr"`
+	Status     string    `json:"status"`
+	AppliedAt  time.Time `json:"applied_at"`
+}
+
+type QuestBoardSummaryResponse struct {
+	KPIs               QuestBoardKPIs              `json:"kpis"`
+	RecentApplications []QuestBoardApplicationItem `json:"recent_applications"`
+	RecommendedQuests  []QuestListItem             `json:"recommended_quests"`
+}
+
+type QuestBoardSummaryOutput struct {
+	Body QuestBoardSummaryResponse
+}

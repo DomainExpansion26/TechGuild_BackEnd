@@ -10,7 +10,7 @@ import (
 
 func RegisterPaymentMethodRoutes(api huma.API, c *controllers.PaymentMethodController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
-	bearer := []map[string][]string{{"bearerAuth": {}}}
+	bearer := []map[string][]string{{"BearerAuth": {}}}
 
 	// ============================================================
 	// Client Payment Methods (money IN)

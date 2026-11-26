@@ -10,10 +10,11 @@ import (
 type ApplicationStatus string
 
 const (
-	ApplicationPending   ApplicationStatus = "pending"
-	ApplicationAccepted  ApplicationStatus = "accepted"
-	ApplicationRejected  ApplicationStatus = "rejected"
-	ApplicationWithdrawn ApplicationStatus = "withdrawn"
+	ApplicationPending     ApplicationStatus = "pending"
+	ApplicationShortlisted ApplicationStatus = "shortlisted"
+	ApplicationAccepted    ApplicationStatus = "accepted"
+	ApplicationRejected    ApplicationStatus = "rejected"
+	ApplicationWithdrawn   ApplicationStatus = "withdrawn"
 )
 
 // QuestApplication represents a bid/application by a freelancer OR an agency (party).

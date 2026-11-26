@@ -95,7 +95,7 @@ func SendResetPasswordEmail(cfg *config.Config, toEmail string, token string) er
 				Reset Password
 			</a>
 			<br><br>
-			<p>This link is valid for 24 hours.</p>
+			<p>This link is valid for 30 minutes.</p>
 			<p>If you did not request this, please ignore this email.</p>
 			<br>
 			<p>Regards,<br>TechGuild Team</p>

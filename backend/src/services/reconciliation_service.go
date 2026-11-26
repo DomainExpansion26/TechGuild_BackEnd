@@ -2,8 +2,8 @@ package services
 
 import (
 	"log"
-	"os"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
 
@@ -16,10 +16,17 @@ type ReconciliationService struct {
 	rzpClient   *razorpay.Client
 }
 
-func NewReconciliationService(fundingSvc *MilestoneFundingService) *ReconciliationService {
-	// .env se Razorpay keys uthayenge
-	keyID := os.Getenv("RAZORPAY_KEY_ID")
-	keySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+func NewReconciliationService(cfg *config.Config, fundingSvc *MilestoneFundingService) *ReconciliationService {
+	// Credentials come from config (validated at startup) with the same RazorpayX
+	// fallback the payment-provider factory uses — previously this read
+	// os.Getenv directly and silently got nothing.
+	keyID, keySecret := cfg.RazorpayKeyID, cfg.RazorpayKeySecret
+	if keyID == "" {
+		keyID = cfg.RazorpayXKeyID
+	}
+	if keySecret == "" {
+		keySecret = cfg.RazorpayXKeySecret
+	}
 
 	var client *razorpay.Client
 	if keyID != "" && keySecret != "" {
@@ -78,11 +85,21 @@ func (s *ReconciliationService) reconcileSinglePayment(p models.Payment) {
 	}
 
 	if status == "paid" {
-		// 3. Payments list nikal kar Payment ID extract karo
+		// 3. Payments list nikal kar Payment ID extract karo.
+		// Har assertion comma-ok hai: malformed Razorpay response se background
+		// goroutine panic nahi hona chahiye.
 		paymentsList, ok := orderData["payments"].([]interface{})
 		if ok && len(paymentsList) > 0 {
-			paymentData := paymentsList[0].(map[string]interface{})
-			paymentID := paymentData["id"].(string)
+			paymentData, ok := paymentsList[0].(map[string]interface{})
+			if !ok {
+				log.Printf("[Reconciliation] Order %s payments[0] is malformed. Skipping.", *p.ProviderOrderID)
+				return
+			}
+			paymentID, ok := paymentData["id"].(string)
+			if !ok || paymentID == "" {
+				log.Printf("[Reconciliation] Order %s is paid but payments[0].id is missing. Skipping.", *p.ProviderOrderID)
+				return
+			}
 
 			// 4. Call Funding Service to mark it as captured
 			_, err := s.fundingSvc.MarkPaymentCaptured(*p.ProviderOrderID, paymentID)

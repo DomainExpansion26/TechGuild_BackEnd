@@ -7,13 +7,13 @@ import "time"
 // ============================================================
 
 type RequestRefundBody struct {
-	Reason         string `json:"reason" huma:"required,minLength=5,maxLength=500" example:"Freelancer did not deliver as agreed"`
-	IdempotencyKey string `json:"idempotency_key" huma:"required,minLength=5,maxLength=255" example:"refund-ms-f4aa-001"`
+	Reason         string `json:"reason" required:"true" minLength:"5" maxLength:"500" example:"Freelancer did not deliver as agreed"`
+	IdempotencyKey string `json:"idempotency_key" required:"true" minLength:"5" maxLength:"255" example:"refund-ms-f4aa-001"`
 }
 
 type RequestRefundInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        RequestRefundBody
 }
 
@@ -55,8 +55,8 @@ type RequestRefundOutput struct {
 // ============================================================
 
 type GetRefundInput struct {
-	QuestID     string `path:"id"`
-	MilestoneID string `path:"milestone_id"`
+	QuestID     string `path:"id" format:"uuid"`
+	MilestoneID string `path:"milestone_id" format:"uuid"`
 }
 
 type GetRefundOutput struct {

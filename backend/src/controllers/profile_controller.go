@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -35,22 +36,7 @@ func (c *ProfileController) CreateIndividualProfileHandler(ctx context.Context, 
 	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateIndividualProfile(userID, input.Body)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileAlreadyExists) {
-			return nil, huma.Error409Conflict(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.IndividualProfileOutput{
@@ -72,22 +58,7 @@ func (c *ProfileController) UpdateIndividualProfileHandler(ctx context.Context, 
 	slug, err := profileService.UpdateIndividualProfile(userID, input.Body)
 
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound("profile not found, create it first")
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UpdateIndividualProfileOutput{
@@ -108,22 +79,7 @@ func (c *ProfileController) CreateAgencyProfileHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateAgencyProfile(userID, input.Body)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileAlreadyExists) {
-			return nil, huma.Error409Conflict(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.AgencyProfileOutput{
@@ -142,22 +98,7 @@ func (c *ProfileController) UpdateAgencyProfileHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.UpdateAgencyProfile(userID, input.Body)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound("profile not found, create it first")
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UpdateAgencyProfileOutput{
@@ -177,22 +118,7 @@ func (c *ProfileController) CreateClientProfileHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.CreateClientProfile(userID, input.Body)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileAlreadyExists) {
-			return nil, huma.Error409Conflict(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.ClientProfileOutput{
@@ -211,22 +137,7 @@ func (c *ProfileController) UpdateClientProfileHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	slug, err := profileService.UpdateClientProfile(userID, input.Body)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound("profile not found, create it first")
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UpdateClientProfileOutput{
@@ -247,10 +158,7 @@ func (c *ProfileController) GetMyProfileHandler(ctx context.Context, input *dto.
 	profileService := services.NewProfileService(c.cfg)
 	profile, err := profileService.GetMyProfile(userID)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.GetMyProfileOutput{Body: *profile}, nil
@@ -362,16 +270,7 @@ func (c *ProfileController) DeleteAvatarHandler(ctx context.Context, input *dto.
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteAvatar(userID); err != nil {
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrNothingToDelete) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) { // ← YE 3 LINE ADD KARO
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.DeleteAvatarOutput{
@@ -387,19 +286,7 @@ func (c *ProfileController) DeleteLogoHandler(ctx context.Context, input *dto.De
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteLogo(userID); err != nil {
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrNothingToDelete) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.DeleteLogoOutput{
@@ -415,16 +302,7 @@ func (c *ProfileController) DeleteResumeHandler(ctx context.Context, input *dto.
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteResume(userID); err != nil {
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrNothingToDelete) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.DeleteResumeOutput{
@@ -438,10 +316,10 @@ func (c *ProfileController) GetPublicProfileHandler(ctx context.Context, input *
 	profileService := services.NewProfileService(c.cfg)
 	profile, err := profileService.GetPublicProfile(input.Slug)
 	if err != nil {
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError(err.Error())
+		if errors.Is(err, services.ErrProfileNotFound) {
+			return nil, huma.Error404NotFound("profile not found")
 		}
-		return nil, huma.Error404NotFound(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.GetPublicProfileOutput{Body: *profile}, nil
@@ -458,10 +336,7 @@ func (c *ProfileController) GetUserPointsHandler(ctx context.Context, input *dto
 	profileService := services.NewProfileService(c.cfg)
 	points, err := profileService.GetUserPoints(userID)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.GetUserPointsOutput{Body: *points}, nil
@@ -490,10 +365,8 @@ func (c *ProfileController) ExportProfileHandler(ctx context.Context, input *dto
 		if errors.Is(err, services.ErrInvalidAccountType) {
 			return nil, huma.Error400BadRequest("invalid account type, cannot export profile")
 		}
-		if errors.Is(err, services.ErrInternal) {
-			return nil, huma.Error500InternalServerError("failed to export user data")
-		}
-		return nil, huma.Error500InternalServerError("failed to export user data: " + err.Error())
+		log.Printf("[profile] export failed user=%s: %v", userID, err)
+		return nil, huma.Error500InternalServerError("failed to export user data")
 	}
 
 	return &dto.ExportProfileOutput{Body: *result}, nil
@@ -505,7 +378,7 @@ func (c *ProfileController) CheckSlugHandler(ctx context.Context, input *dto.Che
 	profileService := services.NewProfileService(c.cfg)
 	resp, err := profileService.CheckSlugAvailability(input.Slug)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.CheckSlugOutput{Body: *resp}, nil
@@ -598,7 +471,12 @@ func mapProfileError(err error) error {
 		return huma.Error401Unauthorized("invalid password")
 	case errors.Is(err, services.ErrSessionNotFound):
 		return huma.Error404NotFound("session not found")
+	case errors.Is(err, services.ErrPasswordNotSet):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, services.ErrProfilePrivate):
+		return huma.Error404NotFound("this profile is private")
 	default:
-		return huma.Error500InternalServerError(err.Error())
+		log.Printf("[profile] unhandled error: %v", err)
+		return huma.Error500InternalServerError("internal server error")
 	}
 }

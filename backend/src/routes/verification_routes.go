@@ -2,7 +2,9 @@ package routes
 
 import (
 	"techguild-backend/src/controllers"
+	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
+	"techguild-backend/src/utils"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -31,6 +33,17 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Verification"},
 		Summary:     "Step 1: Save Individual Info (Aadhaar/PAN)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateIndividualInfoRequest{
+						DocType:  "AADHAAR",
+						IDNumber: "123456789012",
+					},
+				},
+			},
+		},
 	}, c.UpdateIndividualInfoHandler)
 
 	huma.Register(api, huma.Operation{
@@ -40,6 +53,21 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Verification"},
 		Summary:     "Step 1: Save Business Info",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateBusinessInfoRequest{
+						CompanyName:        "Nimbus Analytics",
+						GSTNumber:          "27ABCDE1234F1Z5",
+						PANNumber:          "ABCDE1234F",
+						RegistrationNumber: "U12345MH2024PTC123456",
+						Website:            "https://nimbusanalytics.com",
+						Country:            "India",
+					},
+				},
+			},
+		},
 	}, c.UpdateBusinessInfoHandler)
 
 	huma.Register(api, huma.Operation{
@@ -49,16 +77,31 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Verification"},
 		Summary:     "Step 3: Save Bank Details",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateBankDetailsRequest{
+						BankName:          "HDFC Bank",
+						AccountHolderName: "Nimbus Analytics Pvt Ltd",
+						AccountNumber:     "12345678901234",
+						IFSCCode:          "HDFC0001234",
+					},
+				},
+			},
+		},
 	}, c.UpdateBankDetailsHandler)
 
 	// Upload Endpoint
 	huma.Register(api, huma.Operation{
-		OperationID: "upload-verification-document",
-		Method:      "POST",
-		Path:        "/v1/verification/upload",
-		Tags:        []string{"Verification"},
-		Summary:     "Step 2: Upload KYC Document",
-		Middlewares: authMw,
+		OperationID:  "upload-verification-document",
+		Method:       "POST",
+		Path:         "/v1/verification/upload",
+		Tags:         []string{"Verification"},
+		Summary:      "Step 2: Upload KYC Document",
+		Description:  "Multipart upload with two form fields: `document_type` (one of aadhaar, govt_id, selfie, gst_certificate, incorporation_certificate, pan_card, business_registration, cancelled_cheque) and `file` (PDF or image: JPEG, PNG, WebP). Maximum file size: 2 MiB.",
+		MaxBodyBytes: utils.MaxUploadBytes,
+		Middlewares:  authMw,
 	}, c.UploadDocumentHandler)
 
 	// Submit Endpoint
@@ -124,6 +167,19 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
 		Summary:     "Bulk approve auto-eligible records (transactional, audited)",
 		Middlewares: adminMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.BulkApproveRequest{
+						VerificationIDs: []string{
+							"11111111-1111-1111-1111-111111111111",
+							"22222222-2222-2222-2222-222222222222",
+						},
+					},
+				},
+			},
+		},
 	}, c.AdminBulkApproveHandler)
 
 	huma.Register(api, huma.Operation{
@@ -133,6 +189,18 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
 		Summary:     "Single approve/reject from manual review (audited)",
 		Middlewares: adminMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.AdminManualActionRequest{
+						Action:          "REJECT",
+						RejectionReason: "PAN details are illegible; please re-upload a clearer document.",
+						ManualNote:      "Rejected during manual review: document quality insufficient.",
+					},
+				},
+			},
+		},
 	}, c.AdminManualActionHandler)
 
 	huma.Register(api, huma.Operation{
@@ -142,5 +210,15 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
 		Summary:     "Escalate auto-eligible record to manual review",
 		Middlewares: adminMw,
+		RequestBody: &huma.RequestBody{
+			Required: true, // false only when EVERY body field is optional
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.AdminEscalateRequest{
+						Reason: "AI confidence is borderline; needs a human check before the auto-approve window closes.",
+					},
+				},
+			},
+		},
 	}, c.AdminEscalateHandler)
 }

@@ -53,6 +53,7 @@ paddle_pdx_cache/
 # ==========================================
 # AI Tools, IDEs & OS
 # ==========================================
+.archify/
 .opencode/
 .claude/
 .cursor/
@@ -103,3 +104,15 @@ node_modules/
 KYC_PIPELINE_REVIEW.md
 KYC_VERIFICATION_FILE_FLOW_REVIEW.md
 LOCAL_TESTING.md
+
+.npmrc
+AUTH_OAUTH_FLOW_REVIEW.md
+QUEST_MILESTONE_MONEY_AS_IS_REPORT.md
+check-orbital-flow.mjs
+check-story-walkthrough.mjs
+check-studio-story.mjs
+
+payment.html
+TECHGUILD_3D_FLOW.html
+TECHGUILD_ORBITAL_SYSTEM.html
+techguild-3d-architecture.html

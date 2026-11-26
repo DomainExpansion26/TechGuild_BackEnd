@@ -9,11 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PaymentRepository interface {
 	Create(payment *models.Payment) error
 	GetByID(id uuid.UUID) (*models.Payment, error)
+	GetByIDForUpdate(id uuid.UUID) (*models.Payment, error)
 	GetByProviderPaymentID(provider, providerPaymentID string) (*models.Payment, error)
 	GetByIdempotencyKey(key string) (*models.Payment, error)
 	UpdateStatus(id uuid.UUID, status models.PaymentStatus) error
@@ -62,6 +64,21 @@ func (r *paymentRepository) GetByProviderPaymentID(provider, providerPaymentID s
 	var p models.Payment
 	err := r.db.
 		Where("provider = ? AND provider_payment_id = ?", provider, providerPaymentID).
+		First(&p).Error
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetByIDForUpdate — row-level lock (SELECT ... FOR UPDATE) inside an existing
+// transaction. Callers re-read the payment here because their status guards ran
+// outside the tx, where a concurrent webhook could slip in between.
+func (r *paymentRepository) GetByIDForUpdate(id uuid.UUID) (*models.Payment, error) {
+	var p models.Payment
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", id).
 		First(&p).Error
 	if err != nil {
 		return nil, err

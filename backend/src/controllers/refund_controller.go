@@ -67,10 +67,12 @@ func mapRefundError(err error) error {
 		return huma.Error403Forbidden(err.Error())
 
 	case errors.Is(err, services.ErrRefInvalidState),
-		errors.Is(err, services.ErrRefReasonRequired):
+		errors.Is(err, services.ErrRefReasonRequired),
+		errors.Is(err, services.ErrRefEscrowNotHeld):
 		return huma.Error400BadRequest(err.Error())
 
-	case errors.Is(err, services.ErrRefAlreadyRefunded):
+	case errors.Is(err, services.ErrRefAlreadyRefunded),
+		errors.Is(err, services.ErrRefStateRace):
 		return huma.Error409Conflict(err.Error())
 
 	case errors.Is(err, services.ErrRefProviderFailed),

@@ -9,7 +9,7 @@ import (
 
 func RegisterWalletRoutes(api huma.API, c *controllers.WalletController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
-	bearer := []map[string][]string{{"bearerAuth": {}}}
+	bearer := []map[string][]string{{"BearerAuth": {}}}
 	tags := []string{"Wallet"}
 
 	huma.Register(api, huma.Operation{

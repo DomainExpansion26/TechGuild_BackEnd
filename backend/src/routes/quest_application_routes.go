@@ -4,6 +4,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"techguild-backend/src/controllers"
+	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
 )
 
@@ -24,6 +25,20 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		Tags:        tags,
 		Summary:     "Apply/bid to a quest (freelancer or party lead)",
 		Middlewares: generalAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.ApplyQuestBody{
+						CoverLetter:       "I have 5+ years in UI/UX and shipped multiple FinTech dashboards.",
+						ProposedBudget:    72000,
+						Currency:          "INR",
+						EstimatedDuration: "18 days",
+						PartyID:           "11111111-1111-1111-1111-111111111111",
+					},
+				},
+			},
+		},
 	}, controllers.ApplyQuestHandler)
 
 	// Client views applications; freelancer views own
@@ -57,6 +72,16 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		Tags:        tags,
 		Summary:     "Reject application (client only)",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.RejectApplicationBody{
+						Reason: "Looking for more React experience",
+					},
+				},
+			},
+		},
 	}, controllers.RejectApplicationHandler)
 
 	// Freelancer withdraws

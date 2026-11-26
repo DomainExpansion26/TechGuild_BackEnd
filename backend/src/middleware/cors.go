@@ -37,7 +37,7 @@ func CORS(cfg *config.Config) gin.HandlerFunc {
 		AllowOriginFunc: func(origin string) bool {
 			return vercelPreviewRegex.MatchString(origin)
 		},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 	})

@@ -110,9 +110,6 @@ type Config struct {
 	RedisUsername string
 	RedisPassword string
 
-	JWTSecret        string
-	JWTRefreshSecret string
-
 	FrontendURL      string
 	ZudokuURL        string
 	GeoNamesUsername string
@@ -142,6 +139,9 @@ type Config struct {
 	// KYC Phase 3: Go router policy + interval. Loaded from env in env.go.
 	KYCPolicy             KYCPolicy
 	RouterIntervalSeconds int
+
+	// Payment reconciliation poll interval, in seconds. Loaded from env in env.go.
+	ReconciliationIntervalSeconds int
 
 	// KYC Phase 4: client-IP resolution. Loaded from env in env.go.
 	KYCIPPepper    string // env: KYC_IP_HASH_PEPPER, required in production

@@ -115,11 +115,19 @@ func (s *OAuthService) GoogleLogin(req dto.GoogleLoginRequest, device, ipAddress
 	}
 
 	// user now guaranteed non-nil (new, raced-and-refetched, or pre-existing)
+	// M2: an email-owned account must not be silently claimed by OAuth —
+	// require the user to sign in with their password first
+	if user.OAuthID == nil && user.PasswordHash != "" {
+		return nil, "", errors.New("an account with this email already exists; please sign in with your password first")
+	}
 	if user.OAuthID == nil {
 		user.OAuthProvider = stringPtr("google")
 		user.OAuthID = stringPtr(req.GoogleID)
 	}
-	if user.Status == models.StatusPendingDeletion {
+	if !user.EmailVerified {
+		user.EmailVerified = true
+	}
+	if user.Status == models.StatusPendingDeletion || user.Status == models.StatusDeactivated {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
 	}
@@ -233,11 +241,19 @@ func (s *OAuthService) GitHubLogin(req dto.GitHubLoginRequest, device, ipAddress
 		}
 	}
 
+	// M2: an email-owned account must not be silently claimed by OAuth —
+	// require the user to sign in with their password first
+	if user.OAuthID == nil && user.PasswordHash != "" {
+		return nil, "", errors.New("an account with this email already exists; please sign in with your password first")
+	}
 	if user.OAuthID == nil {
 		user.OAuthProvider = stringPtr("github")
 		user.OAuthID = stringPtr(req.GitHubID)
 	}
-	if user.Status == models.StatusPendingDeletion {
+	if !user.EmailVerified {
+		user.EmailVerified = true
+	}
+	if user.Status == models.StatusPendingDeletion || user.Status == models.StatusDeactivated {
 		user.Status = models.StatusActive
 		user.ScheduledDeletionDate = nil
 	}

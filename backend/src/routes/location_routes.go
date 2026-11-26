@@ -11,7 +11,7 @@ func RegisterLocationRoutes(api huma.API, c *controllers.LocationController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-location-countries",
 		Method:      "GET",
 		Path:        "/v1/locations/countries",
@@ -21,7 +21,7 @@ func RegisterLocationRoutes(api huma.API, c *controllers.LocationController) {
 	}, c.GetCountries)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "search-location-cities",
 		Method:      "GET",
 		Path:        "/v1/locations/cities",

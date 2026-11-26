@@ -4,14 +4,18 @@ import (
 	"log"
 	"time"
 
+	"techguild-backend/src/config"
 	"techguild-backend/src/services"
 )
 
-func StartReconciliationJob(fundingSvc *services.MilestoneFundingService) {
-	reconSvc := services.NewReconciliationService(fundingSvc)
+func StartReconciliationJob(cfg *config.Config, fundingSvc *services.MilestoneFundingService) {
+	reconSvc := services.NewReconciliationService(cfg, fundingSvc)
 
-	// Production me 10 * time.Minute karna
-	ticker := time.NewTicker(10 * time.Second)
+	interval := cfg.ReconciliationIntervalSeconds
+	if interval <= 0 {
+		interval = 180
+	}
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 
 	go func() {
 		for range ticker.C {
@@ -19,5 +23,5 @@ func StartReconciliationJob(fundingSvc *services.MilestoneFundingService) {
 		}
 	}()
 
-	log.Println("[Job] Reconciliation job started")
+	log.Printf("[Job] Reconciliation job started (interval %ds)", interval)
 }

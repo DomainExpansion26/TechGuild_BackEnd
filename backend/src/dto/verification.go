@@ -21,15 +21,15 @@ type UpdateBusinessInfoRequest struct {
 	CompanyName        string `json:"company_name" minLength:"2" maxLength:"255" required:"true" example:"Nimbus Analytics"`
 	GSTNumber          string `json:"gst_number" pattern:"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$" required:"true" example:"27ABCDE1234F1Z5"`
 	PANNumber          string `json:"pan_number" pattern:"^[A-Z]{5}[0-9]{4}[A-Z]{1}$" required:"true" example:"ABCDE1234F"`
-	RegistrationNumber string `json:"registration_number" example:"U12345MH2024PTC123456"`
-	Website            string `json:"website" format:"uri" example:"https://nimbusanalytics.com"`
-	Country            string `json:"country" required:"true" example:"India"`
+	RegistrationNumber string `json:"registration_number,omitempty" maxLength:"100" example:"U12345MH2024PTC123456"`
+	Website            string `json:"website,omitempty" format:"uri" maxLength:"255" example:"https://nimbusanalytics.com"`
+	Country            string `json:"country" required:"true" minLength:"1" maxLength:"100" example:"India"`
 }
 
 // Step 3: Bank Details
 type UpdateBankDetailsRequest struct {
-	BankName          string `json:"bank_name" required:"true" example:"HDFC Bank"`
-	AccountHolderName string `json:"account_holder_name" required:"true" example:"Nimbus Analytics Pvt Ltd"`
+	BankName          string `json:"bank_name" required:"true" minLength:"1" maxLength:"150" example:"HDFC Bank"`
+	AccountHolderName string `json:"account_holder_name" required:"true" minLength:"1" maxLength:"150" example:"Nimbus Analytics Pvt Ltd"`
 	AccountNumber     string `json:"account_number" minLength:"6" maxLength:"20" required:"true" example:"12345678901234"`
 	IFSCCode          string `json:"ifsc_code" pattern:"^[A-Z]{4}0[A-Z0-9]{6}$" required:"true" example:"HDFC0001234"`
 }
@@ -43,7 +43,7 @@ type UploadDocumentForm struct {
 // Admin Action
 type AdminReviewRequest struct {
 	Action          string `json:"action" enum:"APPROVE,REJECT" required:"true"`
-	RejectionReason string `json:"rejection_reason,omitempty"`
+	RejectionReason string `json:"rejection_reason,omitempty" maxLength:"1000"`
 }
 
 // ==========================================
@@ -125,14 +125,14 @@ func (r *ClientAddrResolver) Resolve(ctx huma.Context) []error {
 
 type SubmitVerificationInput struct {
 	ClientAddrResolver
-	ForwardedFor string `header:"X-Forwarded-For"`
-	UserAgent    string `header:"User-Agent"`
+	ForwardedFor string `header:"X-Forwarded-For" maxLength:"255"`
+	UserAgent    string `header:"User-Agent" maxLength:"512"`
 }
 type SubmitVerificationOutput struct{ Body VerificationMessageResponse }
 
 // Admin
 type AdminReviewInput struct {
-	ID   string `path:"id"`
+	ID   string `path:"id" format:"uuid"`
 	Body AdminReviewRequest
 }
 type AdminReviewOutput struct{ Body VerificationMessageResponse }
@@ -231,7 +231,7 @@ type AdminVerificationDetailResponse struct {
 // ---- Requests ----
 
 type BulkApproveRequest struct {
-	VerificationIDs []string `json:"verification_ids" required:"true" minItems:"1" maxItems:"100" doc:"Verification record IDs to bulk approve"`
+	VerificationIDs []string `json:"verification_ids" required:"true" minItems:"1" maxItems:"100" format:"uuid" doc:"Verification record IDs to bulk approve"`
 }
 
 type BulkApproveResponse struct {
@@ -241,28 +241,28 @@ type BulkApproveResponse struct {
 
 type AdminManualActionRequest struct {
 	Action          string `json:"action" enum:"APPROVE,REJECT" required:"true" doc:"Approve or reject the record"`
-	RejectionReason string `json:"rejection_reason,omitempty" doc:"Required when action is REJECT"`
-	ManualNote      string `json:"manual_note,omitempty" doc:"Optional internal note recorded in the audit trail"`
+	RejectionReason string `json:"rejection_reason,omitempty" maxLength:"1000" doc:"Required when action is REJECT"`
+	ManualNote      string `json:"manual_note,omitempty" maxLength:"1000" doc:"Optional internal note recorded in the audit trail"`
 }
 
 type AdminEscalateRequest struct {
-	Reason string `json:"reason" required:"true" maxLength:"500" doc:"Why the admin wants human review before the auto-approve window"`
+	Reason string `json:"reason" required:"true" minLength:"1" maxLength:"500" doc:"Why the admin wants human review before the auto-approve window"`
 }
 
 // ---- Huma wrappers ----
 
 type GetAutoEligibleQueueInput struct {
-	Limit       int     `query:"limit" default:"20" doc:"Max items (default 20, max 100)"`
-	Offset      int     `query:"offset" default:"0" doc:"Offset items"`
-	MinAgeHours float64 `query:"min_age_hours" default:"24" doc:"Only include records whose ML completion is at least this many hours old"`
+	Limit       int     `query:"limit" default:"20" minimum:"1" maximum:"100" doc:"Max items (default 20, max 100)"`
+	Offset      int     `query:"offset" default:"0" minimum:"0" doc:"Offset items"`
+	MinAgeHours float64 `query:"min_age_hours" default:"24" minimum:"0" doc:"Only include records whose ML completion is at least this many hours old"`
 }
 type GetAutoEligibleQueueOutput struct{ Body GetAutoEligibleQueueResponse }
 
 type GetManualReviewQueueInput struct {
 	SortBy  string `query:"sort_by" default:"submitted_at" enum:"submitted_at,liveness_score,face_similarity" doc:"Weakest-first sorting uses the AI scores"`
 	SortDir string `query:"sort_dir" default:"asc" enum:"asc,desc"`
-	Limit   int    `query:"limit" default:"20" doc:"Max items (default 20, max 100)"`
-	Offset  int    `query:"offset" default:"0" doc:"Offset items"`
+	Limit   int    `query:"limit" default:"20" minimum:"1" maximum:"100" doc:"Max items (default 20, max 100)"`
+	Offset  int    `query:"offset" default:"0" minimum:"0" doc:"Offset items"`
 }
 type GetManualReviewQueueOutput struct{ Body GetManualReviewQueueResponse }
 

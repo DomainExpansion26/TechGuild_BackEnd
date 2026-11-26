@@ -4,6 +4,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"techguild-backend/src/controllers"
+	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
 )
 
@@ -74,9 +75,22 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Method:      "POST",
 		Path:        "/v1/client/task-management/quests/{quest_id}/milestones",
 		Tags:        tags,
-		Summary:     "Dynamically add a new milestone to an active quest",
-		Description: "Allows client to add a new deliverable milestone with amount, start date, and due date.",
+		Summary:     "DEPRECATED — use POST /v1/quests/{id}/milestones",
+		Description: "DEPRECATED. Returns 410 Gone. Milestones are created by the assigned freelancer via POST /v1/quests/{id}/milestones and must go through the review/agreement/funding flow.",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.AddMilestoneRequestBody{
+						Title:       "Responsive Design & Mobile Optimization",
+						Description: "Complete responsive layouts for tablet and mobile.",
+						Amount:      10000,
+						DueDays:     7,
+					},
+				},
+			},
+		},
 	}, controllers.AddMilestoneHandler)
 
 	// 6. Delete Milestone (Modal)
@@ -87,7 +101,7 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Path:        "/v1/client/task-management/milestones/{milestone_id}",
 		Tags:        tags,
 		Summary:     "Delete a milestone and its associated tasks",
-		Description: "Removes a milestone from an active quest. Blocked if the milestone is already approved.",
+		Description: "Removes a milestone from an active quest. Only milestones in draft or revision_requested state can be deleted.",
 		Middlewares: clientAuthMw,
 	}, controllers.DeleteMilestoneTMDHandler)
 
@@ -110,9 +124,19 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Method:      "POST",
 		Path:        "/v1/client/task-management/milestones/{milestone_id}/approve",
 		Tags:        tags,
-		Summary:     "Approve a submitted milestone",
-		Description: "Marks milestone as approved, records client feedback, and advances overall quest completion.",
+		Summary:     "DEPRECATED — use POST /v1/quests/{id}/milestones/{milestone_id}/release",
+		Description: "DEPRECATED. Returns 410 Gone. A milestone is marked released only by the escrow release flow (POST /v1/quests/{id}/milestones/{milestone_id}/release), which moves money into the freelancer wallet.",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.ApproveMilestoneTMDRequestBody{
+						Feedback: "Deliverables approved and tested",
+					},
+				},
+			},
+		},
 	}, controllers.ApproveMilestoneTMDHandler)
 
 	// 9. Cancel Milestone Approval (Modal)
@@ -122,9 +146,19 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Method:      "POST",
 		Path:        "/v1/client/task-management/milestones/{milestone_id}/cancel-approval",
 		Tags:        tags,
-		Summary:     "Cancel/revert milestone approval",
-		Description: "Reverts an approved milestone back to in_progress. Requires client to provide a mandatory reason.",
+		Summary:     "DEPRECATED — no longer supported",
+		Description: "DEPRECATED. Returns 410 Gone. Releasing a milestone moves money to the freelancer wallet and cannot be reverted through this endpoint.",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.CancelMilestoneApprovalTMDRequestBody{
+						Reason: "Revisions required on mobile layouts",
+					},
+				},
+			},
+		},
 	}, controllers.CancelMilestoneApprovalTMDHandler)
 
 	// 10. Approve Quest (Modal)
@@ -135,8 +169,19 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Path:        "/v1/client/task-management/quests/{quest_id}/approve",
 		Tags:        tags,
 		Summary:     "Final sign-off and quest completion",
-		Description: "Marks the entire quest as completed. Requires 100% of milestones to be approved, and collects rating and review.",
+		Description: "Marks the entire quest as completed. Requires every milestone to be released AND fully settled (MilestonePayment released + EscrowTransaction released), and collects rating and review.",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.ApproveQuestTMDRequestBody{
+						Rating:   5,
+						Feedback: "Outstanding work delivered on time",
+					},
+				},
+			},
+		},
 	}, controllers.ApproveQuestTMDHandler)
 
 	// 11. Cancel Quest Approval (Dispute/Reopen)
@@ -149,6 +194,16 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Summary:     "Cancel quest approval and reopen quest",
 		Description: "Reverts a completed quest back to in_progress with a required justification reason.",
 		Middlewares: clientAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.CancelQuestApprovalTMDRequestBody{
+						Reason: "Post-delivery integration defect requires patch",
+					},
+				},
+			},
+		},
 	}, controllers.CancelQuestApprovalTMDHandler)
 
 	// 12. Recent Activities Drawer
@@ -171,8 +226,21 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Path:        "/v1/client/task-management/milestones/{milestone_id}/tasks",
 		Tags:        tags,
 		Summary:     "Create a task under a milestone",
-		Description: "Creates an actionable task under a milestone.",
+		Description: "Creates an actionable task under a milestone. Caller must be the quest client or the assigned freelancer, and the milestone must be in draft, revision_in_progress, or work_in_progress.",
 		Middlewares: generalAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.CreateMilestoneTaskRequestBody{
+						Title:       "Navbar Wireframe",
+						Description: "Design responsive navigation component",
+						AssigneeID:  ptr("11111111-1111-1111-1111-111111111111"),
+						Status:      "todo",
+					},
+				},
+			},
+		},
 	}, controllers.CreateMilestoneTaskHandler)
 
 	// 14. Update Task Status (Operational)
@@ -183,7 +251,17 @@ func RegisterTaskManagementRoutes(api huma.API) {
 		Path:        "/v1/client/task-management/tasks/{task_id}/status",
 		Tags:        tags,
 		Summary:     "Update status of a task",
-		Description: "Updates task status to todo, in_progress, or completed.",
+		Description: "Updates task status to todo, in_progress, or completed. Caller must be the quest client or the assigned freelancer, and the parent milestone must be in draft, revision_in_progress, or work_in_progress.",
 		Middlewares: generalAuthMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateTaskStatusRequestBody{
+						Status: "in_progress",
+					},
+				},
+			},
+		},
 	}, controllers.UpdateTaskStatusHandler)
 }

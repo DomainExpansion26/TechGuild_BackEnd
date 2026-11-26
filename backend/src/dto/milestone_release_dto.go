@@ -7,12 +7,12 @@ import "time"
 // ============================================================
 
 type SubmitForReleaseBody struct {
-	Note string `json:"note,omitempty" example:"All tasks completed and tested"`
+	Note string `json:"note,omitempty" maxLength:"2000" example:"All tasks completed and tested"`
 }
 
 type SubmitForReleaseInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        SubmitForReleaseBody
 }
 
@@ -25,13 +25,13 @@ type SubmitForReleaseOutput struct {
 // ============================================================
 
 type ReleaseMilestoneBody struct {
-	IdempotencyKey string `json:"idempotency_key" huma:"required,minLength=5,maxLength=255" example:"release-ms-42-xyz"`
-	Note           string `json:"note,omitempty" example:"Great work, releasing payment"`
+	IdempotencyKey string `json:"idempotency_key" required:"true" minLength:"5" maxLength:"255" example:"release-ms-42-xyz"`
+	Note           string `json:"note,omitempty" maxLength:"2000" example:"Great work, releasing payment"`
 }
 
 type ReleaseMilestoneInput struct {
-	QuestID     string `path:"id" doc:"Quest ID"`
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	QuestID     string `path:"id" format:"uuid" doc:"Quest ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        ReleaseMilestoneBody
 }
 
@@ -59,6 +59,11 @@ type ReleaseMilestoneResponse struct {
 
 	// Wallet snapshot after credit
 	WalletAvailableBalance float64 `json:"wallet_available_balance" example:"11400"`
+	WalletPendingBalance   float64 `json:"wallet_pending_balance" example:"11400"`
+
+	// Wallet snapshot in minor units
+	WalletAvailableBalanceMinor int64 `json:"wallet_available_balance_minor"`
+	WalletPendingBalanceMinor   int64 `json:"wallet_pending_balance_minor"`
 
 	ReleasedAt time.Time `json:"released_at"`
 

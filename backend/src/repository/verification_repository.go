@@ -81,6 +81,6 @@ func (r *VerificationRepository) DeleteVerificationToken(token string) error {
 
 	return r.Redis.Del(
 		ctx,
-		"verify:token:"+token,
+		"verify:"+token,
 	).Err()
 }

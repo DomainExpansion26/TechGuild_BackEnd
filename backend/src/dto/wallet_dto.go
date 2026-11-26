@@ -47,8 +47,8 @@ type GetWalletOutput struct {
 // ============================================================
 
 type ListWalletTransactionsInput struct {
-	Limit  int `query:"limit" default:"20" doc:"Max items (default 20, max 100)"`
-	Offset int `query:"offset" default:"0" doc:"Offset items"`
+	Limit  int `query:"limit" default:"20" minimum:"1" maximum:"100" doc:"Max items (default 20, max 100)"`
+	Offset int `query:"offset" default:"0" minimum:"0" doc:"Offset items"`
 }
 
 type ListWalletTransactionsResponse struct {

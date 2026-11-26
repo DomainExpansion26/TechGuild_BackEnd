@@ -51,9 +51,9 @@ type GoogleLoginOutput struct {
 }
 
 type GoogleCallbackInput struct {
-	Code             string `query:"code"`
-	State            string `query:"state"`
-	OauthStateCookie string `cookie:"oauth_state"`
+	Code             string `query:"code" maxLength:"2048"`
+	State            string `query:"state" maxLength:"128"`
+	OauthStateCookie string `cookie:"oauth_state" maxLength:"128"`
 	Accept           string `header:"Accept"`
 	UserAgent        string `header:"User-Agent"`
 	ForwardedFor     string `header:"X-Forwarded-For"`
@@ -73,9 +73,9 @@ type GitHubLoginOutput struct {
 }
 
 type GitHubCallbackInput struct {
-	Code             string `query:"code"`
-	State            string `query:"state"`
-	OauthStateCookie string `cookie:"oauth_state"`
+	Code             string `query:"code" maxLength:"2048"`
+	State            string `query:"state" maxLength:"128"`
+	OauthStateCookie string `cookie:"oauth_state" maxLength:"128"`
 	Accept           string `header:"Accept"`
 	UserAgent        string `header:"User-Agent"`
 	ForwardedFor     string `header:"X-Forwarded-For"`

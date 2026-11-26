@@ -263,6 +263,11 @@ func mapQuestMilestoneError(err error) error {
 		errors.Is(err, services.ErrQMSAmountRequired),
 		errors.Is(err, services.ErrQMSTitleRequired),
 		errors.Is(err, services.ErrQMSRevisionNoteRequired),
+		errors.Is(err, services.ErrQMSInvalidDateRange),
+		errors.Is(err, services.ErrQMSInvalidAssignee),
+		errors.Is(err, services.ErrQMSInvalidTaskStatus),
+		errors.Is(err, repository.ErrTaskNotFound),
+		errors.Is(err, repository.ErrMilestoneBudgetExceeded),
 		errors.Is(err, services.ErrInvalidUserID):
 		return huma.Error400BadRequest(err.Error())
 

@@ -14,7 +14,7 @@ func RegisterPartyRoutes(api huma.API) {
 
 	// Party CRUD
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-party",
 		Method:      "POST",
 		Path:        "/v1/parties",
@@ -38,28 +38,28 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.CreatePartyHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-party",
-		Method: "GET",
-		Path: "/v1/parties/{party_id}",
-		Tags: []string{"Parties"},
-		Summary: "Get a party",
+		Method:      "GET",
+		Path:        "/v1/parties/{party_id}",
+		Tags:        []string{"Parties"},
+		Summary:     "Get a party",
 		Middlewares: authMw},
 		controllers.GetPartyHandler)
-	
-	//new	
+
+	//new
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-party-members",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/members",
 		Tags:        []string{"Parties"},
 		Summary:     "Get party members",
 		Middlewares: authMw,
-	}, controllers.GetPartyMembersHandler)	
+	}, controllers.GetPartyMembersHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-party-invitations",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/invitations",
@@ -69,7 +69,7 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.GetPartyInvitationsHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-party-portfolio",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/portfolio",
@@ -79,7 +79,7 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.GetPartyPortfolioHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-party-skills",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/skills",
@@ -88,9 +88,9 @@ func RegisterPartyRoutes(api huma.API) {
 		Middlewares: authMw,
 	}, controllers.GetPartySkillsHandler)
 
-	//continued	
+	//continued
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-party",
 		Method:      "PUT",
 		Path:        "/v1/parties/{party_id}",
@@ -113,37 +113,36 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.UpdatePartyHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "delete-party", Method: "DELETE", 
-		Path: "/v1/parties/{party_id}", 
-		Tags: []string{"Parties"}, 
-		Summary: "Delete a party", 
-		Middlewares: authMw}, 
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "delete-party", Method: "DELETE",
+		Path:        "/v1/parties/{party_id}",
+		Tags:        []string{"Parties"},
+		Summary:     "Delete a party",
+		Middlewares: authMw},
 		controllers.DeletePartyHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}}, 
-		OperationID: "get-my-parties", Method: "GET", 
-		Path: "/v1/parties/my",
-		Tags: []string{"Parties"}, 
-		Summary: "Get my parties", 
-		Middlewares: authMw}, 
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "get-my-parties", Method: "GET",
+		Path:        "/v1/parties/my",
+		Tags:        []string{"Parties"},
+		Summary:     "Get my parties",
+		Middlewares: authMw},
 		controllers.GetMyPartiesHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-available-parties",
 		Method:      "GET",
 		Path:        "/v1/parties/available",
 		Tags:        []string{"Parties"},
 		Summary:     "Get parties available to freelancer",
-		Middlewares: authMw,},
+		Middlewares: authMw},
 		controllers.GetAvailablePartiesHandler)
-
 
 	// Members
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "invite-member",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/invite",
@@ -163,17 +162,17 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.InviteMemberHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}}, 
-		OperationID: "accept-invitation", 
-		Method: "POST", 
-		Path: "/v1/parties/invitation/{invitation_id}/accept", 
-		Tags: []string{"Parties"}, 
-		Summary: "Accept invitation", 
-		Middlewares: authMw}, 
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "accept-invitation",
+		Method:      "POST",
+		Path:        "/v1/parties/invitation/{invitation_id}/accept",
+		Tags:        []string{"Parties"},
+		Summary:     "Accept invitation",
+		Middlewares: authMw},
 		controllers.AcceptInvitationHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "reject-invitation",
 		Method:      "POST",
 		Path:        "/v1/parties/invitation/{invitation_id}/reject",
@@ -191,17 +190,17 @@ func RegisterPartyRoutes(api huma.API) {
 		},
 	}, controllers.RejectInvitationHandler)
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}}, 
-		OperationID: "remove-member", 
-		Method: "DELETE", 
-		Path: "/v1/parties/{party_id}/member/{member_id}", 
-		Tags: []string{"Parties"}, 
-		Summary: "Remove member", 
-		Middlewares: authMw}, 
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "remove-member",
+		Method:      "DELETE",
+		Path:        "/v1/parties/{party_id}/member/{member_id}",
+		Tags:        []string{"Parties"},
+		Summary:     "Remove member",
+		Middlewares: authMw},
 		controllers.RemoveMemberHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "leave-party",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/leave",
@@ -221,7 +220,7 @@ func RegisterPartyRoutes(api huma.API) {
 
 	// Portfolio
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-portfolio",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/portfolio",
@@ -244,7 +243,7 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.CreatePortfolioHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-portfolio",
 		Method:      "PUT",
 		Path:        "/v1/parties/portfolio/{portfolio_id}",
@@ -267,18 +266,18 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.UpdatePortfolioHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-portfolio",
-		Method: "DELETE", 
-		Path: "/v1/parties/portfolio/{portfolio_id}", 
-		Tags: []string{"Parties"}, 
-		Summary: "Delete portfolio", 
-		Middlewares: authMw}, 
+		Method:      "DELETE",
+		Path:        "/v1/parties/portfolio/{portfolio_id}",
+		Tags:        []string{"Parties"},
+		Summary:     "Delete portfolio",
+		Middlewares: authMw},
 		controllers.DeletePortfolioHandler)
 
 	// Skills
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "add-skill",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/skills",
@@ -298,7 +297,7 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.AddSkillHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "update-skill",
 		Method:      "PUT",
 		Path:        "/v1/parties/skills/{skill_id}",
@@ -318,13 +317,13 @@ func RegisterPartyRoutes(api huma.API) {
 	}, controllers.UpdateSkillHandler)
 
 	huma.Register(api, huma.Operation{
-		Security: []map[string][]string{{"bearerAuth": {}}},
-		OperationID: "delete-skill", 
-		Method: "DELETE", 
-		Path: "/v1/parties/skills/{skill_id}", 
-		Tags: []string{"Parties"}, 
-		Summary: "Delete skill", 
-		Middlewares: authMw}, 
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+		OperationID: "delete-skill",
+		Method:      "DELETE",
+		Path:        "/v1/parties/skills/{skill_id}",
+		Tags:        []string{"Parties"},
+		Summary:     "Delete skill",
+		Middlewares: authMw},
 		controllers.DeleteSkillHandler)
 }
 

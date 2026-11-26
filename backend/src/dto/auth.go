@@ -1,10 +1,10 @@
 package dto
 
 type RegisterRequest struct {
-	FirstName string `json:"first_name" binding:"required" example:"John"`
-	LastName  string `json:"last_name" binding:"required" example:"Doe"`
-	Email     string `json:"email" binding:"required,email" example:"test@example.com"`
-	Password  string `json:"password" binding:"required,min=8" example:"test@123"`
+	FirstName string `json:"first_name" required:"true" minLength:"1" maxLength:"100" example:"John"`
+	LastName  string `json:"last_name" required:"true" minLength:"1" maxLength:"100" example:"Doe"`
+	Email     string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
+	Password  string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"test@123"`
 }
 
 type RegisterResponse struct {
@@ -13,8 +13,8 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email" example:"test@example.com"`
-	Password string `json:"password" binding:"required" example:"test@123"`
+	Email    string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
+	Password string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"test@123"`
 }
 
 type LoginResponse struct {
@@ -27,7 +27,7 @@ type LoginResponse struct {
 }
 
 type VerifyEmailRequest struct {
-	Token string `json:"token" binding:"required" example:"abc123def456ghi789"`
+	Token string `json:"token" required:"true" minLength:"10" maxLength:"4096" example:"abc123def456ghi789"`
 }
 
 type VerifyEmailResponse struct {
@@ -38,7 +38,7 @@ type VerifyEmailResponse struct {
 }
 
 type ResendVerificationRequest struct {
-	Email string `json:"email" binding:"required,email" example:"test@example.com"`
+	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
 }
 
 type ResendVerificationResponse struct {
@@ -46,7 +46,7 @@ type ResendVerificationResponse struct {
 }
 
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token" binding:"required" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"` //if mobile app support need remove bidning
+	RefreshToken string `json:"refresh_token,omitempty" maxLength:"4096" doc:"Optional when the refresh_token cookie is sent."`
 }
 
 type LogoutResponse struct {
@@ -54,7 +54,7 @@ type LogoutResponse struct {
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email" binding:"required,email" example:"test@example.com"`
+	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
 }
 
 type ForgotPasswordResponse struct {
@@ -62,7 +62,7 @@ type ForgotPasswordResponse struct {
 }
 
 type ResetPasswordRequest struct {
-	NewPassword string `json:"new_password" binding:"required,min=8" example:"newpass@123"`
+	NewPassword string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
 }
 
 type ResetPasswordResponse struct {
@@ -70,9 +70,9 @@ type ResetPasswordResponse struct {
 }
 
 type ChangePasswordRequest struct {
-	OldPassword     string `json:"old_password" binding:"required" example:"test@123"`
-	NewPassword     string `json:"new_password" binding:"required,min=8" example:"newpass@123"`
-	ConfirmPassword string `json:"confirm_password" binding:"required,min=8" example:"newpass@123"`
+	OldPassword     string `json:"old_password" required:"true" minLength:"1" maxLength:"72" example:"test@123"`
+	NewPassword     string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
+	ConfirmPassword string `json:"confirm_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
 }
 
 type ChangePasswordResponse struct {
@@ -80,7 +80,7 @@ type ChangePasswordResponse struct {
 }
 
 type SetAccountTypeAuthRequest struct {
-	AccountType string `json:"account_type" binding:"required" example:"individual"`
+	AccountType string `json:"account_type" required:"true" enum:"individual,agency,client" example:"individual"`
 }
 
 type SetAccountTypeAuthInput struct {
@@ -118,7 +118,7 @@ type LoginOutput struct {
 }
 
 type VerifyEmailInput struct {
-	Token        string `query:"token" required:"true" doc:"Email verification token"`
+	Token        string `query:"token" required:"true" minLength:"10" maxLength:"4096" doc:"Email verification token"`
 	UserAgent    string `header:"User-Agent"`
 	ForwardedFor string `header:"X-Forwarded-For"`
 }
@@ -157,7 +157,7 @@ type RefreshTokenOutput struct {
 }
 
 type ResetPasswordInput struct {
-	Token string `query:"token" required:"true" doc:"Password reset token"`
+	Token string `query:"token" required:"true" minLength:"10" maxLength:"4096" doc:"Password reset token"`
 	Body  ResetPasswordRequest
 }
 type ResetPasswordOutput struct {

@@ -11,14 +11,16 @@ import (
 	"gorm.io/gorm/clause" // 👈 Ye naya import add karna hai
 )
 
+// ErrWebhookEventDuplicate — the (provider, provider_event_id) row already
+// existed, so the insert was a no-op. Callers treat it as a benign concurrent
+// duplicate, not a failure.
+var ErrWebhookEventDuplicate = errors.New("duplicate webhook event skipped")
+
 type PaymentWebhookEventRepository interface {
 	Create(event *models.PaymentWebhookEvent) error
 	GetByProviderAndEventID(provider, eventID string) (*models.PaymentWebhookEvent, error)
 	MarkProcessed(id uuid.UUID) error
 	MarkFailed(id uuid.UUID, reason string) error
-
-	// ExistsByProviderAndEventID is the fast idempotency check.
-	ExistsByProviderAndEventID(provider, eventID string) (bool, error)
 }
 
 type paymentWebhookEventRepository struct {
@@ -45,9 +47,7 @@ func (r *paymentWebhookEventRepository) Create(event *models.PaymentWebhookEvent
 
 	// Agar RowsAffected 0 hai, matlab event pehle se database me maujood tha
 	if result.RowsAffected == 0 {
-		// Service layer ko signal dene ke liye hum ek custom error return kar sakte hain,
-		// par abhi ke liye hum nil return kar rahe hain taaki service isko gracefully handle kar sake.
-		return errors.New("duplicate webhook event skipped")
+		return ErrWebhookEventDuplicate
 	}
 
 	return nil
@@ -83,19 +83,4 @@ func (r *paymentWebhookEventRepository) MarkFailed(id uuid.UUID, reason string) 
 			"processed_at":  gorm.Expr("NOW()"),
 			"error_message": reason,
 		}).Error
-}
-
-func (r *paymentWebhookEventRepository) ExistsByProviderAndEventID(provider, eventID string) (bool, error) {
-	var count int64
-	err := r.db.
-		Model(&models.PaymentWebhookEvent{}).
-		Where("provider = ? AND provider_event_id = ?", provider, eventID).
-		Count(&count).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	return count > 0, nil
 }

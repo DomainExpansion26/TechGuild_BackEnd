@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 
 	"techguild-backend/src/config"
 	"techguild-backend/src/dto"
@@ -29,10 +28,7 @@ func (c *SettingsController) GetAccountSettingsHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	accountSettings, err := profileService.GetAccountSettings(userID)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.GetAccountSettingsOutput{
@@ -46,18 +42,14 @@ func (c *SettingsController) UpdateAccountSettingsHandler(ctx context.Context, i
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
+	currentSessionID, err := utils.GetSessionIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
 	profileService := services.NewProfileService(c.cfg)
-	if err := profileService.UpdateAccountSettings(userID, input.Body); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidPassword) {
-			return nil, huma.Error401Unauthorized(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+	if err := profileService.UpdateAccountSettings(userID, input.Body, currentSessionID); err != nil {
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UpdateAccountSettingsOutput{
@@ -83,16 +75,7 @@ func (c *SettingsController) GetPrivacySettingsHandler(ctx context.Context, inpu
 	profileService := services.NewProfileService(c.cfg)
 	privacySettings, err := profileService.GetPrivacySettings(userID)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrAccountTypeNotSet) || errors.Is(err, services.ErrInvalidAccountType) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 	return &dto.GetPrivacySettingsOutput{Body: *privacySettings}, nil
 }
@@ -105,22 +88,7 @@ func (c *SettingsController) UpdatePrivacySettingsHandler(ctx context.Context, i
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.UpdatePrivacySettings(userID, input.Body); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrProfileNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrAccountTypeNotSet) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidAccountType) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.UpdatePrivacyOutput{Body: dto.SettingsUpdateResponse{Message: "privacy settings updated successfully"}}, nil
@@ -146,16 +114,7 @@ func (c *SettingsController) DeactivateAccountHandler(ctx context.Context, input
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeactivateAccount(userID, input.Body); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidPassword) {
-			return nil, huma.Error401Unauthorized(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 	return &dto.DeactivateAccountOutput{
 		Body: dto.SettingsUpdateResponse{
@@ -172,16 +131,7 @@ func (c *SettingsController) DeleteAccountHandler(ctx context.Context, input *dt
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.DeleteAccountPermanently(userID, input.Body.Password); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrInvalidPassword) {
-			return nil, huma.Error401Unauthorized(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.DeleteAccountOutput{
@@ -197,14 +147,16 @@ func (c *SettingsController) GetSessionsHandler(ctx context.Context, input *dto.
 		return nil, huma.Error401Unauthorized(err.Error())
 	}
 
+	currentSessionID, err := utils.GetSessionIDFromHumaContext(ctx)
+	if err != nil {
+		return nil, huma.Error401Unauthorized(err.Error())
+	}
+
 	profileService := services.NewProfileService(c.cfg)
 
-	sessions, err := profileService.GetSessions(userID)
+	sessions, err := profileService.GetSessions(userID, currentSessionID)
 	if err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 
 	return &dto.GetSessionsOutput{
@@ -220,16 +172,7 @@ func (c *SettingsController) RevokeSessionHandler(ctx context.Context, input *dt
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.RevokeSession(userID, input.ID); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrSessionNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 	return &dto.RevokeSessionOutput{
 		Body: dto.SettingsUpdateResponse{
@@ -250,13 +193,7 @@ func (c *SettingsController) SignOutOtherSessionsHandler(ctx context.Context, in
 
 	profileService := services.NewProfileService(c.cfg)
 	if err := profileService.SignOutOtherSessions(userID, currentSessionID); err != nil {
-		if errors.Is(err, services.ErrUserNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		if errors.Is(err, services.ErrSessionNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, mapProfileError(err)
 	}
 	return &dto.SignOtherSessionsOutput{
 		Body: dto.SettingsUpdateResponse{
