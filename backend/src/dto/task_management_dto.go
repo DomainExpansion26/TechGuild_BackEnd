@@ -13,7 +13,7 @@ type FreelancerSummary struct {
 // ---------- 1. Metrics ----------
 
 type TaskManagementMetricsInput struct {
-	QuestID string `query:"quest_id" doc:"Optional Quest ID to scope task and deadline counts"`
+	QuestID string `query:"quest_id" maxLength:"36" doc:"Optional Quest ID to scope task and deadline counts"`
 }
 
 type TaskManagementMetricsResponse struct {
@@ -55,7 +55,7 @@ type ActiveQuestsListOutput struct {
 // ---------- 3. Quest Dashboard Overview & Donut Chart ----------
 
 type GetQuestDashboardInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
 }
 
 type QuestDashboardOverview struct {
@@ -101,7 +101,7 @@ type QuestDashboardOutput struct {
 // ---------- 4. Milestones Table ----------
 
 type GetQuestMilestonesTableInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
 }
 
 type QuestMilestoneRowItem struct {
@@ -133,16 +133,16 @@ type QuestMilestonesTableOutput struct {
 // ---------- 5. Add Milestone Modal ----------
 
 type AddMilestoneRequestBody struct {
-	Title       string     `json:"title" huma:"required,minLength=2,maxLength=255" example:"Responsive Design & Mobile Optimization"`
-	Description string     `json:"description" example:"Complete responsive layouts for tablet and mobile."`
-	Amount      float64    `json:"amount" huma:"required,minimum=0.01" example:"10000"`
+	Title       string     `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Responsive Design & Mobile Optimization"`
+	Description string     `json:"description,omitempty" maxLength:"5000" example:"Complete responsive layouts for tablet and mobile."`
+	Amount      float64    `json:"amount" required:"true" minimum:"0.01" example:"10000"`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
-	DueDays     int        `json:"due_days,omitempty" example:"7"`
+	DueDays     int        `json:"due_days,omitempty" minimum:"1" example:"7"`
 }
 
 type AddMilestoneInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
 	Body    AddMilestoneRequestBody
 }
 
@@ -160,7 +160,7 @@ type AddMilestoneOutput struct {
 // ---------- 6. Delete Milestone Modal ----------
 
 type DeleteMilestoneTMDInput struct {
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type DeleteMilestoneTMDResponse struct {
@@ -175,7 +175,7 @@ type DeleteMilestoneTMDOutput struct {
 // ---------- 7. View Tasks Modal ----------
 
 type GetMilestoneTasksInput struct {
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 }
 
 type MilestoneTaskItem struct {
@@ -203,11 +203,11 @@ type MilestoneTasksOutput struct {
 // ---------- 8. Approve Milestone Modal ----------
 
 type ApproveMilestoneTMDRequestBody struct {
-	Feedback string `json:"feedback,omitempty" example:"Deliverables approved and tested"`
+	Feedback string `json:"feedback,omitempty" maxLength:"2000" example:"Deliverables approved and tested"`
 }
 
 type ApproveMilestoneTMDInput struct {
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        ApproveMilestoneTMDRequestBody
 }
 
@@ -226,11 +226,11 @@ type ApproveMilestoneTMDOutput struct {
 // ---------- 9. Cancel Milestone Approval Modal ----------
 
 type CancelMilestoneApprovalTMDRequestBody struct {
-	Reason string `json:"reason" huma:"required,minLength=5" example:"Revisions required on mobile layouts"`
+	Reason string `json:"reason" required:"true" minLength:"5" maxLength:"2000" example:"Revisions required on mobile layouts"`
 }
 
 type CancelMilestoneApprovalTMDInput struct {
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        CancelMilestoneApprovalTMDRequestBody
 }
 
@@ -249,12 +249,12 @@ type CancelMilestoneApprovalTMDOutput struct {
 // ---------- 10. Approve Quest Modal ----------
 
 type ApproveQuestTMDRequestBody struct {
-	Rating   int    `json:"rating" huma:"required,minimum=1,maximum=5" example:"5"`
-	Feedback string `json:"feedback" huma:"required,minLength=5" example:"Outstanding work delivered on time"`
+	Rating   int    `json:"rating" required:"true" minimum:"1" maximum:"5" example:"5"`
+	Feedback string `json:"feedback" required:"true" minLength:"5" maxLength:"2000" example:"Outstanding work delivered on time"`
 }
 
 type ApproveQuestTMDInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
 	Body    ApproveQuestTMDRequestBody
 }
 
@@ -263,6 +263,12 @@ type ApproveQuestTMDResponse struct {
 	QuestID     string    `json:"quest_id"`
 	Status      string    `json:"status"`
 	CompletedAt time.Time `json:"completed_at"`
+
+	// Wallet movement caused by completion: pending hold → available.
+	UnlockedToAvailableMinor    int64   `json:"unlocked_to_available_minor"`
+	UnlockedToAvailable         float64 `json:"unlocked_to_available"`
+	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor"`
+	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor"`
 }
 
 type ApproveQuestTMDOutput struct {
@@ -272,11 +278,11 @@ type ApproveQuestTMDOutput struct {
 // ---------- 11. Cancel Quest Approval Modal ----------
 
 type CancelQuestApprovalTMDRequestBody struct {
-	Reason string `json:"reason" huma:"required,minLength=5" example:"Post-delivery integration defect requires patch"`
+	Reason string `json:"reason" required:"true" minLength:"5" maxLength:"2000" example:"Post-delivery integration defect requires patch"`
 }
 
 type CancelQuestApprovalTMDInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
 	Body    CancelQuestApprovalTMDRequestBody
 }
 
@@ -284,6 +290,12 @@ type CancelQuestApprovalTMDResponse struct {
 	Message string `json:"message"`
 	QuestID string `json:"quest_id"`
 	Status  string `json:"status"`
+
+	// Wallet movement caused by reopening: available → pending hold.
+	RelockedToPendingMinor      int64   `json:"relocked_to_pending_minor"`
+	RelockedToPending           float64 `json:"relocked_to_pending"`
+	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor"`
+	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor"`
 }
 
 type CancelQuestApprovalTMDOutput struct {
@@ -293,9 +305,9 @@ type CancelQuestApprovalTMDOutput struct {
 // ---------- 12. Recent Activities Drawer ----------
 
 type GetQuestActivitiesTMDInput struct {
-	QuestID string `path:"quest_id" doc:"Quest ID"`
-	Limit   int    `query:"limit" doc:"Maximum items" default:"20"`
-	Offset  int    `query:"offset" doc:"Offset items" default:"0"`
+	QuestID string `path:"quest_id" format:"uuid" doc:"Quest ID"`
+	Limit   int    `query:"limit" doc:"Maximum items" default:"20" minimum:"1" maximum:"100"`
+	Offset  int    `query:"offset" doc:"Offset items" default:"0" minimum:"0"`
 }
 
 type QuestActivitiesTMDResponse struct {
@@ -311,16 +323,16 @@ type QuestActivitiesTMDOutput struct {
 // ---------- 13. Task Operations (Create Task & Status Update) ----------
 
 type CreateMilestoneTaskRequestBody struct {
-	Title       string     `json:"title" huma:"required,minLength=2,maxLength=255" example:"Navbar Wireframe"`
-	Description string     `json:"description,omitempty" example:"Design responsive navigation component"`
+	Title       string     `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Navbar Wireframe"`
+	Description string     `json:"description,omitempty" maxLength:"5000" example:"Design responsive navigation component"`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	EndDate     *time.Time `json:"end_date,omitempty"`
-	AssigneeID  *string    `json:"assignee_id,omitempty"`
-	Status      string     `json:"status,omitempty" example:"todo"`
+	AssigneeID  *string    `json:"assignee_id,omitempty" format:"uuid"`
+	Status      string     `json:"status,omitempty" minLength:"1" maxLength:"50" example:"todo"`
 }
 
 type CreateMilestoneTaskInput struct {
-	MilestoneID string `path:"milestone_id" doc:"Milestone ID"`
+	MilestoneID string `path:"milestone_id" format:"uuid" doc:"Milestone ID"`
 	Body        CreateMilestoneTaskRequestBody
 }
 
@@ -330,11 +342,11 @@ type CreateMilestoneTaskOutput struct {
 }
 
 type UpdateTaskStatusRequestBody struct {
-	Status string `json:"status" huma:"required" example:"in_progress"`
+	Status string `json:"status" required:"true" minLength:"1" maxLength:"50" example:"in_progress"`
 }
 
 type UpdateTaskStatusInput struct {
-	TaskID string `path:"task_id" doc:"Task ID"`
+	TaskID string `path:"task_id" format:"uuid" doc:"Task ID"`
 	Body   UpdateTaskStatusRequestBody
 }
 

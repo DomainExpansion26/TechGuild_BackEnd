@@ -56,9 +56,15 @@ func (r *escrowTransactionRepository) GetByID(id uuid.UUID) (*models.EscrowTrans
 	return &e, nil
 }
 
+// GetByQuestMilestoneID returns the milestone's one non-failed escrow row.
+// A milestone can hold several attempts once one has failed, so filtering here
+// keeps release/refund from picking the dead row. `refunded` rows stay visible
+// because the refund replay paths read them back.
 func (r *escrowTransactionRepository) GetByQuestMilestoneID(questMilestoneID uuid.UUID) (*models.EscrowTransaction, error) {
 	var e models.EscrowTransaction
-	err := r.db.Where("quest_milestone_id = ?", questMilestoneID).First(&e).Error
+	err := r.db.
+		Where("quest_milestone_id = ? AND status <> ?", questMilestoneID, models.EscrowStatusFailed).
+		First(&e).Error
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +84,7 @@ func (r *escrowTransactionRepository) GetByQuestMilestoneIDForUpdate(questMilest
 	var e models.EscrowTransaction
 	err := r.db.
 		Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("quest_milestone_id = ?", questMilestoneID).
+		Where("quest_milestone_id = ? AND status <> ?", questMilestoneID, models.EscrowStatusFailed).
 		First(&e).Error
 	if err != nil {
 		return nil, err

@@ -33,6 +33,9 @@ var (
 	ErrQMSAmountRequired        = errors.New("milestone amount is required")
 	ErrQMSTitleRequired         = errors.New("milestone title is required")
 	ErrQMSRevisionNoteRequired  = errors.New("revision note is required and must be at least 5 characters")
+	ErrQMSInvalidDateRange      = errors.New("due date must be on or after the start date")
+	ErrQMSInvalidAssignee       = errors.New("task assignee must be the team lead or an active party member")
+	ErrQMSInvalidTaskStatus     = errors.New("invalid task status")
 )
 
 // ============================================================
@@ -65,6 +68,7 @@ type questMilestoneService struct {
 	milestoneRepo repository.QuestMilestoneRepository
 	questRepo     repository.QuestRepository
 	activityRepo  repository.TaskManagementRepository
+	partyRepo     *repository.PartyRepository
 }
 
 func NewQuestMilestoneService(cfg *config.Config) QuestMilestoneService {
@@ -73,6 +77,7 @@ func NewQuestMilestoneService(cfg *config.Config) QuestMilestoneService {
 		milestoneRepo: repository.NewQuestMilestoneRepository(),
 		questRepo:     repository.NewQuestRepository(),
 		activityRepo:  repository.NewTaskManagementRepository(),
+		partyRepo:     repository.NewPartyRepository(),
 	}
 }
 
@@ -125,6 +130,11 @@ func (s *questMilestoneService) CreateMilestone(
 		return nil, err
 	}
 
+	// Reject an inverted date range before it can be persisted.
+	if req.StartDate != nil && req.DueDate != nil && req.DueDate.Before(*req.StartDate) {
+		return nil, ErrQMSInvalidDateRange
+	}
+
 	// Compute due days
 	dueDays := req.DueDays
 	if dueDays <= 0 {
@@ -152,6 +162,10 @@ func (s *questMilestoneService) CreateMilestone(
 	// Build tasks (optional)
 	var tasks []models.Task
 	for _, t := range req.Tasks {
+		assignee, err := s.resolveTaskAssignee(quest, t.AssigneeID, userUUID)
+		if err != nil {
+			return nil, err
+		}
 		tasks = append(tasks, models.Task{
 			MilestoneID: milestone.ID,
 			QuestID:     questUUID,
@@ -159,6 +173,7 @@ func (s *questMilestoneService) CreateMilestone(
 			Description: strings.TrimSpace(t.Description),
 			StartDate:   t.StartDate,
 			EndDate:     t.EndDate,
+			AssigneeID:  assignee,
 			Status:      models.TaskStatusToDo,
 		})
 	}
@@ -219,8 +234,9 @@ func (s *questMilestoneService) UpdateMilestone(
 	if milestone.QuestID != questUUID {
 		return nil, ErrQMSMilestoneNotFound
 	}
-	if milestone.CreatedByID != userUUID {
-		return nil, ErrQMSNotAssignedFreelancer
+	quest, err := s.requireTeamLead(milestone.QuestID, userUUID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Only draft or revision_in_progress can be edited
@@ -247,6 +263,19 @@ func (s *questMilestoneService) UpdateMilestone(
 		}
 		milestone.AmountMinor = utils.RupeesToPaise(*req.Amount)
 	}
+	// Validate the EFFECTIVE range (incoming value, else the persisted one).
+	effectiveStart := milestone.StartDate
+	if req.StartDate != nil {
+		effectiveStart = req.StartDate
+	}
+	effectiveDue := milestone.DueDate
+	if req.DueDate != nil {
+		effectiveDue = req.DueDate
+	}
+	if effectiveStart != nil && effectiveDue != nil && effectiveDue.Before(*effectiveStart) {
+		return nil, ErrQMSInvalidDateRange
+	}
+
 	if req.StartDate != nil {
 		milestone.StartDate = req.StartDate
 	}
@@ -262,7 +291,11 @@ func (s *questMilestoneService) UpdateMilestone(
 		milestone.Status = models.MilestoneStatusRevisionInProgress
 	}
 
-	if err := s.milestoneRepo.Update(milestone); err != nil {
+	patchSet, err := s.buildTaskPatchSet(quest, req.Tasks, req.DeleteTaskIDs, userUUID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.milestoneRepo.UpdateWithTasks(milestone, patchSet); err != nil {
 		return nil, fmt.Errorf("failed to update milestone: %w", err)
 	}
 
@@ -275,7 +308,11 @@ func (s *questMilestoneService) UpdateMilestone(
 		Description: "Freelancer updated milestone details",
 	})
 
-	resp := s.toDetailResponse(milestone, nil)
+	reloaded, err := s.milestoneRepo.FindByID(milestone.ID)
+	if err != nil {
+		return nil, err
+	}
+	resp := s.toDetailResponse(reloaded, nil)
 	return &resp, nil
 }
 
@@ -304,8 +341,8 @@ func (s *questMilestoneService) DeleteMilestone(userID, questIDStr, milestoneIDS
 	if milestone.QuestID != questUUID {
 		return ErrQMSMilestoneNotFound
 	}
-	if milestone.CreatedByID != userUUID {
-		return ErrQMSNotAssignedFreelancer
+	if _, err := s.requireTeamLead(milestone.QuestID, userUUID); err != nil {
+		return err
 	}
 
 	// Only draft can be deleted
@@ -356,8 +393,8 @@ func (s *questMilestoneService) SendForReview(
 	if milestone.QuestID != questUUID {
 		return nil, ErrQMSMilestoneNotFound
 	}
-	if milestone.CreatedByID != userUUID {
-		return nil, ErrQMSNotAssignedFreelancer
+	if _, err := s.requireTeamLead(milestone.QuestID, userUUID); err != nil {
+		return nil, err
 	}
 
 	// Only draft can be sent
@@ -420,8 +457,8 @@ func (s *questMilestoneService) ResubmitAfterRevision(
 	if milestone.QuestID != questUUID {
 		return nil, ErrQMSMilestoneNotFound
 	}
-	if milestone.CreatedByID != userUUID {
-		return nil, ErrQMSNotAssignedFreelancer
+	if _, err := s.requireTeamLead(milestone.QuestID, userUUID); err != nil {
+		return nil, err
 	}
 
 	// Can only resubmit from revision states
@@ -752,6 +789,12 @@ func (s *questMilestoneService) GetRevisions(
 		return nil, ErrQMSUnauthorized
 	}
 
+	// A milestone id belonging to another quest must not leak its revision history.
+	milestone, err := s.milestoneRepo.FindByID(milestoneUUID)
+	if err != nil || milestone == nil || milestone.QuestID != questUUID {
+		return nil, ErrQMSMilestoneNotFound
+	}
+
 	revisions, err := s.milestoneRepo.GetRevisionsByMilestone(milestoneUUID)
 	if err != nil {
 		return nil, err
@@ -895,6 +938,8 @@ func (s *questMilestoneService) SubmitRoadmap(userID, questIDStr string, req dto
 		questUUID,
 		models.MilestoneStatusDraft,
 		models.MilestoneStatusAwaitingClientReview,
+		"",
+		nil,
 	)
 	if err != nil {
 		return 0, err
@@ -935,12 +980,18 @@ func (s *questMilestoneService) ApproveRoadmap(userID, questIDStr string, req dt
 	if quest.ClientID != userUUID {
 		return 0, ErrQMSNotQuestClient
 	}
+	if quest.Status != models.QuestStatusInProgress {
+		return 0, ErrQMSQuestNotInProgress
+	}
 
-	// Bulk update all 'awaiting_client_review' to 'agreed'
+	// Bulk update all 'awaiting_client_review' to 'agreed', stamping agreed_at.
+	agreedAt := time.Now()
 	count, err := s.milestoneRepo.BulkUpdateMilestoneStatus(
 		questUUID,
 		models.MilestoneStatusAwaitingClientReview,
 		models.MilestoneStatusAgreed,
+		"agreed_at",
+		&agreedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -962,3 +1013,148 @@ func (s *questMilestoneService) ApproveRoadmap(userID, questIDStr string, req dt
 
 // Silence unused import warning if needed
 var _ = gorm.ErrRecordNotFound
+
+// ============================================================
+// PARTY COLLABORATION HELPERS
+// ============================================================
+
+// requireTeamLead resolves the quest and enforces that the caller is the
+// assigned freelancer (team lead). Non-lead party members cannot author or
+// negotiate milestones; they only get task and attachment rights.
+func (s *questMilestoneService) requireTeamLead(questID, userID uuid.UUID) (*models.Quest, error) {
+	quest, err := s.questRepo.FindByID(questID)
+	if err != nil {
+		return nil, ErrQMSQuestNotFound
+	}
+	if quest.AssignedFreelancerID == nil || *quest.AssignedFreelancerID != userID {
+		return nil, ErrQMSNotAssignedFreelancer
+	}
+	return quest, nil
+}
+
+// resolveTaskAssignee defaults to the caller (the lead) and otherwise requires
+// an active member of the quest's accepted party.
+func (s *questMilestoneService) resolveTaskAssignee(quest *models.Quest, raw *string, callerID uuid.UUID) (*uuid.UUID, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		id := callerID
+		return &id, nil
+	}
+	id, err := uuid.Parse(strings.TrimSpace(*raw))
+	if err != nil {
+		return nil, ErrQMSInvalidAssignee
+	}
+	if quest.AssignedFreelancerID != nil && *quest.AssignedFreelancerID == id {
+		return &id, nil
+	}
+	if quest.AcceptedPartyID != nil && s.partyRepo != nil {
+		member, err := s.partyRepo.FindMember(*quest.AcceptedPartyID, id)
+		if err == nil && member.Status == models.MemberActive {
+			return &id, nil
+		}
+	}
+	return nil, ErrQMSInvalidAssignee
+}
+
+// buildTaskPatchSet turns the additive task PATCH body into repository actions.
+func (s *questMilestoneService) buildTaskPatchSet(
+	quest *models.Quest,
+	inputs []dto.MilestoneTaskPatchInput,
+	deleteIDs []string,
+	callerID uuid.UUID,
+) (repository.TaskPatchSet, error) {
+	set := repository.TaskPatchSet{}
+
+	for _, in := range inputs {
+		if in.ID == nil || strings.TrimSpace(*in.ID) == "" {
+			title := ""
+			if in.Title != nil {
+				title = strings.TrimSpace(*in.Title)
+			}
+			if len(title) < 2 {
+				return set, ErrQMSTitleRequired
+			}
+			assignee, err := s.resolveTaskAssignee(quest, in.AssigneeID, callerID)
+			if err != nil {
+				return set, err
+			}
+			task := models.Task{
+				Title:      title,
+				StartDate:  in.StartDate,
+				EndDate:    in.EndDate,
+				AssigneeID: assignee,
+				Status:     models.TaskStatusToDo,
+			}
+			if in.Description != nil {
+				task.Description = strings.TrimSpace(*in.Description)
+			}
+			if in.Status != nil {
+				status := models.TaskStatus(*in.Status)
+				if !isValidTaskStatus(status) {
+					return set, ErrQMSInvalidTaskStatus
+				}
+				task.Status = status
+			}
+			set.Create = append(set.Create, task)
+			continue
+		}
+
+		taskID, err := uuid.Parse(strings.TrimSpace(*in.ID))
+		if err != nil {
+			return set, repository.ErrTaskNotFound
+		}
+		patch := repository.TaskPatch{
+			ID:          taskID,
+			Description: trimStringPtr(in.Description),
+			StartDate:   in.StartDate,
+			EndDate:     in.EndDate,
+		}
+		if in.Title != nil {
+			title := strings.TrimSpace(*in.Title)
+			if len(title) < 2 {
+				return set, ErrQMSTitleRequired
+			}
+			patch.Title = &title
+		}
+		if in.AssigneeID != nil {
+			assignee, err := s.resolveTaskAssignee(quest, in.AssigneeID, callerID)
+			if err != nil {
+				return set, err
+			}
+			patch.AssigneeID = assignee
+		}
+		if in.Status != nil {
+			status := models.TaskStatus(*in.Status)
+			if !isValidTaskStatus(status) {
+				return set, ErrQMSInvalidTaskStatus
+			}
+			patch.Status = &status
+		}
+		set.Update = append(set.Update, patch)
+	}
+
+	for _, raw := range deleteIDs {
+		id, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			return set, repository.ErrTaskNotFound
+		}
+		set.DeleteIDs = append(set.DeleteIDs, id)
+	}
+
+	return set, nil
+}
+
+func trimStringPtr(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*v)
+	return &s
+}
+
+func isValidTaskStatus(status models.TaskStatus) bool {
+	switch status {
+	case models.TaskStatusToDo, models.TaskStatusInProgress, models.TaskStatusCompleted:
+		return true
+	}
+	return false
+}

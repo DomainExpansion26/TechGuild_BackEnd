@@ -63,9 +63,6 @@ func LoadConfig() (*Config, error) {
 		RedisUsername: viper.GetString("REDIS_USERNAME"),
 		RedisPassword: viper.GetString("REDIS_PASSWORD"),
 
-		JWTSecret:        viper.GetString("JWT_SECRET"),
-		JWTRefreshSecret: viper.GetString("JWT_REFRESH_SECRET"),
-
 		FrontendURL:      viper.GetString("FRONTEND_URL"),
 		ZudokuURL:        viper.GetString("ZUDOKU_URL"),
 		GeoNamesUsername: viper.GetString("GEONAMES_USERNAME"),
@@ -105,6 +102,10 @@ func LoadConfig() (*Config, error) {
 			RequireQRVerified:           viper.GetBool("THRESHOLD_REQUIRE_QR"),
 		},
 		RouterIntervalSeconds: viper.GetInt("KYC_ROUTER_INTERVAL_SECONDS"),
+
+		// getIntWithDefault, not GetInt: an unset value must not collapse to 0
+		// and busy-loop the reconciliation job.
+		ReconciliationIntervalSeconds: getIntWithDefault("RECONCILIATION_INTERVAL_SECONDS", 180),
 
 		KYCIPPepper:    os.Getenv("KYC_IP_HASH_PEPPER"),
 		TrustedProxies: os.Getenv("KYC_TRUSTED_PROXY_CIDRS"),

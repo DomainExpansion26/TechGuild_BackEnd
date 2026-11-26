@@ -36,6 +36,11 @@ var (
 	ErrFundInvalidSignature   = errors.New("razorpay signature verification failed")
 	ErrFundNotPending         = errors.New("funding not in pending state")
 	ErrFundMissingCredentials = errors.New("provider credentials missing")
+
+	ErrFundProviderVerifyFailed = errors.New("provider could not verify this payment")
+	ErrFundPaymentMismatch      = errors.New("provider payment does not match this charge")
+	ErrFundOrderMismatch        = errors.New("provider payment belongs to a different order")
+	ErrFundPaymentNotFound      = errors.New("payment not found for this milestone")
 )
 
 // ============================================================
@@ -133,6 +138,10 @@ func (s *MilestoneFundingService) FundMilestone(
 		return nil, err
 	}
 
+	// Only a LIVE attempt blocks funding. A failed row is history:
+	// MarkPaymentFailed puts the milestone back to `agreed` precisely so the
+	// client can retry, so refusing here would strand the milestone forever.
+	// GetByQuestMilestoneID already filters failed attempts out.
 	existingMP, err := s.mpRepo.GetByQuestMilestoneID(milestoneUUID)
 	if err == nil && existingMP != nil {
 		return nil, ErrFundAlreadyFunded
@@ -208,6 +217,19 @@ func (s *MilestoneFundingService) FundMilestone(
 
 	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
+
+		// Re-verify under a row lock: the pre-flight status check above ran outside any
+		// transaction, so without this two concurrent funds could both create records.
+		lockedMilestone, lockErr := repository.NewQuestMilestoneRepositoryTx(tx).FindByIDForUpdate(milestoneUUID)
+		if lockErr != nil {
+			return ErrFundMilestoneNotFound
+		}
+		if lockedMilestone.Status != models.MilestoneStatusAgreed {
+			return ErrFundMilestoneNotAgreed
+		}
+		if existing, exErr := repository.NewMilestonePaymentRepositoryTx(tx).GetByQuestMilestoneID(milestoneUUID); exErr == nil && existing != nil {
+			return ErrFundAlreadyFunded
+		}
 
 		// Determine initial statuses
 		paymentStatus := models.PaymentStatusCaptured
@@ -545,8 +567,18 @@ func (s *MilestoneFundingService) MarkPaymentCaptured(
 	if payment.Status == models.PaymentStatusCaptured {
 		return s.buildFundResponseFromExisting(payment)
 	}
-	if payment.Status != models.PaymentStatusPending {
+	// `failed` is recoverable: Razorpay allows several payment attempts against
+	// one order, so an attempt that failed and was then retried successfully on
+	// the SAME order must still be able to fund the milestone.
+	if payment.Status != models.PaymentStatusPending && payment.Status != models.PaymentStatusFailed {
 		return nil, ErrFundNotPending
+	}
+
+	// Never trust the caller's word (or a bare webhook payload) that the money
+	// actually moved: ask the provider. Covers /fund/confirm, the webhook and
+	// the reconciliation job, since all three route through here.
+	if err := s.verifyProviderCapture(payment, paymentID); err != nil {
+		return nil, err
 	}
 
 	milestoneUUID := payment.QuestMilestoneID
@@ -555,6 +587,27 @@ func (s *MilestoneFundingService) MarkPaymentCaptured(
 	// DB TX
 	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
+
+		// Re-read under the row lock: the guards above ran outside the tx, so a
+		// concurrent payment.failed could otherwise kill this attempt between the
+		// check and the writes.
+		locked, lockErr := repository.NewPaymentRepositoryTx(tx).GetByIDForUpdate(payment.ID)
+		if lockErr != nil {
+			return lockErr
+		}
+		if locked.Status == models.PaymentStatusCaptured {
+			return nil // another delivery already captured it
+		}
+		if locked.Status != models.PaymentStatusPending && locked.Status != models.PaymentStatusFailed {
+			return ErrFundNotPending
+		}
+
+		// This attempt's own row: a milestone can hold several attempts once one
+		// has failed, so quest_milestone_id would pick the wrong one.
+		mp, err := repository.NewMilestonePaymentRepositoryTx(tx).GetByPaymentID(payment.ID)
+		if err != nil {
+			return err
+		}
 
 		// Update Payment
 		if err := tx.Model(&models.Payment{}).
@@ -567,9 +620,10 @@ func (s *MilestoneFundingService) MarkPaymentCaptured(
 			return err
 		}
 
-		// Escrow pending → held
+		// Escrow pending (or a recovered failure) → held, for THIS attempt only
 		if err := tx.Model(&models.EscrowTransaction{}).
-			Where("quest_milestone_id = ?", milestoneUUID).
+			Where("payment_id = ? AND status IN ?", payment.ID,
+				[]models.EscrowStatus{models.EscrowStatusPending, models.EscrowStatusFailed}).
 			Updates(map[string]interface{}{
 				"status":  models.EscrowStatusHeld,
 				"held_at": now,
@@ -577,16 +631,19 @@ func (s *MilestoneFundingService) MarkPaymentCaptured(
 			return err
 		}
 
-		// MilestonePayment pending → funded
+		// MilestonePayment pending (or a recovered failure) → funded
 		if err := tx.Model(&models.MilestonePayment{}).
-			Where("quest_milestone_id = ?", milestoneUUID).
+			Where("payment_id = ? AND status IN ?", payment.ID,
+				[]models.MilestonePaymentStatus{models.MilestonePaymentPending, models.MilestonePaymentFailed}).
 			Update("status", models.MilestonePaymentFunded).Error; err != nil {
 			return err
 		}
 
-		// PlatformFee client side → settled
+		// PlatformFee client side → settled, for THIS attempt's milestone payment.
+		// The scope must be keyed by payment_id: quest_milestone_id can now match
+		// several rows (failed attempts) and a scalar subquery would error out.
 		if err := tx.Model(&models.PlatformFee{}).
-			Where("quest_id = ? AND side = ?", questUUID, models.PlatformFeeSideClient).
+			Where("milestone_payment_id = ? AND side = ?", mp.ID, models.PlatformFeeSideClient).
 			Updates(map[string]interface{}{
 				"status":     models.PlatformFeeSettled,
 				"settled_at": now,
@@ -604,12 +661,11 @@ func (s *MilestoneFundingService) MarkPaymentCaptured(
 			return err
 		}
 
-		// Ledger entries
-		mp, err := s.mpRepo.GetByQuestMilestoneID(milestoneUUID)
-		if err != nil {
-			return err
+		// Ledger entries — escrow is looked up through THIS attempt's own link
+		if mp.EscrowTransactionID == nil {
+			return fmt.Errorf("milestone payment %s has no escrow row", mp.ID)
 		}
-		escrow, err := s.escrowRepo.GetByQuestMilestoneID(milestoneUUID)
+		escrow, err := repository.NewEscrowTransactionRepositoryTx(tx).GetByID(*mp.EscrowTransactionID)
 		if err != nil {
 			return err
 		}
@@ -704,6 +760,17 @@ func (s *MilestoneFundingService) MarkPaymentFailed(orderID, reason string) erro
 	return postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 
+		// Re-read under the row lock: the terminal check above ran outside the tx,
+		// so a concurrent payment.captured could otherwise land in between.
+		locked, lockErr := repository.NewPaymentRepositoryTx(tx).GetByIDForUpdate(payment.ID)
+		if lockErr != nil {
+			return lockErr
+		}
+		if locked.Status == models.PaymentStatusFailed ||
+			locked.Status == models.PaymentStatusCaptured {
+			return nil // another delivery already settled this attempt
+		}
+
 		if err := tx.Model(&models.Payment{}).
 			Where("id = ?", payment.ID).
 			Updates(map[string]interface{}{
@@ -714,22 +781,37 @@ func (s *MilestoneFundingService) MarkPaymentFailed(orderID, reason string) erro
 			return err
 		}
 
+		// Scope downstream rows to THIS attempt. A milestone may now hold several
+		// attempts, so matching on quest_milestone_id would knock a newer live
+		// attempt's escrow/payment back to failed.
 		if err := tx.Model(&models.EscrowTransaction{}).
-			Where("quest_milestone_id = ?", payment.QuestMilestoneID).
+			Where("payment_id = ? AND status = ?", payment.ID, models.EscrowStatusPending).
 			Update("status", models.EscrowStatusFailed).Error; err != nil {
 			return err
 		}
 
 		if err := tx.Model(&models.MilestonePayment{}).
-			Where("quest_milestone_id = ?", payment.QuestMilestoneID).
+			Where("payment_id = ? AND status = ?", payment.ID, models.MilestonePaymentPending).
 			Update("status", models.MilestonePaymentFailed).Error; err != nil {
 			return err
 		}
 
-		if err := tx.Model(&models.QuestMilestone{}).
-			Where("id = ?", payment.QuestMilestoneID).
-			Update("status", models.MilestoneStatusAgreed).Error; err != nil {
+		// Hand the milestone back to `agreed` only when no other live attempt
+		// exists — a stale failure must not unfund a newer retry.
+		var liveOther int64
+		if err := tx.Model(&models.Payment{}).
+			Where("quest_milestone_id = ? AND id <> ? AND status IN ?",
+				payment.QuestMilestoneID, payment.ID,
+				[]models.PaymentStatus{models.PaymentStatusPending, models.PaymentStatusCaptured}).
+			Count(&liveOther).Error; err != nil {
 			return err
+		}
+		if liveOther == 0 {
+			if err := tx.Model(&models.QuestMilestone{}).
+				Where("id = ?", payment.QuestMilestoneID).
+				Update("status", models.MilestoneStatusAgreed).Error; err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -765,12 +847,20 @@ func (s *MilestoneFundingService) GetMilestonePayment(
 	isClient := quest.ClientID == userUUID
 	isFreelancer := quest.AssignedFreelancerID != nil && *quest.AssignedFreelancerID == userUUID
 	if !isClient && !isFreelancer {
-		return nil, errors.New("unauthorized")
+		return nil, ErrFundUnauthorized
 	}
 
 	mp, err := s.mpRepo.GetByQuestMilestoneID(milestoneUUID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Fall back to the most recent attempt, failed ones included, so the
+		// client can still see why the latest funding attempt failed.
+		mp, err = s.mpRepo.GetLatestByQuestMilestoneID(milestoneUUID)
+	}
 	if err != nil {
-		return nil, errors.New("payment not found for this milestone")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrFundPaymentNotFound
+		}
+		return nil, err
 	}
 
 	payment, err := s.paymentRepo.GetByID(mp.PaymentID)
@@ -778,7 +868,12 @@ func (s *MilestoneFundingService) GetMilestonePayment(
 		return nil, err
 	}
 
-	escrow, err := s.escrowRepo.GetByQuestMilestoneID(milestoneUUID)
+	// Attempt-scoped: a failed attempt's escrow row is status=failed, which
+	// GetByQuestMilestoneID filters out.
+	if mp.EscrowTransactionID == nil {
+		return nil, ErrFundPaymentNotFound
+	}
+	escrow, err := s.escrowRepo.GetByID(*mp.EscrowTransactionID)
 	if err != nil {
 		return nil, err
 	}
@@ -818,6 +913,48 @@ func (s *MilestoneFundingService) GetMilestonePayment(
 // ============================================================
 // Helpers
 // ============================================================
+
+// verifyProviderCapture asks the provider whether this payment is genuinely
+// captured, genuinely ours, and genuinely for the recorded amount.
+//
+// ponytail: non-razorpay providers skip this entirely — the mock is synchronous
+// and exposes no provider-side payment state to verify against. Swap in a mock
+// payment store if the mock ever stops being synchronous.
+func (s *MilestoneFundingService) verifyProviderCapture(payment *models.Payment, paymentID string) error {
+	if s.provider == nil || s.provider.Name() != "razorpay" {
+		return nil
+	}
+
+	res, err := s.provider.GetPayment(paymentID)
+	if errors.Is(err, ErrPaymentNotCaptured) {
+		// Authorized but not captured yet — capture it ourselves.
+		res, err = s.provider.CapturePayment(paymentID, payment.Amount)
+	}
+	if err != nil {
+		log.Printf("provider verify failed for payment=%s: %v", paymentID, err)
+		return ErrFundProviderVerifyFailed
+	}
+	if res == nil || res.Status != "captured" {
+		log.Printf("provider payment %s is not captured", paymentID)
+		return ErrFundProviderVerifyFailed
+	}
+
+	// The strong check: a client can hand us any valid payment id, so make sure
+	// this payment actually belongs to the order WE created.
+	if res.OrderID != "" && payment.ProviderOrderID != nil && res.OrderID != *payment.ProviderOrderID {
+		log.Printf("provider payment %s belongs to order %s, expected %s", paymentID, res.OrderID, *payment.ProviderOrderID)
+		return ErrFundOrderMismatch
+	}
+	if res.Amount > 0 && res.Amount != payment.Amount {
+		log.Printf("provider payment %s amount=%d, expected %d", paymentID, res.Amount, payment.Amount)
+		return ErrFundPaymentMismatch
+	}
+	if res.Currency != "" && res.Currency != payment.Currency {
+		log.Printf("provider payment %s currency=%s, expected %s", paymentID, res.Currency, payment.Currency)
+		return ErrFundPaymentMismatch
+	}
+	return nil
+}
 
 func (s *MilestoneFundingService) resolvePaymentMethod(
 	userID uuid.UUID,
@@ -860,11 +997,16 @@ func (s *MilestoneFundingService) buildFundResponseFromExisting(
 	payment *models.Payment,
 ) (*dto.FundMilestoneResponse, error) {
 
-	mp, err := s.mpRepo.GetByQuestMilestoneID(payment.QuestMilestoneID)
+	// Attempt-scoped: this builds the response for ONE payment, and a milestone
+	// may hold several attempts — GetByQuestMilestoneID would return the live one.
+	mp, err := s.mpRepo.GetByPaymentID(payment.ID)
 	if err != nil {
 		return nil, err
 	}
-	escrow, err := s.escrowRepo.GetByQuestMilestoneID(payment.QuestMilestoneID)
+	if mp.EscrowTransactionID == nil {
+		return nil, fmt.Errorf("milestone payment %s has no escrow row", mp.ID)
+	}
+	escrow, err := s.escrowRepo.GetByID(*mp.EscrowTransactionID)
 	if err != nil {
 		return nil, err
 	}

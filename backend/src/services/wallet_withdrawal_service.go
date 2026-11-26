@@ -25,6 +25,7 @@ var (
 	ErrWDProviderFailed    = errors.New("payout provider failed")
 	ErrWDDuplicate         = errors.New("withdrawal already processed")
 	ErrWDNotFound          = errors.New("withdrawal not found")
+	ErrWDReversalFailed    = errors.New("withdrawal compensation failed; funds need manual reconciliation")
 )
 
 type WalletWithdrawalService struct {
@@ -104,22 +105,14 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 	if pm.ProviderMethodID == nil || *pm.ProviderMethodID == "" {
 		return nil, errors.New("payout method has no provider reference")
 	}
-
-	// ---- 4. Provider: CreatePayout (OUTSIDE tx) ----
-	providerPayout, err := s.provider.CreatePayout(PayoutRequest{
-		UserID:                userUUID.String(),
-		Amount:                amountMinor,
-		Currency:              wallet.Currency,
-		ProviderFundAccountID: *pm.ProviderMethodID,
-		IdempotencyKey:        req.IdempotencyKey,
-		Description:           "Wallet withdrawal",
-	})
-	if err != nil {
-		log.Printf("provider CreatePayout failed for user=%s: %v", userUUID, err)
-		return nil, ErrWDProviderFailed
+	if pm.Purpose != models.PayoutMethodPurposePayout {
+		return nil, errors.New("payout method is not a payout destination")
+	}
+	if pm.Provider != s.provider.Name() {
+		return nil, errors.New("payout method belongs to a different provider")
 	}
 
-	// ---- 5. DB TX ----
+	// ---- 4. Step A: reserve + debit in ONE tx; Payout starts as `pending` ----
 	var (
 		payoutID   uuid.UUID
 		walletTxID uuid.UUID
@@ -129,7 +122,6 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 
-		// 5a. Lock wallet row
 		var w models.Wallet
 		if err := tx.Raw("SELECT * FROM wallets WHERE id = ? FOR UPDATE", wallet.ID).
 			Scan(&w).Error; err != nil {
@@ -139,7 +131,26 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 			return ErrWDInsufficient
 		}
 
-		// 5b. Debit wallet
+		// Create the Payout first so both the wallet transaction and the ledger row
+		// can reference its real id — no follow-up UPDATE needed.
+		source := models.PayoutSourceWalletWithdrawal
+		payout := &models.Payout{
+			UserID:             userUUID,
+			Source:             source,
+			PayoutMethodID:     pm.ID,
+			Provider:           s.provider.Name(),
+			Amount:             amountMinor,
+			Currency:           wallet.Currency,
+			SettlementAmount:   amountMinor,
+			SettlementCurrency: wallet.Currency,
+			Status:             models.PayoutStatusPending,
+			IdempotencyKey:     req.IdempotencyKey,
+		}
+		if err := tx.Create(payout).Error; err != nil {
+			return fmt.Errorf("create payout: %w", err)
+		}
+		payoutID = payout.ID
+
 		newBalance = w.AvailableBalanceMinor - amountMinor
 		if err := tx.Model(&models.Wallet{}).
 			Where("id = ?", w.ID).
@@ -151,7 +162,6 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 			return fmt.Errorf("debit wallet: %w", err)
 		}
 
-		// 5c. Wallet transaction (debit)
 		wt := &models.WalletTransaction{
 			WalletID:          w.ID,
 			UserID:            userUUID,
@@ -159,7 +169,7 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 			AmountMinor:       -amountMinor, // negative for debit
 			BalanceAfterMinor: newBalance,
 			Currency:          w.Currency,
-			Reference:         providerPayout.ProviderPayoutID,
+			Reference:         payoutID.String(),
 			Description:       "Wallet withdrawal",
 			IdempotencyKey:    req.IdempotencyKey + ":wallet",
 		}
@@ -168,29 +178,6 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 		}
 		walletTxID = wt.ID
 
-		// 5d. Payout row
-		source := models.PayoutSourceWalletWithdrawal
-		payout := &models.Payout{
-			UserID:             userUUID,
-			Source:             source,
-			PayoutMethodID:     pm.ID,
-			Provider:           s.provider.Name(),
-			ProviderPayoutID:   &providerPayout.ProviderPayoutID,
-			Amount:             amountMinor,
-			Currency:           wallet.Currency,
-			SettlementAmount:   amountMinor,
-			SettlementCurrency: wallet.Currency,
-			Status:             models.PayoutStatus(providerPayout.Status),
-			IdempotencyKey:     req.IdempotencyKey,
-			ProcessedAt:        &now,
-		}
-		if err := tx.Create(payout).Error; err != nil {
-			return fmt.Errorf("create payout: %w", err)
-		}
-		payoutID = payout.ID
-
-		// 5e. Ledger entry (withdrawal) — PaymentID aur QuestID nil (pointers)
-		providerRef := providerPayout.ProviderPayoutID
 		ledgerRec := &models.PaymentTransaction{
 			PaymentID:             nil, // withdrawal me payment nahi
 			QuestID:               nil,
@@ -199,8 +186,8 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 			Amount:                -amountMinor,
 			Currency:              wallet.Currency,
 			Provider:              s.provider.Name(),
-			ProviderTransactionID: &providerRef,
-			Reference:             payout.ID.String(),
+			ProviderTransactionID: nil, // filled by the provider call in Step B
+			Reference:             payoutID.String(),
 			IdempotencyKey:        req.IdempotencyKey + ":ledger:withdrawal",
 			CreatedAt:             now,
 		}
@@ -212,11 +199,52 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 	})
 
 	if err != nil {
-		log.Printf("Withdrawal TX failed for user=%s: %v", userUUID, err)
+		log.Printf("Withdrawal reserve TX failed for user=%s: %v", userUUID, err)
 		return nil, fmt.Errorf("failed to process withdrawal: %w", err)
 	}
 
-	// ---- 6. Response ----
+	// ---- 5. Step B: provider call, OUTSIDE the DB lock ----
+	providerPayout, providerErr := s.provider.CreatePayout(PayoutRequest{
+		UserID:                userUUID.String(),
+		Amount:                amountMinor,
+		Currency:              wallet.Currency,
+		ProviderFundAccountID: *pm.ProviderMethodID,
+		IdempotencyKey:        req.IdempotencyKey,
+		Description:           "Wallet withdrawal",
+	})
+
+	// ---- 6. Step C: finalize, or compensate the debit ----
+	if providerErr != nil {
+		log.Printf("provider CreatePayout failed for user=%s payout=%s: %v", userUUID, payoutID, providerErr)
+		if compErr := s.compensateFailedPayout(payoutID, wallet.ID, userUUID, amountMinor, providerErr.Error()); compErr != nil {
+			log.Printf("CRITICAL: withdrawal compensation FAILED user=%s payout=%s amount_minor=%d: %v", userUUID, payoutID, amountMinor, compErr)
+			return nil, ErrWDReversalFailed
+		}
+		return nil, ErrWDProviderFailed
+	}
+
+	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Payout{}).
+			Where("id = ?", payoutID).
+			Updates(map[string]interface{}{
+				"provider_payout_id": providerPayout.ProviderPayoutID,
+				"status":             models.PayoutStatus(providerPayout.Status),
+				"processed_at":       time.Now(),
+			}).Error; err != nil {
+			return fmt.Errorf("finalize payout: %w", err)
+		}
+		return tx.Model(&models.WalletTransaction{}).
+			Where("id = ?", walletTxID).
+			Update("reference", providerPayout.ProviderPayoutID).Error
+	})
+	if err != nil {
+		// The debit is already committed and the provider accepted the payout, so this
+		// is NOT compensated here — the payout webhook reconciles the row.
+		log.Printf("CRITICAL: payout finalize failed user=%s payout=%s provider_payout=%s: %v", userUUID, payoutID, providerPayout.ProviderPayoutID, err)
+		return nil, fmt.Errorf("failed to finalize withdrawal: %w", err)
+	}
+
+	// ---- 7. Response ----
 	return &dto.RequestWithdrawalResponse{
 		PayoutID:                    payoutID.String(),
 		WalletTxID:                  walletTxID.String(),
@@ -229,6 +257,70 @@ func (s *WalletWithdrawalService) RequestWithdrawal(
 		WalletAvailableBalanceMinor: newBalance,
 		Message:                     "Withdrawal successful. Funds on the way to your account.",
 	}, nil
+}
+
+// compensateFailedPayout reverses the Step-A debit when the provider refused the
+// payout. It locks the Payout row and re-checks its status, and it reuses the exact
+// idempotency key the async payout webhook uses, so the two paths cannot both
+// re-credit the same debit.
+func (s *WalletWithdrawalService) compensateFailedPayout(
+	payoutID uuid.UUID,
+	walletDBID uuid.UUID,
+	userUUID uuid.UUID,
+	amountMinor int64,
+	reason string,
+) error {
+	return postgres.DB.Transaction(func(tx *gorm.DB) error {
+		var p models.Payout
+		if err := tx.Raw("SELECT * FROM payouts WHERE id = ? FOR UPDATE", payoutID).
+			Scan(&p).Error; err != nil {
+			return fmt.Errorf("lock payout: %w", err)
+		}
+		if p.Status == models.PayoutStatusFailed || p.Status == models.PayoutStatusReversed {
+			return nil // the webhook path already reversed this debit
+		}
+
+		if err := tx.Model(&models.Payout{}).
+			Where("id = ?", payoutID).
+			Updates(map[string]interface{}{
+				"status":         models.PayoutStatusFailed,
+				"failure_reason": reason,
+			}).Error; err != nil {
+			return fmt.Errorf("mark payout failed: %w", err)
+		}
+
+		var w models.Wallet
+		if err := tx.Raw("SELECT * FROM wallets WHERE id = ? FOR UPDATE", walletDBID).
+			Scan(&w).Error; err != nil {
+			return fmt.Errorf("lock wallet: %w", err)
+		}
+		newAvailable := w.AvailableBalanceMinor + amountMinor
+		totalWithdrawn := w.TotalWithdrawnMinor - amountMinor
+		if totalWithdrawn < 0 {
+			totalWithdrawn = 0 // chk_wallet_balances_nonneg
+		}
+		if err := tx.Model(&models.Wallet{}).
+			Where("id = ?", w.ID).
+			Updates(map[string]interface{}{
+				"available_balance_minor": newAvailable,
+				"total_withdrawn_minor":   totalWithdrawn,
+				"updated_at":              time.Now(),
+			}).Error; err != nil {
+			return fmt.Errorf("re-credit wallet: %w", err)
+		}
+
+		return tx.Create(&models.WalletTransaction{
+			WalletID:          w.ID,
+			UserID:            userUUID,
+			Type:              models.WalletTxTypeWithdrawalFailed,
+			AmountMinor:       amountMinor,
+			BalanceAfterMinor: newAvailable,
+			Currency:          w.Currency,
+			Reference:         payoutID.String(),
+			Description:       "Withdrawal failed: funds returned",
+			IdempotencyKey:    "payout:" + payoutID.String() + ":reversal",
+		}).Error
+	})
 }
 
 // ============================================================

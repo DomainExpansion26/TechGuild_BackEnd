@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"errors"
 	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
 
@@ -9,12 +10,15 @@ import (
 	"gorm.io/gorm"
 )
 
+var ErrRecoveryCodeAlreadyUsed = errors.New("recovery code already used")
+
 type TwoFactorRepository interface {
 	GetByUserID(userID uuid.UUID) (*models.UserTwoFactorAuthentication, error)
 	Upsert(record *models.UserTwoFactorAuthentication) error
 	UpdateStatus(userID uuid.UUID, updates map[string]interface{}) error
 
 	CreateRecoveryCodes(codes []models.UserRecoveryCode) error
+	ReplaceRecoveryCodes(userID uuid.UUID, codes []models.UserRecoveryCode) error
 	GetUnusedRecoveryCodes(userID uuid.UUID) ([]models.UserRecoveryCode, error)
 	MarkRecoveryCodeUsed(id uuid.UUID) error
 	InvalidateRecoveryCodes(userID uuid.UUID) error
@@ -57,13 +61,32 @@ func (r *twoFactorRepository) GetUnusedRecoveryCodes(userID uuid.UUID) ([]models
 	return codes, err
 }
 
+func (r *twoFactorRepository) ReplaceRecoveryCodes(userID uuid.UUID, codes []models.UserRecoveryCode) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&models.UserRecoveryCode{}).Error; err != nil {
+			return err
+		}
+		if len(codes) == 0 {
+			return nil
+		}
+		return tx.Create(&codes).Error
+	})
+}
+
 func (r *twoFactorRepository) MarkRecoveryCodeUsed(id uuid.UUID) error {
-	return r.db.Model(&models.UserRecoveryCode{}).
-		Where("id = ?", id).
+	res := r.db.Model(&models.UserRecoveryCode{}).
+		Where("id = ? AND is_used = false", id).
 		Updates(map[string]interface{}{
 			"is_used": true,
 			"used_at": gorm.Expr("NOW()"),
-		}).Error
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return ErrRecoveryCodeAlreadyUsed
+	}
+	return nil
 }
 
 func (r *twoFactorRepository) InvalidateRecoveryCodes(userID uuid.UUID) error {

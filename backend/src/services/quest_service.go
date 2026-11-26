@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,31 +19,21 @@ import (
 )
 
 var (
-	ErrOnlyClientAllowed      = errors.New("only client accounts can create quests")
-	ErrClientNotVerified      = errors.New("client account verification required before creating quests")
-	ErrInvalidUserID          = errors.New("invalid user id")
-	ErrInvalidQuestID         = errors.New("invalid quest id")
-	ErrQuestNotFound          = errors.New("quest not found")
-	ErrQuestNotVisible        = errors.New("quest is not visible for your rank")
-	ErrQuestNotDraft          = errors.New("only draft quests can be published")
-	ErrClientFundingRequired  = errors.New("client must configure a funding method before publishing a quest")
-	ErrOnlyPartyLeadAllowed   = errors.New("only Party Lead of an active, verified party can accept quests")
-	ErrPartyNotVerified       = errors.New("party must be verified to accept quests")
-	ErrPartyCapacityExceeded  = errors.New("party has reached maximum concurrent quests capacity (5)")
-	ErrSkillMatchInsufficient = errors.New("party does not meet the minimum 60% skill match requirement")
-	ErrClientConflict         = errors.New("party already has an active quest with this client")
-	ErrEscrowNotFunded        = errors.New("client has not deposited funds into escrow for this quest")
-	ErrQuestNotOpen           = errors.New("quest is not open for acceptance")
-	ErrOnlyClientCanCancel    = errors.New("only the client owner can cancel/reject this quest")
-	ErrQuestAlreadyFinished   = errors.New("quest is already completed or cancelled")
-
-	// NEW: Direct acceptance has been deprecated in favour of the
-	// Upwork-style "Apply → Client Accepts" bidding flow.
-	ErrDirectAcceptDeprecated = errors.New(
-		"direct quest acceptance is deprecated. " +
-			"Apply via POST /v1/quests/{id}/apply, then wait for the client " +
-			"to accept your application via POST /v1/quests/{id}/applications/{application_id}/accept",
-	)
+	ErrOnlyClientAllowed     = errors.New("only client accounts can create quests")
+	ErrClientNotVerified     = errors.New("client account verification required before creating quests")
+	ErrInvalidUserID         = errors.New("invalid user id")
+	ErrInvalidQuestID        = errors.New("invalid quest id")
+	ErrQuestNotFound         = errors.New("quest not found")
+	ErrQuestNotVisible       = errors.New("quest is not visible for your rank")
+	ErrQuestNotDraft         = errors.New("only draft quests can be published")
+	ErrClientFundingRequired = errors.New("client must configure a funding method before publishing a quest")
+	ErrOnlyPartyLeadAllowed  = errors.New("only Party Lead of an active, verified party can accept quests")
+	ErrPartyNotVerified      = errors.New("party must be verified to accept quests")
+	ErrOnlyClientCanCancel   = errors.New("only the client owner can cancel/reject this quest")
+	ErrQuestAlreadyFinished  = errors.New("quest is already completed or cancelled")
+	ErrQuestLegacyEscrow     = errors.New("quest uses legacy quest-level escrow; cancellation requires manual reconciliation")
+	ErrQuestNotOwner         = errors.New("only the quest owner can perform this action")
+	ErrQuestNotEditable      = errors.New("only draft quests can be edited")
 )
 
 type QuestService interface {
@@ -51,25 +42,38 @@ type QuestService interface {
 	ListQuests(userID string, req dto.ListQuestsInput) (*dto.ListQuestsResponse, error)
 	GetQuestDetails(userID string, questID string) (*dto.QuestDetailsResponse, error)
 	RejectQuest(userID string, questID string, req dto.RejectQuestBody) (*dto.RejectQuestResponse, error)
-
-	// Deprecated: AcceptQuest is retained for backward compatibility but
-	// always returns ErrDirectAcceptDeprecated. Hiring now happens via
-	// quest applications (see QuestApplicationService.AcceptApplication).
-	AcceptQuest(userID string, questID string, req dto.AcceptQuestBody) (*dto.AcceptQuestResponse, error)
+	UpdateQuest(userID string, questID string, req dto.UpdateQuestBody) (*dto.UpdateQuestResponse, error)
+	SaveQuest(userID string, questID string) (*dto.SaveQuestResponse, error)
+	ListSavedQuests(userID string) (*dto.ListQuestsResponse, error)
+	GetBoardSummary(userID string) (*dto.QuestBoardSummaryResponse, error)
 }
 
 type questService struct {
-	questRepo repository.QuestRepository
-	userRepo  repository.UserRepository
-	partyRepo *repository.PartyRepository
+	questRepo     repository.QuestRepository
+	userRepo      repository.UserRepository
+	partyRepo     *repository.PartyRepository
+	milestoneRepo repository.QuestMilestoneRepository
+	appRepo       repository.QuestApplicationRepository
+	refundSvc     *RefundService
 }
 
 func NewQuestService() QuestService {
 	return &questService{
-		questRepo: repository.NewQuestRepository(),
-		userRepo:  repository.NewUserRepository(),
-		partyRepo: repository.NewPartyRepository(),
+		questRepo:     repository.NewQuestRepository(),
+		userRepo:      repository.NewUserRepository(),
+		partyRepo:     repository.NewPartyRepository(),
+		milestoneRepo: repository.NewQuestMilestoneRepository(),
+		appRepo:       repository.NewQuestApplicationRepository(),
 	}
+}
+
+// NewQuestServiceWithRefund wires refunds into RejectQuest (cancel-with-refund).
+// Constructors without a RefundService still cancel, but refuse to guess when a
+// refundable milestone exists.
+func NewQuestServiceWithRefund(refundSvc *RefundService) QuestService {
+	svc := NewQuestService().(*questService)
+	svc.refundSvc = refundSvc
+	return svc
 }
 
 func NewQuestServiceWithRepos(
@@ -78,9 +82,11 @@ func NewQuestServiceWithRepos(
 	partyRepo *repository.PartyRepository,
 ) QuestService {
 	return &questService{
-		questRepo: questRepo,
-		userRepo:  userRepo,
-		partyRepo: partyRepo,
+		questRepo:     questRepo,
+		userRepo:      userRepo,
+		partyRepo:     partyRepo,
+		milestoneRepo: repository.NewQuestMilestoneRepository(),
+		appRepo:       repository.NewQuestApplicationRepository(),
 	}
 }
 
@@ -258,29 +264,11 @@ func (s *questService) PublishQuest(userID string, questID string, req dto.Publi
 		return nil, ErrQuestNotDraft
 	}
 
-	hasFundingMethod := false
-	if strings.TrimSpace(req.FundingMethod) != "" {
-		hasFundingMethod = true
-	} else if cp, err := s.questRepo.GetClientProfile(clientUUID); err == nil && cp != nil {
-		hasFundingMethod = true
-	} else if vr, err := s.userRepo.GetVerificationRecordByUserID(userID); err == nil && vr != nil {
-		if vr.BankName != "" || vr.AccountNumberEnc != "" || vr.Status == models.VerificationApproved {
-			hasFundingMethod = true
-		}
-	}
-
-	if !hasFundingMethod {
-		return nil, ErrClientFundingRequired
-	}
-
+	// Publishing has no payment prerequisite: escrow is funded per-milestone by
+	// MilestoneFundingService.FundMilestone once a milestone reaches `agreed`.
 	now := time.Now()
 	quest.Status = models.QuestStatusOpen
 	quest.PublishedAt = &now
-
-	if req.FundEscrowNow == nil || *req.FundEscrowNow {
-		quest.IsEscrowFunded = true
-		quest.EscrowFundedAt = &now
-	}
 
 	if err := s.questRepo.UpdateQuest(quest); err != nil {
 		return nil, fmt.Errorf("failed to publish quest: %w", err)
@@ -289,7 +277,6 @@ func (s *questService) PublishQuest(userID string, questID string, req dto.Publi
 	meta, _ := json.Marshal(map[string]interface{}{
 		"budget_minor":      quest.BudgetMinor,
 		"required_min_rank": quest.RequiredMinRank,
-		"is_escrow_funded":  quest.IsEscrowFunded,
 		"published_at":      now,
 	})
 	_ = s.questRepo.CreateAuditLog(&models.AuditLog{
@@ -334,35 +321,46 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 		maxBudgetPtr = &req.MaxBudget
 	}
 
+	tlMin, tlMax := timelineBounds(req.TimelineBucket)
+
 	filter := repository.QuestFilter{
-		Category:   req.Category,
-		Complexity: req.Complexity,
-		MinBudget:  minBudgetPtr,
-		MaxBudget:  maxBudgetPtr,
-		Cursor:     req.Cursor,
-		Limit:      req.Limit,
+		Category:    req.Category,
+		Complexity:  req.Complexity,
+		MinBudget:   minBudgetPtr,
+		MaxBudget:   maxBudgetPtr,
+		Search:      strings.TrimSpace(req.Search),
+		QuestType:   strings.TrimSpace(req.QuestType),
+		Skills:      splitCSV(req.Skills),
+		ClientRank:  strings.TrimSpace(req.ClientRank),
+		TimelineMin: tlMin,
+		TimelineMax: tlMax,
+		Sort:        req.Sort,
+		Cursor:      req.Cursor,
+		Limit:       req.Limit,
 	}
 
-	// Client → see own quests (draft + open + in_progress + completed)
-	// Freelancer → see marketplace (rank-filtered, open only)
-	isClient := false
+	// Three audiences:
+	//   admin      → all quests, no client scoping (explicit filters still apply)
+	//   client     → own quests only, all statuses
+	//   freelancer → rank-filtered marketplace, open/published by default
+	accountType := ""
 	if user != nil && user.AccountType != nil {
-		at := string(*user.AccountType)
-		// "client", "client_admin", "client_member", "admin" sabko handle karega
-		if strings.HasPrefix(at, "client") || at == string(models.AccountTypeAdmin) {
-			isClient = true
-		}
+		accountType = string(*user.AccountType)
 	}
 
-	if isClient {
-		// Client is seeing their own quests (all statuses)
+	switch {
+	case accountType == string(models.AccountTypeAdmin):
+		if req.Status != "" {
+			filter.Status = req.Status
+		}
+	case strings.HasPrefix(accountType, "client"):
 		clientUUID := user.ID
 		filter.ClientID = &clientUUID
 		if req.Status != "" {
 			filter.Status = req.Status
 		}
-	} else {
-		// Freelancer is seeing the marketplace
+	default:
+		// Freelancer marketplace view; also covers anonymous / account-type-less callers.
 		filter.AllowedRanks = utils.GetVisibleRanks(requesterRank)
 		if req.Status != "" {
 			filter.Status = req.Status
@@ -379,35 +377,16 @@ func (s *questService) ListQuests(userID string, req dto.ListQuestsInput) (*dto.
 		return nil, fmt.Errorf("failed to query quests: %w", err)
 	}
 
+	ids := questIDs(quests)
+	applicantCounts, err := s.questRepo.CountApplicantsByQuestIDs(ids)
+	if err != nil {
+		applicantCounts = map[uuid.UUID]int64{}
+	}
+	savedIDs, userSkills := s.viewerState(user, ids)
+
 	items := make([]dto.QuestListItem, len(quests))
 	for i, q := range quests {
-		skillNames := make([]string, len(q.Skills))
-		for j, sk := range q.Skills {
-			skillNames[j] = sk.Name
-		}
-
-		clientName := "Anonymous Client"
-		if q.Client.FirstName != "" {
-			clientName = strings.TrimSpace(q.Client.FirstName + " " + q.Client.LastName)
-		}
-
-		items[i] = dto.QuestListItem{
-			ID:              q.ID.String(),
-			Title:           q.Title,
-			Description:     q.Description,
-			Category:        q.Category,
-			Complexity:      string(q.Complexity),
-			BudgetINR:       utils.PaiseToRupees(q.BudgetMinor),
-			TimelineDays:    q.TimelineDays,
-			RequiredMinRank: q.RequiredMinRank,
-			Status:          string(q.Status),
-			ClientID:        q.ClientID.String(),
-			ClientName:      clientName,
-			Skills:          skillNames,
-			MilestoneCount:  len(q.Milestones),
-			PublishedAt:     q.PublishedAt,
-			CreatedAt:       q.CreatedAt,
-		}
+		items[i] = s.questListItem(q, userSkills, savedIDs, applicantCounts)
 	}
 
 	return &dto.ListQuestsResponse{
@@ -505,6 +484,18 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 
 	// --- Build response ---
 
+	if !isOwner {
+		if err := s.questRepo.IncrementQuestViews(quest.ID); err == nil {
+			quest.ViewsCount++
+		}
+	}
+
+	applicantCounts, err := s.questRepo.CountApplicantsByQuestIDs([]uuid.UUID{quest.ID})
+	if err != nil {
+		applicantCounts = map[uuid.UUID]int64{}
+	}
+	savedIDs, userSkills := s.viewerState(user, []uuid.UUID{quest.ID})
+
 	milestones := make([]dto.QuestDetailMilestone, len(quest.Milestones))
 	for i, m := range quest.Milestones {
 		milestones[i] = dto.QuestDetailMilestone{
@@ -561,18 +552,23 @@ func (s *questService) GetQuestDetails(userID string, questID string) (*dto.Ques
 		AcceptedPartyID: acceptedPartyIDStr,
 		Milestones:      milestones,
 		Skills:          skills,
+		ApplicantsCount: int(applicantCounts[quest.ID]),
+		ViewsCount:      quest.ViewsCount,
+		IsSaved:         savedIDs[quest.ID],
+		MatchPercentage: matchPercentage(skillNamesOf(quest.Skills), userSkills),
 		CreatedAt:       quest.CreatedAt,
 		UpdatedAt:       quest.UpdatedAt,
 	}, nil
 }
 
 // ============================================================
-// 5. RejectQuest — client cancels/rejects (with escrow refund)
+// 5. RejectQuest — client cancels/rejects (refunds held escrow)
 // ============================================================
 // Allowed on: open, published, in_progress
 // Not allowed on: cancelled, completed
-// Escrow refunded if IsEscrowFunded == true (milestone-level holds
-// are handled separately by milestone refund flows).
+// Every milestone in a refundable state (work_in_progress,
+// submitted_for_release) is refunded through RefundService; the quest only
+// becomes cancelled once each of those succeeded.
 func (s *questService) RejectQuest(userID string, questID string, req dto.RejectQuestBody) (*dto.RejectQuestResponse, error) {
 	clientUUID, err := uuid.Parse(userID)
 	if err != nil {
@@ -598,15 +594,48 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 		return nil, ErrQuestAlreadyFinished
 	}
 
-	escrowRefunded := false
-	refundAmount := int64(0)
-
+	// Legacy quest-level escrow has no per-milestone rows to walk; cancelling
+	// would strand the deposit, so hand it to manual reconciliation instead.
 	if quest.IsEscrowFunded {
-		escrowRefunded = true
-		refundAmount = quest.BudgetMinor
-		quest.IsEscrowFunded = false
-		now := time.Now()
-		quest.EscrowRefundedAt = &now
+		return nil, ErrQuestLegacyEscrow
+	}
+
+	reason := strings.TrimSpace(req.Reason)
+	if len(reason) < 5 {
+		reason = "Quest cancelled by client"
+	}
+
+	// Refund sequentially, oldest milestone first. Keys are deterministic per
+	// milestone, so a retried cancel replays the existing refund instead of
+	// refunding twice.
+	milestones, err := s.milestoneRepo.FindByQuestID(qUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load milestones: %w", err)
+	}
+
+	var refundedMinor int64
+	var refundedCount int
+	for i := range milestones {
+		m := &milestones[i]
+		if m.Status != models.MilestoneStatusWorkInProgress &&
+			m.Status != models.MilestoneStatusSubmittedForRelease {
+			continue
+		}
+		if s.refundSvc == nil {
+			return nil, errors.New("refund service is not configured")
+		}
+		res, err := s.refundSvc.RequestRefund(userID, questID, m.ID.String(), dto.RequestRefundBody{
+			Reason:         reason,
+			IdempotencyKey: fmt.Sprintf("quest:%s:cancel:%s", questID, m.ID),
+		})
+		if err != nil {
+			if skippableCancelRefundError(err) {
+				continue
+			}
+			return nil, fmt.Errorf("refund failed for milestone %s: %w", m.ID, err)
+		}
+		refundedCount++
+		refundedMinor += res.RefundAmountMinor
 	}
 
 	quest.Status = models.QuestStatusCancelled
@@ -615,9 +644,7 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 	}
 
 	meta, _ := json.Marshal(map[string]interface{}{
-		"refunded":      escrowRefunded,
-		"refund_amount": refundAmount,
-		"reason":        req.Reason,
+		"reason": req.Reason,
 	})
 	_ = s.questRepo.CreateAuditLog(&models.AuditLog{
 		UserID:   &clientUUID,
@@ -627,27 +654,447 @@ func (s *questService) RejectQuest(userID string, questID string, req dto.Reject
 		Metadata: datatypes.JSON(meta),
 	})
 
+	message := "Quest has been cancelled successfully"
+	if refundedCount > 0 {
+		message = fmt.Sprintf("Quest cancelled and %d milestone refund(s) initiated", refundedCount)
+	}
+
 	return &dto.RejectQuestResponse{
 		QuestID:            quest.ID.String(),
 		Status:             string(quest.Status),
-		EscrowRefunded:     escrowRefunded,
-		EscrowRefundAmount: utils.PaiseToRupees(refundAmount),
-		Message:            "Quest has been cancelled successfully",
+		EscrowRefunded:     refundedCount > 0,
+		EscrowRefundAmount: utils.PaiseToRupees(refundedMinor),
+		Message:            message,
+	}, nil
+}
+
+// skippableCancelRefundError reports refund failures that mean "this milestone
+// has nothing to refund during a bulk cancel": a refund already in flight or
+// done, escrow never held (e.g. only failed funding attempts), or the milestone
+// left a refundable state concurrently.
+func skippableCancelRefundError(err error) bool {
+	return errors.Is(err, ErrRefStateRace) ||
+		errors.Is(err, ErrRefAlreadyRefunded) ||
+		errors.Is(err, ErrRefInvalidState) ||
+		errors.Is(err, ErrRefEscrowNotFound) ||
+		errors.Is(err, ErrRefPaymentNotFound) ||
+		errors.Is(err, ErrRefEscrowNotHeld)
+}
+
+// ============================================================
+// 6. UpdateQuest — partial edit of a draft quest (owner only)
+// ============================================================
+func (s *questService) UpdateQuest(userID string, questID string, req dto.UpdateQuestBody) (*dto.UpdateQuestResponse, error) {
+	clientUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, ErrInvalidUserID
+	}
+	qUUID, err := uuid.Parse(questID)
+	if err != nil {
+		return nil, ErrInvalidQuestID
+	}
+
+	quest, err := s.questRepo.FindByID(qUUID)
+	if err != nil || quest == nil {
+		return nil, ErrQuestNotFound
+	}
+	if quest.ClientID != clientUUID {
+		return nil, ErrQuestNotOwner
+	}
+	if quest.Status != models.QuestStatusDraft {
+		return nil, ErrQuestNotEditable
+	}
+
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if len(title) < 3 || len(title) > 100 {
+			return nil, errors.New("quest title must be between 3 and 100 characters")
+		}
+		quest.Title = title
+	}
+	if req.Description != nil {
+		description := strings.TrimSpace(*req.Description)
+		if len(description) < 10 {
+			return nil, errors.New("quest description must be at least 10 characters")
+		}
+		quest.Description = description
+	}
+	if req.Category != nil {
+		category := strings.TrimSpace(*req.Category)
+		if category == "" {
+			return nil, errors.New("quest category is required")
+		}
+		quest.Category = category
+	}
+	if req.Industry != nil {
+		quest.Industry = strings.TrimSpace(*req.Industry)
+	}
+	if req.Complexity != nil {
+		if v := strings.TrimSpace(*req.Complexity); v != "" {
+			quest.Complexity = models.QuestComplexity(v)
+		}
+	}
+	if req.BudgetMinor != nil {
+		if *req.BudgetMinor < 100000 {
+			return nil, errors.New("quest budget must be at least ₹1,000 (100000 paise)")
+		}
+		quest.BudgetMinor = *req.BudgetMinor
+	}
+	if req.TimelineDays != nil {
+		if *req.TimelineDays < 1 {
+			return nil, errors.New("quest timeline must be at least 1 day")
+		}
+		quest.TimelineDays = *req.TimelineDays
+	}
+	if req.QuestType != nil {
+		if v := strings.TrimSpace(*req.QuestType); v != "" {
+			quest.QuestType = models.QuestType(v)
+		}
+	}
+	if req.ExperienceLevel != nil {
+		quest.ExperienceLevel = strings.TrimSpace(*req.ExperienceLevel)
+	}
+	if req.SoftSkills != nil {
+		quest.SoftSkills = pq.StringArray(*req.SoftSkills)
+	}
+	if req.Languages != nil {
+		if langBytes, err := json.Marshal(*req.Languages); err == nil {
+			quest.Languages = datatypes.JSON(langBytes)
+		}
+	}
+
+	// A budget change moves the marketplace rank gate with it.
+	budgetRupees := float64(quest.BudgetMinor) / 100.0
+	clientRank := quest.Client.Rank
+	if clientRank == "" {
+		clientRank = models.RankF
+	}
+	if err := utils.ValidateBudgetForRank(clientRank, budgetRupees); err != nil {
+		return nil, err
+	}
+	requiredMinRank, err := utils.ComputeRequiredMinRank(budgetRupees)
+	if err != nil {
+		return nil, err
+	}
+	quest.RequiredMinRank = requiredMinRank
+
+	replaceSkills := req.Skills != nil
+	skills := make([]models.QuestSkill, 0)
+	if replaceSkills {
+		if len(*req.Skills) == 0 {
+			return nil, errors.New("at least one technical skill is required")
+		}
+		for _, sk := range *req.Skills {
+			prof := strings.TrimSpace(sk.ProficiencyLevel)
+			if prof == "" {
+				prof = "intermediate"
+			}
+			skills = append(skills, models.QuestSkill{
+				Name:             strings.TrimSpace(sk.Name),
+				ProficiencyLevel: prof,
+				IsCore:           sk.IsCore,
+			})
+		}
+	}
+
+	if err := s.questRepo.UpdateDraftQuest(quest, skills, replaceSkills); err != nil {
+		return nil, fmt.Errorf("failed to update quest draft: %w", err)
+	}
+
+	return &dto.UpdateQuestResponse{
+		QuestID:         quest.ID.String(),
+		Title:           quest.Title,
+		Status:          string(quest.Status),
+		BudgetMinor:     quest.BudgetMinor,
+		RequiredMinRank: quest.RequiredMinRank,
+		UpdatedAt:       quest.UpdatedAt,
 	}, nil
 }
 
 // ============================================================
-// 6. AcceptQuest — DISABLED (Upwork flow)
+// 7. SaveQuest — toggle a bookmark
 // ============================================================
-// Freelancers MUST go through the application flow:
-//
-//  1. POST /v1/quests/{id}/apply          (freelancer or party lead bids)
-//  2. GET  /v1/quests/{id}/applications   (client reviews)
-//  3. POST /v1/quests/{id}/applications/{app_id}/accept  (client picks winner)
-//
-// If you need to restore the legacy direct-accept behavior (e.g. for a
-// private/internal feature flag), replace the early return below with the
-// original implementation from git history.
-func (s *questService) AcceptQuest(userID string, questID string, req dto.AcceptQuestBody) (*dto.AcceptQuestResponse, error) {
-	return nil, ErrDirectAcceptDeprecated
+func (s *questService) SaveQuest(userID string, questID string) (*dto.SaveQuestResponse, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, ErrInvalidUserID
+	}
+	qUUID, err := uuid.Parse(questID)
+	if err != nil {
+		return nil, ErrInvalidQuestID
+	}
+
+	quest, err := s.questRepo.FindByID(qUUID)
+	if err != nil || quest == nil {
+		return nil, ErrQuestNotFound
+	}
+
+	saved, err := s.questRepo.ToggleSavedQuest(userUUID, qUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to toggle saved quest: %w", err)
+	}
+
+	if saved {
+		// Best-effort feed entry; a bookmark must not fail because of it.
+		_ = s.questRepo.CreateQuestActivity(&models.QuestActivity{
+			QuestID:     qUUID,
+			ActorID:     userUUID,
+			ActionType:  models.ActivityQuestSaved,
+			Title:       "Quest saved",
+			Description: quest.Title,
+		})
+	}
+
+	return &dto.SaveQuestResponse{QuestID: qUUID.String(), Saved: saved}, nil
+}
+
+// ============================================================
+// 8. ListSavedQuests — the caller's bookmarks
+// ============================================================
+func (s *questService) ListSavedQuests(userID string) (*dto.ListQuestsResponse, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, ErrInvalidUserID
+	}
+
+	quests, err := s.questRepo.ListSavedQuests(userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list saved quests: %w", err)
+	}
+
+	ids := questIDs(quests)
+	applicantCounts, err := s.questRepo.CountApplicantsByQuestIDs(ids)
+	if err != nil {
+		applicantCounts = map[uuid.UUID]int64{}
+	}
+	savedIDs := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		savedIDs[id] = true
+	}
+
+	userSkills := map[string]bool{}
+	if names, err := s.questRepo.GetUserSkillNames(userUUID); err == nil {
+		userSkills = lowerSkillSet(names)
+	}
+
+	items := make([]dto.QuestListItem, len(quests))
+	for i, q := range quests {
+		items[i] = s.questListItem(q, userSkills, savedIDs, applicantCounts)
+	}
+
+	return &dto.ListQuestsResponse{Quests: items, Total: len(items)}, nil
+}
+
+// ============================================================
+// 9. GetBoardSummary — freelancer quest-board KPIs
+// ============================================================
+func (s *questService) GetBoardSummary(userID string) (*dto.QuestBoardSummaryResponse, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, ErrInvalidUserID
+	}
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil || user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	statusCounts, err := s.appRepo.CountByStatusForFreelancer(userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count applications: %w", err)
+	}
+	var applied int64
+	for _, count := range statusCounts {
+		applied += count
+	}
+
+	activeQuests, err := s.questRepo.ListQuestsForPartyViewer(userUUID, string(models.QuestStatusInProgress))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active quests: %w", err)
+	}
+
+	recent, err := s.appRepo.ListRecentByFreelancer(userUUID, 5)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent applications: %w", err)
+	}
+	recentItems := make([]dto.QuestBoardApplicationItem, 0, len(recent))
+	for _, app := range recent {
+		recentItems = append(recentItems, dto.QuestBoardApplicationItem{
+			QuestID:    app.QuestID.String(),
+			QuestTitle: app.Quest.Title,
+			BudgetINR:  utils.PaiseToRupees(app.ProposedBudget),
+			Status:     string(app.Status),
+			AppliedAt:  app.CreatedAt,
+		})
+	}
+
+	rank := user.Rank
+	if rank == "" {
+		rank = models.RankF
+	}
+	candidates, _, _, _, err := s.questRepo.ListQuests(repository.QuestFilter{
+		AllowedRanks: utils.GetVisibleRanks(rank),
+		Status:       string(models.QuestStatusOpen),
+		Limit:        50,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load recommended quests: %w", err)
+	}
+
+	ids := questIDs(candidates)
+	applicantCounts, err := s.questRepo.CountApplicantsByQuestIDs(ids)
+	if err != nil {
+		applicantCounts = map[uuid.UUID]int64{}
+	}
+	savedIDs, userSkills := s.viewerState(user, ids)
+
+	recommended := make([]dto.QuestListItem, len(candidates))
+	for i, q := range candidates {
+		recommended[i] = s.questListItem(q, userSkills, savedIDs, applicantCounts)
+	}
+	sort.SliceStable(recommended, func(i, j int) bool {
+		return recommended[i].MatchPercentage > recommended[j].MatchPercentage
+	})
+	if len(recommended) > 5 {
+		recommended = recommended[:5]
+	}
+
+	return &dto.QuestBoardSummaryResponse{
+		KPIs: dto.QuestBoardKPIs{
+			AppliedCount:      int(applied),
+			UnderReviewCount:  int(statusCounts[string(models.ApplicationPending)]),
+			ShortlistedCount:  int(statusCounts[string(models.ApplicationShortlisted)]),
+			ActiveQuestsCount: len(activeQuests),
+		},
+		RecentApplications: recentItems,
+		RecommendedQuests:  recommended,
+	}, nil
+}
+
+// ============================================================
+// Card enrichment helpers
+// ============================================================
+
+func questIDs(quests []models.Quest) []uuid.UUID {
+	ids := make([]uuid.UUID, len(quests))
+	for i := range quests {
+		ids[i] = quests[i].ID
+	}
+	return ids
+}
+
+// viewerState returns the caller's bookmarked quest ids and their lowercased
+// skill set. Anonymous callers get empty maps.
+func (s *questService) viewerState(viewer *models.User, ids []uuid.UUID) (map[uuid.UUID]bool, map[string]bool) {
+	saved := map[uuid.UUID]bool{}
+	skills := map[string]bool{}
+	if viewer == nil {
+		return saved, skills
+	}
+	if rows, err := s.questRepo.SavedQuestIDs(viewer.ID, ids); err == nil {
+		saved = rows
+	}
+	if names, err := s.questRepo.GetUserSkillNames(viewer.ID); err == nil {
+		skills = lowerSkillSet(names)
+	}
+	return saved, skills
+}
+
+func (s *questService) questListItem(q models.Quest, userSkills map[string]bool, saved map[uuid.UUID]bool, applicantCounts map[uuid.UUID]int64) dto.QuestListItem {
+	skillNames := skillNamesOf(q.Skills)
+
+	clientName := "Anonymous Client"
+	if q.Client.FirstName != "" {
+		clientName = strings.TrimSpace(q.Client.FirstName + " " + q.Client.LastName)
+	}
+
+	return dto.QuestListItem{
+		ID:              q.ID.String(),
+		Title:           q.Title,
+		Description:     q.Description,
+		Category:        q.Category,
+		Complexity:      string(q.Complexity),
+		BudgetINR:       utils.PaiseToRupees(q.BudgetMinor),
+		TimelineDays:    q.TimelineDays,
+		RequiredMinRank: q.RequiredMinRank,
+		Status:          string(q.Status),
+		ClientID:        q.ClientID.String(),
+		ClientName:      clientName,
+		Skills:          skillNames,
+		MilestoneCount:  len(q.Milestones),
+		PublishedAt:     q.PublishedAt,
+		CreatedAt:       q.CreatedAt,
+		QuestType:       string(q.QuestType),
+		ClientRank:      q.Client.Rank,
+		ApplicantsCount: int(applicantCounts[q.ID]),
+		ViewsCount:      q.ViewsCount,
+		IsSaved:         saved[q.ID],
+		MatchPercentage: matchPercentage(skillNames, userSkills),
+	}
+}
+
+func skillNamesOf(skills []models.QuestSkill) []string {
+	names := make([]string, len(skills))
+	for i, sk := range skills {
+		names[i] = sk.Name
+	}
+	return names
+}
+
+func lowerSkillSet(names []string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, name := range names {
+		if v := strings.ToLower(strings.TrimSpace(name)); v != "" {
+			out[v] = true
+		}
+	}
+	return out
+}
+
+// matchPercentage is the share of the quest's required skills the caller has.
+func matchPercentage(questSkillNames []string, userSkills map[string]bool) int {
+	if len(questSkillNames) == 0 || len(userSkills) == 0 {
+		return 0
+	}
+	hits := 0
+	for _, name := range questSkillNames {
+		if userSkills[strings.ToLower(strings.TrimSpace(name))] {
+			hits++
+		}
+	}
+	return hits * 100 / len(questSkillNames)
+}
+
+// splitCSV is the lenient parser for comma-separated query params.
+func splitCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// timelineBounds maps a timeline bucket to inclusive day bounds.
+func timelineBounds(bucket string) (*int, *int) {
+	switch strings.TrimSpace(bucket) {
+	case "under_7":
+		max := 6
+		return nil, &max
+	case "7_15":
+		min, max := 7, 15
+		return &min, &max
+	case "15_30":
+		min, max := 15, 30
+		return &min, &max
+	case "30_plus":
+		min := 31
+		return &min, nil
+	default:
+		return nil, nil
+	}
 }

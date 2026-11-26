@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"techguild-backend/src/utils"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -32,6 +34,10 @@ var (
 	ErrRelProviderFailed        = errors.New("provider escrow release failed")
 	ErrRelPaymentNotFound       = errors.New("milestone payment record not found")
 )
+
+// errReleaseReplay signals that another caller already completed this release;
+// it is converted into the idempotent 200 response outside the transaction.
+var errReleaseReplay = errors.New("milestone already released")
 
 // ============================================================
 // Service
@@ -208,6 +214,11 @@ func (s *MilestoneReleaseService) ReleaseMilestone(
 		return nil, errors.New("escrow has no provider reference")
 	}
 
+	// Replay of an already-completed release carrying the same idempotency key.
+	if prior, err := s.escrowRepo.GetByReleaseIdempotencyKey(req.IdempotencyKey); err == nil && prior != nil && prior.Status == models.EscrowStatusReleased {
+		return s.buildReleaseResponseFromExisting(milestone, questUUID)
+	}
+
 	// ---- 3. Provider: ReleaseEscrow (OUTSIDE tx) ----
 	if _, err := s.provider.ReleaseEscrow(EscrowReleaseRequest{
 		ProviderEscrowID: *escrow.ProviderEscrowID,
@@ -222,16 +233,35 @@ func (s *MilestoneReleaseService) ReleaseMilestone(
 	// ---- 4. DB TX ----
 	var walletTxID uuid.UUID
 	var walletAfter int64
+	var walletPendingAfter int64
 
 	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 
-		// 4a. Escrow: held → released
+		// Re-verify state under a row lock: the checks above ran outside the tx, so a
+		// concurrent release could otherwise credit the freelancer wallet twice.
+		lockedMilestone, lockErr := repository.NewQuestMilestoneRepositoryTx(tx).FindByIDForUpdate(milestoneUUID)
+		if lockErr != nil {
+			return ErrRelMilestoneNotFound
+		}
+		if lockedMilestone.Status == models.MilestoneStatusReleased {
+			return errReleaseReplay
+		}
+		if lockedMilestone.Status != models.MilestoneStatusSubmittedForRelease {
+			return ErrRelInvalidState
+		}
+		lockedEscrow, lockErr := repository.NewEscrowTransactionRepositoryTx(tx).GetByQuestMilestoneIDForUpdate(milestoneUUID)
+		if lockErr != nil {
+			return errors.New("escrow record not found")
+		}
+
+		// 4a. Escrow: held → released (persist the release key so replays are detectable)
 		if err := tx.Model(&models.EscrowTransaction{}).
-			Where("id = ?", escrow.ID).
+			Where("id = ?", lockedEscrow.ID).
 			Updates(map[string]interface{}{
-				"status":      models.EscrowStatusReleased,
-				"released_at": now,
+				"status":                  models.EscrowStatusReleased,
+				"released_at":             now,
+				"release_idempotency_key": req.IdempotencyKey,
 			}).Error; err != nil {
 			return fmt.Errorf("update escrow: %w", err)
 		}
@@ -266,13 +296,14 @@ func (s *MilestoneReleaseService) ReleaseMilestone(
 			return fmt.Errorf("update milestone: %w", err)
 		}
 
-		// 4e. Wallet credit (via tx-scoped repos)
-		wallet, err := creditWalletInTx(tx, quest.AssignedFreelancerID, mp.FreelancerNetMinor, mp.Currency, mp.ID.String(), "Milestone release: "+milestone.Title, req.IdempotencyKey+":wallet_credit")
+		// 4e. Wallet HOLD (via tx-scoped repos) — pending until the quest is approved
+		wallet, err := creditWalletInTx(tx, quest.AssignedFreelancerID, mp.FreelancerNetMinor, mp.Currency, mp.ID.String(), "Milestone release: "+milestone.Title, req.IdempotencyKey+":wallet_hold")
 		if err != nil {
-			return fmt.Errorf("wallet credit: %w", err)
+			return fmt.Errorf("wallet hold: %w", err)
 		}
 		walletTxID = wallet.TxID
 		walletAfter = wallet.BalanceAfter
+		walletPendingAfter = wallet.PendingAfter
 
 		// 4f. Ledger entries (pointers)
 		msPtr := milestoneUUID
@@ -324,6 +355,14 @@ func (s *MilestoneReleaseService) ReleaseMilestone(
 	})
 
 	if err != nil {
+		if errors.Is(err, errReleaseReplay) {
+			// Another caller completed the release first: answer with the current row.
+			fresh, ferr := s.milestoneRepo.FindByID(milestoneUUID)
+			if ferr != nil {
+				return nil, ErrRelMilestoneNotFound
+			}
+			return s.buildReleaseResponseFromExisting(fresh, questUUID)
+		}
 		log.Printf("Release TX failed for milestone=%s: %v", milestoneUUID, err)
 		return nil, fmt.Errorf("failed to release: %w", err)
 	}
@@ -340,22 +379,25 @@ func (s *MilestoneReleaseService) ReleaseMilestone(
 
 	// ---- 6. Response ----
 	return &dto.ReleaseMilestoneResponse{
-		MilestonePaymentID:     mp.ID.String(),
-		EscrowID:               escrow.ID.String(),
-		PayoutWalletTxID:       walletTxID.String(),
-		MilestoneID:            milestoneUUID.String(),
-		QuestID:                questUUID.String(),
-		Status:                 string(models.MilestonePaymentReleased),
-		MilestoneAmount:        utils.PaiseToRupees(mp.MilestoneAmountMinor),
-		PlatformFee:            utils.PaiseToRupees(mp.FreelancerFeeMinor),
-		FreelancerNet:          utils.PaiseToRupees(mp.FreelancerNetMinor),
-		MilestoneAmountMinor:   mp.MilestoneAmountMinor,
-		PlatformFeeMinor:       mp.FreelancerFeeMinor,
-		FreelancerNetMinor:     mp.FreelancerNetMinor,
-		Currency:               mp.Currency,
-		WalletAvailableBalance: utils.PaiseToRupees(walletAfter),
-		ReleasedAt:             time.Now(),
-		Message:                "Milestone released. Funds credited to freelancer wallet.",
+		MilestonePaymentID:          mp.ID.String(),
+		EscrowID:                    escrow.ID.String(),
+		PayoutWalletTxID:            walletTxID.String(),
+		MilestoneID:                 milestoneUUID.String(),
+		QuestID:                     questUUID.String(),
+		Status:                      string(models.MilestonePaymentReleased),
+		MilestoneAmount:             utils.PaiseToRupees(mp.MilestoneAmountMinor),
+		PlatformFee:                 utils.PaiseToRupees(mp.FreelancerFeeMinor),
+		FreelancerNet:               utils.PaiseToRupees(mp.FreelancerNetMinor),
+		MilestoneAmountMinor:        mp.MilestoneAmountMinor,
+		PlatformFeeMinor:            mp.FreelancerFeeMinor,
+		FreelancerNetMinor:          mp.FreelancerNetMinor,
+		Currency:                    mp.Currency,
+		WalletAvailableBalance:      utils.PaiseToRupees(walletAfter),
+		WalletPendingBalance:        utils.PaiseToRupees(walletPendingAfter),
+		WalletAvailableBalanceMinor: walletAfter,
+		WalletPendingBalanceMinor:   walletPendingAfter,
+		ReleasedAt:                  time.Now(),
+		Message:                     "Milestone released. Funds are held as pending until the quest is completed.",
 	}, nil
 }
 
@@ -376,11 +418,13 @@ func creditWalletInTx(
 ) (struct {
 	TxID         uuid.UUID
 	BalanceAfter int64
+	PendingAfter int64
 }, error) {
 
 	var result struct {
 		TxID         uuid.UUID
 		BalanceAfter int64
+		PendingAfter int64
 	}
 
 	if userID == nil {
@@ -421,11 +465,14 @@ func creditWalletInTx(
 		return result, err
 	}
 
-	newBalance := wallet.AvailableBalanceMinor + amountMinor
+	// Hold, don't credit: the freelancer cannot withdraw milestone money until the
+	// whole quest is approved. available_balance_minor is deliberately untouched, so
+	// BalanceAfterMinor stays the available-balance snapshot.
+	newPending := wallet.PendingBalanceMinor + amountMinor
 	updates := map[string]interface{}{
-		"available_balance_minor": newBalance,
-		"total_earned_minor":      wallet.TotalEarnedMinor + amountMinor,
-		"updated_at":              time.Now(),
+		"pending_balance_minor": newPending,
+		"total_earned_minor":    wallet.TotalEarnedMinor + amountMinor,
+		"updated_at":            time.Now(),
 	}
 	if err := tx.Model(&models.Wallet{}).
 		Where("id = ?", wallet.ID).
@@ -433,23 +480,30 @@ func creditWalletInTx(
 		return result, err
 	}
 
+	holdMeta, _ := json.Marshal(map[string]interface{}{
+		"pending_balance_after_minor": newPending,
+		"milestone_payment_id":        reference,
+	})
+
 	wtx := &models.WalletTransaction{
 		WalletID:          wallet.ID,
 		UserID:            *userID,
-		Type:              models.WalletTxTypeCredit,
+		Type:              models.WalletTxTypeHold,
 		AmountMinor:       amountMinor,
-		BalanceAfterMinor: newBalance,
+		BalanceAfterMinor: wallet.AvailableBalanceMinor,
 		Currency:          currency,
 		Reference:         reference,
 		Description:       description,
 		IdempotencyKey:    idempotencyKey,
+		Metadata:          datatypes.JSON(holdMeta),
 	}
 	if err := tx.Create(wtx).Error; err != nil {
 		return result, err
 	}
 
 	result.TxID = wtx.ID
-	result.BalanceAfter = newBalance
+	result.BalanceAfter = wallet.AvailableBalanceMinor
+	result.PendingAfter = newPending
 	return result, nil
 }
 
@@ -469,18 +523,21 @@ func (s *MilestoneReleaseService) buildReleaseResponseFromExisting(
 
 	// Fetch wallet + wallet transaction for accurate values
 	var walletBalance int64
+	var walletPending int64
 	var walletTxID uuid.UUID
 
 	walletRepo := repository.NewWalletRepository()
 	if quest, err := s.questRepo.FindByID(questUUID); err == nil && quest.AssignedFreelancerID != nil {
 		if w, err := walletRepo.GetByUserID(*quest.AssignedFreelancerID); err == nil {
 			walletBalance = w.AvailableBalanceMinor
+			walletPending = w.PendingBalanceMinor
 		}
 
-		// Find wallet transaction by reference (milestone_payment_id)
+		// Find wallet transaction by reference (milestone_payment_id).
+		// Phase 2 holds rather than credits, so the row type is `hold`.
 		var wtx models.WalletTransaction
 		if err := postgres.DB.
-			Where("reference = ? AND type = ?", mp.ID.String(), models.WalletTxTypeCredit).
+			Where("reference = ? AND type = ?", mp.ID.String(), models.WalletTxTypeHold).
 			First(&wtx).Error; err == nil {
 			walletTxID = wtx.ID
 		}
@@ -492,22 +549,25 @@ func (s *MilestoneReleaseService) buildReleaseResponseFromExisting(
 	}
 
 	return &dto.ReleaseMilestoneResponse{
-		MilestonePaymentID:     mp.ID.String(),
-		EscrowID:               escrow.ID.String(),
-		PayoutWalletTxID:       walletTxID.String(),
-		MilestoneID:            milestone.ID.String(),
-		QuestID:                questUUID.String(),
-		Status:                 string(mp.Status),
-		MilestoneAmount:        utils.PaiseToRupees(mp.MilestoneAmountMinor),
-		PlatformFee:            utils.PaiseToRupees(mp.FreelancerFeeMinor),
-		FreelancerNet:          utils.PaiseToRupees(mp.FreelancerNetMinor),
-		MilestoneAmountMinor:   mp.MilestoneAmountMinor,
-		PlatformFeeMinor:       mp.FreelancerFeeMinor,
-		FreelancerNetMinor:     mp.FreelancerNetMinor,
-		Currency:               mp.Currency,
-		WalletAvailableBalance: utils.PaiseToRupees(walletBalance),
-		ReleasedAt:             releasedAt,
-		Message:                "Milestone already released (idempotent)",
+		MilestonePaymentID:          mp.ID.String(),
+		EscrowID:                    escrow.ID.String(),
+		PayoutWalletTxID:            walletTxID.String(),
+		MilestoneID:                 milestone.ID.String(),
+		QuestID:                     questUUID.String(),
+		Status:                      string(mp.Status),
+		MilestoneAmount:             utils.PaiseToRupees(mp.MilestoneAmountMinor),
+		PlatformFee:                 utils.PaiseToRupees(mp.FreelancerFeeMinor),
+		FreelancerNet:               utils.PaiseToRupees(mp.FreelancerNetMinor),
+		MilestoneAmountMinor:        mp.MilestoneAmountMinor,
+		PlatformFeeMinor:            mp.FreelancerFeeMinor,
+		FreelancerNetMinor:          mp.FreelancerNetMinor,
+		Currency:                    mp.Currency,
+		WalletAvailableBalance:      utils.PaiseToRupees(walletBalance),
+		WalletPendingBalance:        utils.PaiseToRupees(walletPending),
+		WalletAvailableBalanceMinor: walletBalance,
+		WalletPendingBalanceMinor:   walletPending,
+		ReleasedAt:                  releasedAt,
+		Message:                     "Milestone already released (idempotent)",
 	}, nil
 }
 

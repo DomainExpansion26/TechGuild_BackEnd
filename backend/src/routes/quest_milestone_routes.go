@@ -2,6 +2,7 @@ package routes
 
 import (
 	"techguild-backend/src/controllers"
+	"techguild-backend/src/dto"
 	"techguild-backend/src/middleware"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -12,7 +13,7 @@ func RegisterQuestMilestoneRoutes(
 	c *controllers.QuestMilestoneController,
 ) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
-	bearer := []map[string][]string{{"bearerAuth": {}}}
+	bearer := []map[string][]string{{"BearerAuth": {}}}
 	tags := []string{"Quest Milestones"}
 
 	// ============================================================
@@ -27,6 +28,26 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Create a milestone (freelancer only)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.CreateQuestMilestoneBody{
+						Title:       "Research & Wireframes",
+						Description: "User research and low-fidelity wireframes",
+						Amount:      10000,
+						DueDays:     7,
+						Tasks: []dto.MilestoneTaskInput{
+							{
+								Title:       "Navbar Wireframe",
+								Description: "Design responsive navigation component",
+								AssigneeID:  ptr("11111111-1111-1111-1111-111111111111"),
+							},
+						},
+					},
+				},
+			},
+		},
 	}, c.CreateMilestoneHandler)
 
 	huma.Register(api, huma.Operation{
@@ -37,6 +58,29 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Update a milestone (freelancer, draft/revision only)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.UpdateQuestMilestoneBody{
+						Title:       ptr("Research & Wireframes"),
+						Description: ptr("Updated scope after kickoff call"),
+						Amount:      ptr(12000.0),
+						DueDays:     ptr(10),
+						Tasks: []dto.MilestoneTaskPatchInput{
+							{
+								ID:          ptr("22222222-2222-2222-2222-222222222222"),
+								Title:       ptr("Navbar Wireframe v2"),
+								Description: ptr("Add mobile breakpoints"),
+								AssigneeID:  ptr("11111111-1111-1111-1111-111111111111"),
+								Status:      ptr("in_progress"),
+							},
+						},
+						DeleteTaskIDs: []string{"33333333-3333-3333-3333-333333333333"},
+					},
+				},
+			},
+		},
 	}, c.UpdateMilestoneHandler)
 
 	huma.Register(api, huma.Operation{
@@ -57,6 +101,16 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Send milestone for client review (freelancer)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.SendForReviewBody{
+						Note: "Please review the deliverables",
+					},
+				},
+			},
+		},
 	}, c.SendForReviewHandler)
 
 	huma.Register(api, huma.Operation{
@@ -67,6 +121,16 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Resubmit milestone after revision (freelancer)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.SendForReviewBody{
+						Note: "Revisions applied as requested. Ready for another review.",
+					},
+				},
+			},
+		},
 	}, c.ResubmitHandler)
 
 	// ============================================================
@@ -81,6 +145,16 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Approve milestone (client)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.ApproveMilestoneBody{
+						Feedback: "Looks great, approved!",
+					},
+				},
+			},
+		},
 	}, c.ApproveMilestoneHandler)
 
 	huma.Register(api, huma.Operation{
@@ -91,6 +165,17 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Request milestone revision (client)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.RequestMilestoneRevisionBody{
+						Note:          "Please adjust the color scheme to match brand guidelines",
+						AttachmentURL: "https://example.com/attachments/color-scheme-notes.pdf",
+					},
+				},
+			},
+		},
 	}, c.RequestRevisionHandler)
 
 	// ============================================================
@@ -139,6 +224,16 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Submit all draft milestones for client review at once (freelancer)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.SubmitRoadmapBody{
+						Note: "Here is the complete project roadmap. Please review.",
+					},
+				},
+			},
+		},
 	}, c.SubmitRoadmapHandler)
 
 	huma.Register(api, huma.Operation{
@@ -149,5 +244,15 @@ func RegisterQuestMilestoneRoutes(
 		Tags:        tags,
 		Summary:     "Approve the entire milestone roadmap (client)",
 		Middlewares: authMw,
+		RequestBody: &huma.RequestBody{
+			Required: false,
+			Content: map[string]*huma.MediaType{
+				"application/json": {
+					Example: dto.ApproveRoadmapBody{
+						Feedback: "Roadmap looks perfect. Let's start with Milestone 1.",
+					},
+				},
+			},
+		},
 	}, c.ApproveRoadmapHandler)
 }

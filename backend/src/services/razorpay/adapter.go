@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"techguild-backend/src/models"
 	"techguild-backend/src/services"
 )
 
@@ -174,6 +175,7 @@ func (a *Adapter) CapturePayment(providerPaymentID string, amount int64) (*servi
 
 	return &services.PaymentResult{
 		ProviderPaymentID: providerPaymentID,
+		OrderID:           toStr(body["order_id"]),
 		Status:            status,
 		Amount:            amt,
 		Currency:          currency,
@@ -292,14 +294,7 @@ func (a *Adapter) CreatePayoutFundAccount(req services.FundAccountRequest) (*ser
 		return nil, errors.New("razorpayx: fund account id missing")
 	}
 
-	// Normalize RazorpayX status to our internal status
-	status := toStr(faResp["status"])
-	switch status {
-	case "":
-		status = "pending_verification"
-	case "active":
-		status = "verified"
-	}
+	rawStatus := toStr(faResp["status"])
 
 	var masked string
 	if req.Type == "bank" && req.AccountNumber != "" {
@@ -310,9 +305,23 @@ func (a *Adapter) CreatePayoutFundAccount(req services.FundAccountRequest) (*ser
 
 	return &services.FundAccountResult{
 		ProviderFundAccountID: fundAccountID,
-		Status:                status,
+		ProviderContactID:     contactID,
+		Status:                normalizePayoutFundAccountStatus(rawStatus),
+		RawStatus:             rawStatus,
 		MaskedAccount:         masked,
 	}, nil
+}
+
+// normalizePayoutFundAccountStatus maps a RazorpayX fund-account status onto our
+// PayoutMethodStatus enum. Only an explicitly "active" account is verified —
+// anything else (created, unset, unknown, failed) stays pending until the
+// fund_account.validated webhook flips it, so an unvalidated beneficiary can
+// never reach the withdrawal path.
+func normalizePayoutFundAccountStatus(raw string) string {
+	if raw == "active" {
+		return string(models.PayoutMethodStatusVerified)
+	}
+	return string(models.PayoutMethodStatusPendingVerification)
 }
 
 func (a *Adapter) DeletePayoutFundAccount(providerFundAccountID string) error {
@@ -503,11 +512,12 @@ func (a *Adapter) GetPayment(providerPaymentID string) (*services.PaymentResult,
 	if status == "captured" {
 		return &services.PaymentResult{
 			ProviderPaymentID: providerPaymentID,
+			OrderID:           toStr(body["order_id"]),
 			Status:            "captured",
 			Amount:            amt,
 			Currency:          currency,
 		}, nil
 	}
 
-	return nil, errors.New("payment not captured yet")
+	return nil, fmt.Errorf("%w: status=%s", services.ErrPaymentNotCaptured, status)
 }

@@ -9,117 +9,117 @@ import (
 // ============================================================
 
 type CreateIndividualProfileRequest struct {
-	Phone             *string `json:"phone,omitempty" example:"+1234567890"`
-	DateOfBirth       *string `json:"date_of_birth,omitempty" format:"date" example:"1990-01-15"`
+	Phone             *string `json:"phone,omitempty" maxLength:"20" example:"+1234567890"`
+	DateOfBirth       *string `json:"date_of_birth,omitempty" format:"date" maxLength:"10" example:"1990-01-15"`
 	Gender            *string `json:"gender,omitempty" enum:"male,female,other" example:"male"`
-	AvatarURL         *string `json:"avatar_url,omitempty" format:"uri" example:"https://storage.example.com/avatars/user.png"`
+	AvatarURL         *string `json:"avatar_url,omitempty" format:"uri" maxLength:"2048" example:"https://storage.example.com/avatars/user.png"`
 	Bio               *string `json:"bio,omitempty" maxLength:"500" example:"Full-stack developer with 5 years of experience"`
-	Country           *string `json:"country,omitempty" example:"India"`
-	City              *string `json:"city,omitempty" example:"Mumbai"`
+	Country           *string `json:"country,omitempty" maxLength:"100" example:"India"`
+	City              *string `json:"city,omitempty" maxLength:"100" example:"Mumbai"`
 	Headline          *string `json:"headline,omitempty" maxLength:"150" example:"Senior Full-Stack Developer"`
-	PreferredLanguage *string `json:"preferred_language,omitempty" example:"en"`
-	TimeZone          *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
+	PreferredLanguage *string `json:"preferred_language,omitempty" maxLength:"20" example:"en"`
+	TimeZone          *string `json:"timezone,omitempty" maxLength:"100" example:"Asia/Kolkata"`
 
 	ExperienceLevel   *string   `json:"experience_level,omitempty" enum:"junior,mid,senior,lead" example:"senior"`
 	Availability      *string   `json:"availability,omitempty" enum:"full-time,part-time,contract" example:"full-time"`
-	Skills            *[]string `json:"skills,omitempty"`
-	ToolsTechnologies *[]string `json:"tools_technologies,omitempty"`
-	ServiceCategories *[]string `json:"service_categories,omitempty"`
+	Skills            *[]string `json:"skills,omitempty" maxItems:"50" maxLength:"100"`
+	ToolsTechnologies *[]string `json:"tools_technologies,omitempty" maxItems:"50" maxLength:"100"`
+	ServiceCategories *[]string `json:"service_categories,omitempty" maxItems:"50" maxLength:"100"`
 
-	PortfolioURL *string `json:"portfolio_url,omitempty" format:"uri" example:"https://portfolio.example.com/johndoe"`
-	GithubURL    *string `json:"github_url,omitempty" format:"uri" example:"https://github.com/johndoe"`
-	LinkedinURL  *string `json:"linkedin_url,omitempty" format:"uri" example:"https://linkedin.com/in/johndoe"`
-	ResumeURL    *string `json:"resume_url,omitempty" format:"uri" example:"https://storage.example.com/resumes/johndoe.pdf"`
+	PortfolioURL *string `json:"portfolio_url,omitempty" format:"uri" maxLength:"255" example:"https://portfolio.example.com/johndoe"`
+	GithubURL    *string `json:"github_url,omitempty" format:"uri" maxLength:"255" example:"https://github.com/johndoe"`
+	LinkedinURL  *string `json:"linkedin_url,omitempty" format:"uri" maxLength:"255" example:"https://linkedin.com/in/johndoe"`
+	ResumeURL    *string `json:"resume_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/resumes/johndoe.pdf"`
 
 	TermsConfirmed *bool `json:"terms_confirmed,omitempty" example:"true"`
 }
 
 type UpdateIndividualProfileRequest struct {
-	Phone             *string `json:"phone,omitempty" example:"+1234567890"`
-	DateOfBirth       *string `json:"date_of_birth,omitempty" format:"date" example:"1990-01-15"`
+	Phone             *string `json:"phone,omitempty" maxLength:"20" example:"+1234567890"`
+	DateOfBirth       *string `json:"date_of_birth,omitempty" format:"date" maxLength:"10" example:"1990-01-15"`
 	Gender            *string `json:"gender,omitempty" enum:"male,female,other" example:"male"`
-	AvatarURL         *string `json:"avatar_url,omitempty" format:"uri" example:"https://storage.example.com/avatars/user.png"`
+	AvatarURL         *string `json:"avatar_url,omitempty" format:"uri" maxLength:"2048" example:"https://storage.example.com/avatars/user.png"`
 	Bio               *string `json:"bio,omitempty" maxLength:"500" example:"Full-stack developer with 5 years of experience"`
-	Country           *string `json:"country,omitempty" example:"India"`
-	City              *string `json:"city,omitempty" example:"Mumbai"`
+	Country           *string `json:"country,omitempty" maxLength:"100" example:"India"`
+	City              *string `json:"city,omitempty" maxLength:"100" example:"Mumbai"`
 	Headline          *string `json:"headline,omitempty" maxLength:"150" example:"Senior Full-Stack Developer"`
-	PreferredLanguage *string `json:"preferred_language,omitempty" example:"en"`
-	TimeZone          *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
+	PreferredLanguage *string `json:"preferred_language,omitempty" maxLength:"20" example:"en"`
+	TimeZone          *string `json:"timezone,omitempty" maxLength:"100" example:"Asia/Kolkata"`
 
 	ExperienceLevel   *string   `json:"experience_level,omitempty" enum:"junior,mid,senior,lead" example:"senior"`
 	Availability      *string   `json:"availability,omitempty" enum:"full-time,part-time,contract" example:"full-time"`
-	Skills            *[]string `json:"skills,omitempty"`
-	ToolsTechnologies *[]string `json:"tools_technologies,omitempty"`
-	ServiceCategories *[]string `json:"service_categories,omitempty"`
+	Skills            *[]string `json:"skills,omitempty" maxItems:"50" maxLength:"100"`
+	ToolsTechnologies *[]string `json:"tools_technologies,omitempty" maxItems:"50" maxLength:"100"`
+	ServiceCategories *[]string `json:"service_categories,omitempty" maxItems:"50" maxLength:"100"`
 
-	PortfolioURL *string `json:"portfolio_url,omitempty" format:"uri" example:"https://portfolio.example.com/johndoe"`
-	GithubURL    *string `json:"github_url,omitempty" format:"uri" example:"https://github.com/johndoe"`
-	LinkedinURL  *string `json:"linkedin_url,omitempty" format:"uri" example:"https://linkedin.com/in/johndoe"`
-	ResumeURL    *string `json:"resume_url,omitempty" format:"uri" example:"https://storage.example.com/resumes/johndoe.pdf"`
+	PortfolioURL *string `json:"portfolio_url,omitempty" format:"uri" maxLength:"255" example:"https://portfolio.example.com/johndoe"`
+	GithubURL    *string `json:"github_url,omitempty" format:"uri" maxLength:"255" example:"https://github.com/johndoe"`
+	LinkedinURL  *string `json:"linkedin_url,omitempty" format:"uri" maxLength:"255" example:"https://linkedin.com/in/johndoe"`
+	ResumeURL    *string `json:"resume_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/resumes/johndoe.pdf"`
 
 	TermsConfirmed *bool `json:"terms_confirmed,omitempty" example:"true"`
 }
 
 type CreateAgencyProfileRequest struct {
-	Phone           *string   `json:"phone,omitempty" example:"+919876543210"`
-	AgencyName      string    `json:"agency_name" minLength:"1" maxLength:"255" example:"Acme Digital Agency"`
-	LogoURL         *string   `json:"logo_url,omitempty" format:"uri" example:"https://storage.example.com/logos/acme.png"`
+	Phone           *string   `json:"phone,omitempty" maxLength:"20" example:"+919876543210"`
+	AgencyName      string    `json:"agency_name" required:"true" minLength:"1" maxLength:"255" example:"Acme Digital Agency"`
+	LogoURL         *string   `json:"logo_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/logos/acme.png"`
 	Description     *string   `json:"description,omitempty" maxLength:"1000" example:"Digital agency specializing in web and mobile development"`
-	WebsiteURL      *string   `json:"website_url,omitempty" format:"uri" example:"https://acme.example.com"`
-	ServicesOffered *[]string `json:"services_offered,omitempty"`
-	Industries      *[]string `json:"industries,omitempty"`
+	WebsiteURL      *string   `json:"website_url,omitempty" format:"uri" maxLength:"255" example:"https://acme.example.com"`
+	ServicesOffered *[]string `json:"services_offered,omitempty" maxItems:"50" maxLength:"100"`
+	Industries      *[]string `json:"industries,omitempty" maxItems:"50" maxLength:"100"`
 	TeamSize        *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"10-50"`
 
-	ContactName *string `json:"contact_name,omitempty" example:"Jane Smith"`
-	Country     *string `json:"country,omitempty" example:"India"`
-	City        *string `json:"city,omitempty" example:"Mumbai"`
-	TimeZone    *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
+	ContactName *string `json:"contact_name,omitempty" maxLength:"100" example:"Jane Smith"`
+	Country     *string `json:"country,omitempty" maxLength:"100" example:"India"`
+	City        *string `json:"city,omitempty" maxLength:"100" example:"Mumbai"`
+	TimeZone    *string `json:"timezone,omitempty" maxLength:"100" example:"Asia/Kolkata"`
 }
 
 type UpdateAgencyProfileRequest struct {
-	Phone           *string   `json:"phone,omitempty" example:"+919876543210"`
-	AgencyName      *string   `json:"agency_name,omitempty" maxLength:"255" example:"Acme Digital Agency"`
-	LogoURL         *string   `json:"logo_url,omitempty" format:"uri" example:"https://storage.example.com/logos/acme.png"`
+	Phone           *string   `json:"phone,omitempty" maxLength:"20" example:"+919876543210"`
+	AgencyName      *string   `json:"agency_name,omitempty" minLength:"1" maxLength:"255" example:"Acme Digital Agency"`
+	LogoURL         *string   `json:"logo_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/logos/acme.png"`
 	Description     *string   `json:"description,omitempty" maxLength:"1000" example:"Digital agency specializing in web and mobile development"`
-	WebsiteURL      *string   `json:"website_url,omitempty" format:"uri" example:"https://acme.example.com"`
-	ServicesOffered *[]string `json:"services_offered,omitempty"`
-	Industries      *[]string `json:"industries,omitempty"`
+	WebsiteURL      *string   `json:"website_url,omitempty" format:"uri" maxLength:"255" example:"https://acme.example.com"`
+	ServicesOffered *[]string `json:"services_offered,omitempty" maxItems:"50" maxLength:"100"`
+	Industries      *[]string `json:"industries,omitempty" maxItems:"50" maxLength:"100"`
 	TeamSize        *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"10-50"`
 
-	ContactName *string `json:"contact_name,omitempty" example:"Jane Smith"`
-	Country     *string `json:"country,omitempty" example:"India"`
-	City        *string `json:"city,omitempty" example:"Mumbai"`
-	TimeZone    *string `json:"timezone,omitempty" example:"Asia/Kolkata"`
+	ContactName *string `json:"contact_name,omitempty" maxLength:"100" example:"Jane Smith"`
+	Country     *string `json:"country,omitempty" maxLength:"100" example:"India"`
+	City        *string `json:"city,omitempty" maxLength:"100" example:"Mumbai"`
+	TimeZone    *string `json:"timezone,omitempty" maxLength:"100" example:"Asia/Kolkata"`
 }
 
 type CreateClientProfileRequest struct {
-	Phone        *string   `json:"phone,omitempty" example:"+919876543210"`
-	CompanyName  string    `json:"company_name" minLength:"1" maxLength:"255" example:"TechStart Inc"`
-	LogoURL      *string   `json:"logo_url,omitempty" format:"uri" example:"https://storage.example.com/logos/techstart.png"`
-	Industry     *string   `json:"industry,omitempty" example:"technology"`
-	WebsiteURL   *string   `json:"website_url,omitempty" format:"uri" example:"https://techstart.example.com"`
-	ProjectTypes *[]string `json:"project_types,omitempty"`
-	BudgetRange  *string   `json:"budget_range,omitempty" example:"$5,000 - $20,000"`
-	TeamSize     *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"5-10"`
+	Phone        *string   `json:"phone,omitempty" maxLength:"20" example:"+919876543210"`
+	CompanyName  string    `json:"company_name" required:"true" minLength:"1" maxLength:"255" example:"TechStart Inc"`
+	LogoURL      *string   `json:"logo_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/logos/techstart.png"`
+	Industry     *string   `json:"industry,omitempty" maxLength:"100" example:"technology"`
+	WebsiteURL   *string   `json:"website_url,omitempty" format:"uri" maxLength:"255" example:"https://techstart.example.com"`
+	ProjectTypes *[]string `json:"project_types,omitempty" maxItems:"50" maxLength:"100"`
+	BudgetRange  *string   `json:"budget_range,omitempty" maxLength:"50" example:"$5,000 - $20,000"`
+	TeamSize     *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"1-10"`
 
-	Country  *string `json:"country,omitempty" example:"United States"`
-	City     *string `json:"city,omitempty" example:"San Francisco"`
-	TimeZone *string `json:"timezone,omitempty" example:"America/Los_Angeles"`
+	Country  *string `json:"country,omitempty" maxLength:"100" example:"United States"`
+	City     *string `json:"city,omitempty" maxLength:"100" example:"San Francisco"`
+	TimeZone *string `json:"timezone,omitempty" maxLength:"100" example:"America/Los_Angeles"`
 }
 
 type UpdateClientProfileRequest struct {
-	Phone        *string   `json:"phone,omitempty" example:"+919876543210"`
-	CompanyName  *string   `json:"company_name,omitempty" maxLength:"255" example:"TechStart Inc"`
-	LogoURL      *string   `json:"logo_url,omitempty" format:"uri" example:"https://storage.example.com/logos/techstart.png"`
-	Industry     *string   `json:"industry,omitempty" example:"technology"`
-	WebsiteURL   *string   `json:"website_url,omitempty" format:"uri" example:"https://techstart.example.com"`
-	ProjectTypes *[]string `json:"project_types,omitempty"`
-	BudgetRange  *string   `json:"budget_range,omitempty" example:"$5,000 - $20,000"`
-	TeamSize     *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"5-10"`
+	Phone        *string   `json:"phone,omitempty" maxLength:"20" example:"+919876543210"`
+	CompanyName  *string   `json:"company_name,omitempty" minLength:"1" maxLength:"255" example:"TechStart Inc"`
+	LogoURL      *string   `json:"logo_url,omitempty" format:"uri" maxLength:"255" example:"https://storage.example.com/logos/techstart.png"`
+	Industry     *string   `json:"industry,omitempty" maxLength:"100" example:"technology"`
+	WebsiteURL   *string   `json:"website_url,omitempty" format:"uri" maxLength:"255" example:"https://techstart.example.com"`
+	ProjectTypes *[]string `json:"project_types,omitempty" maxItems:"50" maxLength:"100"`
+	BudgetRange  *string   `json:"budget_range,omitempty" maxLength:"50" example:"$5,000 - $20,000"`
+	TeamSize     *string   `json:"team_size,omitempty" enum:"1-10,10-50,50-200,200+" example:"1-10"`
 
-	Country  *string `json:"country,omitempty" example:"United States"`
-	City     *string `json:"city,omitempty" example:"San Francisco"`
-	TimeZone *string `json:"timezone,omitempty" example:"America/Los_Angeles"`
+	Country  *string `json:"country,omitempty" maxLength:"100" example:"United States"`
+	City     *string `json:"city,omitempty" maxLength:"100" example:"San Francisco"`
+	TimeZone *string `json:"timezone,omitempty" maxLength:"100" example:"America/Los_Angeles"`
 }
 
 // ============================================================

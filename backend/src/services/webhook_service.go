@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
+	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -60,31 +63,43 @@ func (s *WebhookService) ProcessWebhook(provider string, payload []byte, signatu
 		return fmt.Errorf("%w: %v", ErrWebhookMalformed, err)
 	}
 
-	exists, err := s.eventRepo.ExistsByProviderAndEventID(event.Provider, event.ProviderEventID)
-	if err != nil {
-		return fmt.Errorf("idempotency check failed: %w", err)
-	}
-	if exists {
-		log.Printf("webhook duplicate: provider=%s event_id=%s — ignoring",
-			event.Provider, event.ProviderEventID)
-		return nil
-	}
+	// Idempotency: a `processed` event is done, but a `failed` one must be
+	// retryable — otherwise Razorpay's redelivery is silently swallowed and the
+	// money never reconciles.
+	var record *models.PaymentWebhookEvent
 
-	rawBytes, _ := json.Marshal(event.Raw)
-	record := &models.PaymentWebhookEvent{
-		Provider:        event.Provider,
-		ProviderEventID: event.ProviderEventID,
-		EventType:       event.EventType,
-		Payload:         datatypes.JSON(rawBytes),
-		Signature:       signature,
-		Status:          models.WebhookEventStatusReceived,
-	}
-	if err := s.eventRepo.Create(record); err != nil {
-		if isUniqueConstraint(err) {
-			log.Printf("webhook race: provider=%s event_id=%s", event.Provider, event.ProviderEventID)
+	existing, err := s.eventRepo.GetByProviderAndEventID(event.Provider, event.ProviderEventID)
+	switch {
+	case err == nil && existing != nil:
+		if existing.Status == models.WebhookEventStatusProcessed {
+			log.Printf("webhook duplicate: provider=%s event_id=%s already processed",
+				event.Provider, event.ProviderEventID)
 			return nil
 		}
-		return fmt.Errorf("failed to persist webhook: %w", err)
+		log.Printf("webhook retry: provider=%s event_id=%s status=%s — re-dispatching",
+			event.Provider, event.ProviderEventID, existing.Status)
+		record = existing // reuse the row; fall through to the shared tail below
+
+	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
+		return fmt.Errorf("idempotency check failed: %w", err)
+
+	default:
+		rawBytes, _ := json.Marshal(event.Raw)
+		record = &models.PaymentWebhookEvent{
+			Provider:        event.Provider,
+			ProviderEventID: event.ProviderEventID,
+			EventType:       event.EventType,
+			Payload:         datatypes.JSON(rawBytes),
+			Signature:       signature,
+			Status:          models.WebhookEventStatusReceived,
+		}
+		if err := s.eventRepo.Create(record); err != nil {
+			if errors.Is(err, repository.ErrWebhookEventDuplicate) {
+				log.Printf("webhook race: provider=%s event_id=%s", event.Provider, event.ProviderEventID)
+				return nil
+			}
+			return fmt.Errorf("failed to persist webhook: %w", err)
+		}
 	}
 
 	if err := s.dispatch(event); err != nil {
@@ -121,7 +136,7 @@ func (s *WebhookService) handleRazorpayEvent(event *WebhookEvent) error {
 		return s.handlePaymentFailed(event)
 
 	// Fund account validation (RazorpayX)
-	case "fund_account.validation.completed":
+	case "fund_account.validation.completed", "fund_account.validated":
 		return s.handleFundAccountVerified(event)
 	case "fund_account.validation.failed":
 		return s.handleFundAccountFailed(event)
@@ -249,8 +264,21 @@ func (s *WebhookService) handlePayoutProcessed(event *WebhookEvent) error {
 	if payoutID == "" {
 		return nil
 	}
-	log.Printf("razorpay: payout.processed id=%s (handler TODO)", payoutID)
-	// TODO: find Payout row by provider_payout_id, mark paid
+	payoutRepo := repository.NewPayoutRepository()
+	p, err := payoutRepo.GetByProviderPayoutID("razorpay", payoutID)
+	if err != nil || p == nil {
+		log.Printf("razorpay: payout.processed id=%s — no matching payout row", payoutID)
+		return nil
+	}
+	// Only an in-flight payout may become paid: a late `processed` must never
+	// resurrect a payout that was already failed or reversed.
+	if p.Status != models.PayoutStatusPending && p.Status != models.PayoutStatusProcessing {
+		log.Printf("razorpay: payout.processed id=%s ignored (status=%s)", payoutID, p.Status)
+		return nil
+	}
+	if err := payoutRepo.MarkPaid(p.ID); err != nil {
+		return fmt.Errorf("mark payout paid: %w", err)
+	}
 	return nil
 }
 
@@ -260,9 +288,8 @@ func (s *WebhookService) handlePayoutFailed(event *WebhookEvent) error {
 	if payoutID == "" {
 		return nil
 	}
-	log.Printf("razorpay: payout.failed id=%s reason=%s (handler TODO)", payoutID, reason)
-	// TODO: reverse wallet debit, mark payout failed
-	return nil
+	log.Printf("razorpay: payout.failed id=%s reason=%s", payoutID, reason)
+	return s.reversePayout(payoutID, models.PayoutStatusFailed, reason)
 }
 
 func (s *WebhookService) handlePayoutReversed(event *WebhookEvent) error {
@@ -270,8 +297,75 @@ func (s *WebhookService) handlePayoutReversed(event *WebhookEvent) error {
 	if payoutID == "" {
 		return nil
 	}
-	log.Printf("razorpay: payout.reversed id=%s (handler TODO)", payoutID)
-	return nil
+	log.Printf("razorpay: payout.reversed id=%s", payoutID)
+	return s.reversePayout(payoutID, models.PayoutStatusReversed, "payout reversed by provider")
+}
+
+// reversePayout returns a failed/reversed payout's money to the user's available
+// balance. It shares its idempotency key with the synchronous compensation path and
+// re-checks status under a row lock, so the two can never both re-credit the debit.
+func (s *WebhookService) reversePayout(providerPayoutID string, target models.PayoutStatus, reason string) error {
+	payoutRepo := repository.NewPayoutRepository()
+	p, err := payoutRepo.GetByProviderPayoutID("razorpay", providerPayoutID)
+	if err != nil || p == nil {
+		log.Printf("razorpay: payout %s id=%s — no matching payout row", target, providerPayoutID)
+		return nil
+	}
+
+	return postgres.DB.Transaction(func(tx *gorm.DB) error {
+		var locked models.Payout
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", p.ID).
+			First(&locked).Error; err != nil {
+			return fmt.Errorf("lock payout: %w", err)
+		}
+		if locked.Status == models.PayoutStatusFailed || locked.Status == models.PayoutStatusReversed {
+			return nil // already reversed (sync path or an earlier webhook)
+		}
+
+		if err := tx.Model(&models.Payout{}).
+			Where("id = ?", locked.ID).
+			Updates(map[string]interface{}{
+				"status":         target,
+				"failure_reason": reason,
+			}).Error; err != nil {
+			return fmt.Errorf("mark payout %s: %w", target, err)
+		}
+
+		var w models.Wallet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", locked.UserID).
+			First(&w).Error; err != nil {
+			return fmt.Errorf("lock wallet: %w", err)
+		}
+
+		newAvailable := w.AvailableBalanceMinor + locked.Amount
+		totalWithdrawn := w.TotalWithdrawnMinor - locked.Amount
+		if totalWithdrawn < 0 {
+			totalWithdrawn = 0 // chk_wallet_balances_nonneg
+		}
+		if err := tx.Model(&models.Wallet{}).
+			Where("id = ?", w.ID).
+			Updates(map[string]interface{}{
+				"available_balance_minor": newAvailable,
+				"total_withdrawn_minor":   totalWithdrawn,
+				"updated_at":              time.Now(),
+			}).Error; err != nil {
+			return fmt.Errorf("re-credit wallet: %w", err)
+		}
+
+		return tx.Create(&models.WalletTransaction{
+			WalletID:          w.ID,
+			UserID:            locked.UserID,
+			Type:              models.WalletTxTypeWithdrawalFailed,
+			AmountMinor:       locked.Amount,
+			BalanceAfterMinor: newAvailable,
+			Currency:          w.Currency,
+			Reference:         providerPayoutID,
+			Description:       "Withdrawal reversed: funds returned",
+			IdempotencyKey:    fmt.Sprintf("payout:%s:reversal", locked.ID),
+		}).Error
+	})
 }
 
 // ============================================================
@@ -283,8 +377,19 @@ func (s *WebhookService) handleRefundProcessed(event *WebhookEvent) error {
 	if refundID == "" {
 		return nil
 	}
-	log.Printf("razorpay: refund.processed id=%s (handler TODO)", refundID)
-	// Our refund flow already marks completed synchronously; this is a safety net.
+	refundRepo := repository.NewRefundRepository()
+	ref, err := refundRepo.GetByProviderRefundID("razorpay", refundID)
+	if err != nil || ref == nil {
+		log.Printf("razorpay: refund.processed id=%s — no matching refund row", refundID)
+		return nil
+	}
+	if ref.Status == models.RefundStatusCompleted {
+		return nil
+	}
+	if err := refundRepo.MarkCompleted(ref.ID); err != nil {
+		return fmt.Errorf("mark refund completed: %w", err)
+	}
+	log.Printf("razorpay: refund %s marked completed", ref.ID)
 	return nil
 }
 
@@ -293,7 +398,26 @@ func (s *WebhookService) handleRefundFailed(event *WebhookEvent) error {
 	if refundID == "" {
 		return nil
 	}
-	log.Printf("razorpay: refund.failed id=%s (handler TODO)", refundID)
+	refundRepo := repository.NewRefundRepository()
+	ref, err := refundRepo.GetByProviderRefundID("razorpay", refundID)
+	if err != nil || ref == nil {
+		log.Printf("razorpay: refund.failed id=%s — no matching refund row", refundID)
+		return nil
+	}
+	// A locally-completed refund already released the escrow. Flipping it to
+	// failed would leave the milestone marked refunded with no money returned,
+	// so leave the state alone and shout instead.
+	if ref.Status == models.RefundStatusCompleted {
+		log.Printf("CRITICAL: razorpay reports refund %s FAILED but it is already completed locally — manual reconciliation required", refundID)
+		return nil
+	}
+	reason := extractRefundFailureReason(event.Raw)
+	if reason == "" {
+		reason = "razorpay refund failed"
+	}
+	if err := refundRepo.MarkFailed(ref.ID, reason); err != nil {
+		return fmt.Errorf("mark refund failed: %w", err)
+	}
 	return nil
 }
 
@@ -305,13 +429,6 @@ func (s *WebhookService) handleMockEvent(event *WebhookEvent) error {
 // ============================================================
 // Helpers
 // ============================================================
-
-func isUniqueConstraint(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.Is(err, gorm.ErrDuplicatedKey)
-}
 
 func extractFundAccountID(raw map[string]any) string {
 	payload, ok := raw["payload"].(map[string]any)
@@ -408,6 +525,23 @@ func extractPayoutFailureReason(raw map[string]any) string {
 		return reason
 	}
 	return ""
+}
+
+func extractRefundFailureReason(raw map[string]any) string {
+	payload, ok := raw["payload"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	refund, ok := payload["refund"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entity, ok := refund["entity"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	reason, _ := entity["failure_reason"].(string)
+	return reason
 }
 
 func extractRefundID(raw map[string]any) string {

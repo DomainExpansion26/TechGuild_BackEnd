@@ -253,18 +253,25 @@ func mapTMDError(err error) error {
 	if errors.Is(err, services.ErrTMDUnauthorized) {
 		return huma.Error403Forbidden(err.Error())
 	}
+	if errors.Is(err, services.ErrTMDDeprecated) {
+		return huma.Error410Gone(err.Error())
+	}
 	if errors.Is(err, services.ErrTMDQuestNotFound) ||
 		errors.Is(err, services.ErrTMDMilestoneNotFound) ||
 		errors.Is(err, services.ErrTMDTaskNotFound) {
 		return huma.Error404NotFound(err.Error())
 	}
-	if errors.Is(err, services.ErrTMDMilestoneAlreadyDone) ||
-		errors.Is(err, services.ErrTMDAllMilestonesNotDone) ||
+	if errors.Is(err, services.ErrTMDHoldInvariant) {
+		return huma.Error500InternalServerError(err.Error())
+	}
+	if errors.Is(err, services.ErrTMDAllMilestonesNotDone) ||
 		errors.Is(err, services.ErrTMDInvalidMilestoneStatus) ||
 		errors.Is(err, services.ErrTMDQuestNotCompleted) ||
 		errors.Is(err, services.ErrTMDInvalidRating) ||
 		errors.Is(err, services.ErrTMDReasonRequired) ||
-		errors.Is(err, services.ErrTMDInvalidStatus) {
+		errors.Is(err, services.ErrTMDInvalidStatus) ||
+		errors.Is(err, services.ErrTMDInvalidAssignee) ||
+		errors.Is(err, services.ErrTMDQuestFundsAlreadyWithdrawn) {
 		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error400BadRequest(err.Error())

@@ -5,19 +5,19 @@ package dto
 type AddClientPaymentMethodRequest struct {
 	// Provider token from client-side SDK (Razorpay/Stripe checkout).
 	// TechGuild never sees raw card/UPI data.
-	Provider         string `json:"provider" huma:"required,enum=razorpay;stripe" example:"razorpay"`
-	ProviderMethodID string `json:"provider_method_id" huma:"required" example:"pm_xxxxxxxxxxxx"`
+	Provider         string `json:"provider" required:"true" enum:"razorpay,stripe" example:"razorpay"`
+	ProviderMethodID string `json:"provider_method_id" required:"true" minLength:"1" maxLength:"255" example:"pm_xxxxxxxxxxxx"`
 
-	Type string `json:"type" huma:"required,enum=card;upi;netbanking" example:"card"`
+	Type string `json:"type" required:"true" enum:"card,upi,netbanking" example:"card"`
 
 	// Optional display metadata, client can send but server may override
 	// from provider response.
-	Last4    *string `json:"last4,omitempty" huma:"maxLength=4" example:"4242"`
-	Brand    *string `json:"brand,omitempty" example:"visa"`
-	ExpMonth *int    `json:"exp_month,omitempty" example:"12"`
-	ExpYear  *int    `json:"exp_year,omitempty" example:"2028"`
+	Last4    *string `json:"last4,omitempty" minLength:"4" maxLength:"4" pattern:"^[0-9]{4}$" example:"4242"`
+	Brand    *string `json:"brand,omitempty" maxLength:"50" example:"visa"`
+	ExpMonth *int    `json:"exp_month,omitempty" minimum:"1" maximum:"12" example:"12"`
+	ExpYear  *int    `json:"exp_year,omitempty" minimum:"2024" maximum:"2100" example:"2028"`
 
-	VPAMasked *string `json:"vpa_masked,omitempty" example:"user@okhdfc"`
+	VPAMasked *string `json:"vpa_masked,omitempty" maxLength:"100" example:"user@okhdfc"`
 
 	SetPrimary bool `json:"set_primary" example:"true"`
 }
@@ -70,7 +70,7 @@ type ListClientPaymentMethodsOutput struct {
 }
 
 type ConfirmClientPaymentMethodInput struct {
-	ID   string `path:"id" doc:"Payment method ID"`
+	ID   string `path:"id" format:"uuid" doc:"Payment method ID"`
 	Body ConfirmClientPaymentMethodRequest
 }
 type ConfirmClientPaymentMethodOutput struct {
@@ -78,14 +78,14 @@ type ConfirmClientPaymentMethodOutput struct {
 }
 
 type SetPrimaryClientPaymentMethodInput struct {
-	ID string `path:"id" doc:"Payment method ID"`
+	ID string `path:"id" format:"uuid" doc:"Payment method ID"`
 }
 type SetPrimaryClientPaymentMethodOutput struct {
 	Body ClientPaymentMethodResponse
 }
 
 type DeleteClientPaymentMethodInput struct {
-	ID string `path:"id" doc:"Payment method ID"`
+	ID string `path:"id" format:"uuid" doc:"Payment method ID"`
 }
 type DeleteClientPaymentMethodOutput struct {
 	Body DeleteClientPaymentMethodResponse

@@ -13,7 +13,7 @@ import (
 func RegisterTwoFactorRoutes(api huma.API) {
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "2fa-setup",
 		Method:      "POST",
 		Path:        "/auth/2fa/setup",
@@ -23,7 +23,7 @@ func RegisterTwoFactorRoutes(api huma.API) {
 	}, controllers.Setup2FAHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "2fa-verify-setup",
 		Method:      "POST",
 		Path:        "/auth/2fa/verify-setup",
@@ -78,7 +78,7 @@ func RegisterTwoFactorRoutes(api huma.API) {
 	}, controllers.VerifyRecoveryCodeHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "2fa-disable",
 		Method:      "POST",
 		Path:        "/auth/2fa/disable",
@@ -95,7 +95,7 @@ func RegisterTwoFactorRoutes(api huma.API) {
 	}, controllers.Disable2FAHandler)
 
 	huma.Register(api, huma.Operation{
-		Security:    []map[string][]string{{"bearerAuth": {}}},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "2fa-recovery-codes-regenerate",
 		Method:      "POST",
 		Path:        "/auth/2fa/recovery-codes/regenerate",

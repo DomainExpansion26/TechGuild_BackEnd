@@ -120,7 +120,7 @@ func main() {
 	milestoneFundingController := controllers.NewMilestoneFundingControllerFromService(milestoneFundingService)
 	milestoneReleaseController := controllers.NewMilestoneReleaseController(cfg, paymentProvider)
 
-	jobs.StartReconciliationJob(milestoneFundingService)
+	jobs.StartReconciliationJob(cfg, milestoneFundingService)
 
 	// KYC stale-pending escalator cron (manual review only; never auto-approves)
 	jobs.StartStalePendingEscalator(verificationService)
@@ -137,6 +137,7 @@ func main() {
 	walletController := controllers.NewWalletController(cfg)
 	walletWithdrawalController := controllers.NewWalletWithdrawalController(cfg, paymentProvider)
 	refundController := controllers.NewRefundController(cfg, paymentProvider)
+	questController := controllers.NewQuestController(cfg, paymentProvider)
 
 	// --------------------------------------------------
 	// Webhook infrastructure
@@ -184,12 +185,14 @@ func main() {
 	routes.RegisterVerificationRoutes(api, verificationController)
 	routes.RegisterTwoFactorRoutes(api)
 
-	routes.RegisterQuestRoutes(api)
 	routes.RegisterQuestApplicationRoutes(api)
+	routes.RegisterQuestRoutes(api, questController)
 	routes.RegisterTaskManagementRoutes(api)
 	routes.RegisterGuildhallRoutes(api)
 
 	routes.RegisterQuestMilestoneRoutes(api, questMilestoneController)
+	routes.RegisterMilestoneAttachmentRoutes(api)
+	routes.RegisterPartyTaskManagementRoutes(api)
 	routes.RegisterMilestoneFundingRoutes(api, milestoneFundingController)
 	routes.RegisterMilestoneReleaseRoutes(api, milestoneReleaseController)
 	routes.RegisterWalletRoutes(api, walletController)
@@ -214,7 +217,6 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
 
 // {
 //   "email": "david@techguild.dev",

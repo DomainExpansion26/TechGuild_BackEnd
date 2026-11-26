@@ -7,6 +7,11 @@ var (
 	ErrProviderUnsupported = errors.New("operation not supported by provider")
 	ErrProviderTimeout     = errors.New("payment provider timeout")
 	ErrProviderUnavailable = errors.New("payment provider unavailable")
+
+	// ErrPaymentNotCaptured — the provider knows this payment but it is not
+	// captured yet. A sentinel (not a plain error) so callers can tell "try
+	// CapturePayment" apart from an actual provider/network failure.
+	ErrPaymentNotCaptured = errors.New("payment not captured yet at provider")
 )
 
 type PaymentProvider interface {
@@ -24,6 +29,7 @@ type PaymentProvider interface {
 	// ---------- Milestone funding (money IN) ----------
 	CreatePayment(req CreatePaymentRequest) (*PaymentResult, error)
 	CapturePayment(providerPaymentID string, amount int64) (*PaymentResult, error)
+	GetPayment(providerPaymentID string) (*PaymentResult, error)
 
 	// ---------- Escrow ----------
 	CreateEscrowHold(req EscrowHoldRequest) (*EscrowResult, error)
@@ -53,9 +59,14 @@ type CreatePaymentRequest struct {
 
 type PaymentResult struct {
 	ProviderPaymentID string
-	Status            string // pending / authorized / captured / failed
-	Amount            int64
-	Currency          string
+
+	// OrderID — the provider order this payment belongs to. Used to prove a
+	// client-supplied payment id belongs to OUR order, not somebody else's.
+	OrderID string
+
+	Status   string // pending / authorized / captured / failed
+	Amount   int64
+	Currency string
 
 	// RequiresConfirmation — if true, the client must complete a checkout
 	// flow (e.g. Razorpay Checkout) and call back with payment confirmation.
@@ -133,7 +144,9 @@ type FundAccountRequest struct {
 
 type FundAccountResult struct {
 	ProviderFundAccountID string
-	Status                string
+	ProviderContactID     string
+	Status                string // normalized PayoutMethodStatus value
+	RawStatus             string // provider's untouched status, for debugging
 	MaskedAccount         string
 	FailureReason         string
 }

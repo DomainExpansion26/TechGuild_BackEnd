@@ -10,7 +10,7 @@ type Setup2FAResponse struct {
 }
 
 type VerifySetup2FARequest struct {
-	Code string `json:"code" binding:"required" example:"123456"`
+	Code string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
 }
 
 type VerifySetup2FAResponse struct {
@@ -19,23 +19,23 @@ type VerifySetup2FAResponse struct {
 }
 
 type VerifyLogin2FARequest struct {
-	TemporaryToken string `json:"temporary_token" binding:"required"`
-	Code           string `json:"code" binding:"required" example:"123456"`
+	TemporaryToken string `json:"temporary_token" required:"true" minLength:"20" maxLength:"4096"`
+	Code           string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
 }
 
 type VerifyRecoveryCodeRequest struct {
-	TemporaryToken string `json:"temporary_token" binding:"required"`
-	Code           string `json:"code" binding:"required" example:"ABCD-EFGH"`
+	TemporaryToken string `json:"temporary_token" required:"true" minLength:"20" maxLength:"4096"`
+	Code           string `json:"code" required:"true" minLength:"8" maxLength:"16" example:"ABCD-EFGH"`
 }
 
 type Disable2FARequest struct {
-	Password string `json:"password,omitempty" example:"test@123"`
-	Code     string `json:"code" binding:"required" example:"123456"`
+	Password string `json:"password,omitempty" maxLength:"72" example:"test@123" doc:"Required for password-based accounts; omit for OAuth-only accounts."`
+	Code     string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
 }
 
 type RegenerateRecoveryCodesRequest struct {
-	Password string `json:"password,omitempty" example:"test@123"`
-	Code     string `json:"code,omitempty" example:"123456"`
+	Password string `json:"password,omitempty" maxLength:"72" example:"test@123" doc:"Required for password-based accounts."`
+	Code     string `json:"code,omitempty" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456" doc:"Required for OAuth-only accounts (6-digit TOTP code)."`
 }
 
 type RegenerateRecoveryCodesResponse struct {

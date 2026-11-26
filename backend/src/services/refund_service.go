@@ -28,6 +28,8 @@ var (
 	ErrRefProviderFailed    = errors.New("provider refund failed")
 	ErrRefNotFound          = errors.New("refund not found")
 	ErrRefReasonRequired    = errors.New("refund reason is required and must be at least 5 characters")
+	ErrRefEscrowNotHeld     = errors.New("escrow is not held; nothing to refund")
+	ErrRefStateRace         = errors.New("refund already in progress for this milestone")
 )
 
 // ============================================================
@@ -126,17 +128,12 @@ func (s *RefundService) RequestRefund(
 	if milestone.Status == models.MilestoneStatusRefunded {
 		return s.buildRefundResponseFromMilestone(milestone, questUUID)
 	}
-	if milestone.Status == models.MilestoneStatusRefundPending {
-		return nil, errors.New("refund already in progress")
-	}
 
-	// ---- 4. State check ----
-	if milestone.Status != models.MilestoneStatusWorkInProgress &&
-		milestone.Status != models.MilestoneStatusSubmittedForRelease {
-		return nil, ErrRefInvalidState
-	}
+	// The remaining state preconditions (refund_pending, allowed statuses, escrow
+	// held, payment funded) are all re-checked under FOR UPDATE inside the
+	// reserve transaction below — checking them here too would only be drift.
 
-	// ---- 5. Load payment + escrow ----
+	// ---- 4. Load payment + escrow ----
 	mp, err := s.mpRepo.GetByQuestMilestoneID(milestoneUUID)
 	if err != nil {
 		return nil, ErrRefPaymentNotFound
@@ -160,7 +157,55 @@ func (s *RefundService) RequestRefund(
 	// Refund amount = milestone amount only
 	refundAmount := mp.MilestoneAmountMinor
 
-	// ---- 6. Provider: RefundPayment (OUTSIDE tx) ----
+	// ---- 6. Reserve: lock + move to refund_pending BEFORE calling the provider ----
+	// Without this, two concurrent requests both reach RefundPayment and the
+	// provider refunds twice. The row lock plus the refund_pending state makes
+	// the second request fail fast, before any money moves.
+	priorMilestoneStatus := milestone.Status
+
+	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
+		lockedMilestone, err := repository.NewQuestMilestoneRepositoryTx(tx).FindByIDForUpdate(milestoneUUID)
+		if err != nil {
+			return ErrRefMilestoneNotFound
+		}
+		if lockedMilestone.Status == models.MilestoneStatusRefundPending {
+			return ErrRefStateRace
+		}
+		if lockedMilestone.Status != models.MilestoneStatusWorkInProgress &&
+			lockedMilestone.Status != models.MilestoneStatusSubmittedForRelease {
+			return ErrRefInvalidState
+		}
+
+		lockedEscrow, err := repository.NewEscrowTransactionRepositoryTx(tx).GetByQuestMilestoneIDForUpdate(milestoneUUID)
+		if err != nil {
+			return ErrRefEscrowNotFound
+		}
+		if lockedEscrow.Status != models.EscrowStatusHeld {
+			return ErrRefEscrowNotHeld
+		}
+
+		lockedMP, err := repository.NewMilestonePaymentRepositoryTx(tx).GetByQuestMilestoneIDForUpdate(milestoneUUID)
+		if err != nil {
+			return ErrRefPaymentNotFound
+		}
+		if lockedMP.Status != models.MilestonePaymentFunded {
+			return ErrRefInvalidState
+		}
+
+		if err := tx.Model(&models.EscrowTransaction{}).
+			Where("id = ?", lockedEscrow.ID).
+			Update("status", models.EscrowStatusRefundPending).Error; err != nil {
+			return fmt.Errorf("reserve escrow: %w", err)
+		}
+		return tx.Model(&models.QuestMilestone{}).
+			Where("id = ?", lockedMilestone.ID).
+			Update("status", models.MilestoneStatusRefundPending).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// ---- 7. Provider: RefundPayment (OUTSIDE tx, after the reservation) ----
 	providerRefund, err := s.provider.RefundPayment(RefundRequest{
 		ProviderPaymentID: *payment.ProviderPaymentID,
 		Amount:            refundAmount,
@@ -170,14 +215,36 @@ func (s *RefundService) RequestRefund(
 	})
 	if err != nil {
 		log.Printf("RefundPayment failed for milestone=%s: %v", milestoneUUID, err)
+		// Hand the reservation back so the client can retry.
+		if compErr := postgres.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&models.EscrowTransaction{}).
+				Where("id = ?", escrow.ID).
+				Update("status", models.EscrowStatusHeld).Error; err != nil {
+				return err
+			}
+			return tx.Model(&models.QuestMilestone{}).
+				Where("id = ?", milestoneUUID).
+				Update("status", priorMilestoneStatus).Error
+		}); compErr != nil {
+			log.Printf("CRITICAL: refund reservation release FAILED milestone=%s: %v", milestoneUUID, compErr)
+		}
 		return nil, ErrRefProviderFailed
 	}
 
-	// ---- 7. DB TX ----
+	// ---- 8. Finalize ----
 	var refundID uuid.UUID
 
 	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
+
+		// Re-verify the reservation under lock before any terminal write.
+		lockedEscrow, err := repository.NewEscrowTransactionRepositoryTx(tx).GetByQuestMilestoneIDForUpdate(milestoneUUID)
+		if err != nil {
+			return ErrRefEscrowNotFound
+		}
+		if lockedEscrow.Status != models.EscrowStatusRefundPending {
+			return ErrRefStateRace
+		}
 
 		// 7a. Create Refund row
 		mpID := mp.ID
@@ -219,13 +286,29 @@ func (s *RefundService) RequestRefund(
 			return fmt.Errorf("reverse freelancer fee: %w", err)
 		}
 
-		// 7d. MilestonePayment: funded → refunded
-		if err := tx.Model(&models.MilestonePayment{}).
-			Where("id = ?", mp.ID).
-			Updates(map[string]interface{}{
-				"status": models.MilestonePaymentRefunded,
-			}).Error; err != nil {
-			return fmt.Errorf("update milestone_payment: %w", err)
+		// 7d. MilestonePayment: funded → refunded (guarded — never a blind update)
+		mpRes := tx.Model(&models.MilestonePayment{}).
+			Where("id = ? AND status = ?", mp.ID, models.MilestonePaymentFunded).
+			Update("status", models.MilestonePaymentRefunded)
+		if mpRes.Error != nil {
+			return fmt.Errorf("update milestone_payment: %w", mpRes.Error)
+		}
+		if mpRes.RowsAffected == 0 {
+			return ErrRefStateRace
+		}
+
+		// 7d-bis. Payment: captured → partially_refunded (the client fee is
+		// retained, so a full refund is not reachable today — computed anyway).
+		// ponytail: per-milestone guard makes one refund per payment enough;
+		// use SumCompletedByPayment if a payment ever funds several refunds.
+		paymentStatus := models.PaymentStatusPartiallyRefunded
+		if refundAmount >= payment.Amount {
+			paymentStatus = models.PaymentStatusRefunded
+		}
+		if err := tx.Model(&models.Payment{}).
+			Where("id = ?", payment.ID).
+			Update("status", paymentStatus).Error; err != nil {
+			return fmt.Errorf("update payment status: %w", err)
 		}
 
 		// 7e. Milestone: → refunded

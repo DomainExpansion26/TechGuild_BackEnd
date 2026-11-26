@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"techguild-backend/src/repository"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -81,6 +83,15 @@ func (s *PayoutMethodService) AddPayoutMethod(userIDStr string, req dto.AddPayou
 	}
 	if result.MaskedAccount != "" {
 		method.MaskedAccount = &result.MaskedAccount
+	}
+
+	// Keep the beneficiary contact + raw provider status so an orphaned contact
+	// or a stuck pending_verification row can be diagnosed later.
+	if meta, err := json.Marshal(map[string]string{
+		"contact_id": result.ProviderContactID,
+		"raw_status": result.RawStatus,
+	}); err == nil {
+		method.Metadata = datatypes.JSON(meta)
 	}
 
 	if err := s.repo.Create(method); err != nil {

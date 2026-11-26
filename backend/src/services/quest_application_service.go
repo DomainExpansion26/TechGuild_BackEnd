@@ -9,7 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
+	"techguild-backend/src/database/postgres"
 	"techguild-backend/src/dto"
 	"techguild-backend/src/models"
 	"techguild-backend/src/repository"
@@ -33,6 +35,7 @@ var (
 	ErrNotApplicationOwner         = errors.New("you are not the owner of this application")
 	ErrCannotApplyOwnQuest         = errors.New("you cannot apply to your own quest")
 	ErrPartySkillMatchInsufficient = errors.New("party skill match is below 60%")
+	ErrProposedBudgetExceedsQuest  = errors.New("proposed budget exceeds the quest budget")
 )
 
 type QuestApplicationService interface {
@@ -175,13 +178,17 @@ func (s *questApplicationService) ApplyToQuest(userID, questID string, req dto.A
 			return nil, ErrFreelancerRankInsufficient
 		}
 	}
-	// Validate inputs FIRST (so reapply block can reuse them)
+	// Validate inputs FIRST (so reapply block can reuse them).
+	// 1-click apply: the cover letter may be empty and the budget may be
+	// omitted, in which case it defaults to the quest's full fixed budget.
 	cover := strings.TrimSpace(req.CoverLetter)
-	if len(cover) < 20 {
-		return nil, errors.New("cover letter must be at least 20 characters")
+
+	proposedPaise := quest.BudgetMinor
+	if req.ProposedBudget > 0 {
+		proposedPaise = utils.RupeesToPaise(req.ProposedBudget)
 	}
-	if req.ProposedBudget <= 0 {
-		return nil, errors.New("proposed budget must be > 0")
+	if proposedPaise > quest.BudgetMinor {
+		return nil, ErrProposedBudgetExceedsQuest
 	}
 
 	currency := strings.TrimSpace(req.Currency)
@@ -197,7 +204,7 @@ func (s *questApplicationService) ApplyToQuest(userID, questID string, req dto.A
 		// Reactivate the withdrawn application with new details
 		existing.Status = models.ApplicationPending
 		existing.CoverLetter = cover
-		existing.ProposedBudget = utils.RupeesToPaise(req.ProposedBudget)
+		existing.ProposedBudget = proposedPaise
 		existing.Currency = currency
 		existing.EstimatedDuration = strings.TrimSpace(req.EstimatedDuration)
 		existing.WithdrawnAt = nil
@@ -222,7 +229,7 @@ func (s *questApplicationService) ApplyToQuest(userID, questID string, req dto.A
 		FreelancerID:      userUUID,
 		PartyID:           partyID,
 		CoverLetter:       cover,
-		ProposedBudget:    utils.RupeesToPaise(req.ProposedBudget),
+		ProposedBudget:    proposedPaise,
 		Currency:          currency,
 		EstimatedDuration: strings.TrimSpace(req.EstimatedDuration),
 		Status:            models.ApplicationPending,
@@ -335,92 +342,112 @@ func (s *questApplicationService) AcceptApplication(userID, questID, application
 		return nil, ErrApplicationNotFound
 	}
 
-	quest, err := s.questRepo.FindByID(qUUID)
-	if err != nil || quest == nil {
-		return nil, ErrQuestNotFound
-	}
-	if quest.ClientID != userUUID {
-		return nil, ErrOnlyClientCanReview
-	}
-	if quest.Status != models.QuestStatusOpen && quest.Status != models.QuestStatusPublished {
-		return nil, ErrQuestNotOpenForApplications
-	}
-	if !quest.IsEscrowFunded {
-		return nil, ErrEscrowNotFunded
-	}
+	var quest *models.Quest
+	var app *models.QuestApplication
+	var chat *models.QuestChatChannel
+	var otherApps []models.QuestApplication
+	var now time.Time
 
-	app, err := s.appRepo.FindByID(aUUID)
-	if err != nil || app == nil || app.QuestID != qUUID {
-		return nil, ErrApplicationNotFound
-	}
-	if app.Status != models.ApplicationPending {
-		return nil, ErrApplicationNotPending
-	}
+	// Lock the quest row for the whole read-check-write so two concurrent accepts
+	// cannot both observe `open` and both win.
+	err = postgres.DB.Transaction(func(tx *gorm.DB) error {
+		questRepo := repository.NewQuestRepositoryTx(tx)
+		appRepo := repository.NewQuestApplicationRepositoryTx(tx)
 
-	now := time.Now()
-
-	// Accept
-	app.Status = models.ApplicationAccepted
-	app.AcceptedAt = &now
-
-	// Update quest — set assigned freelancer AND accepted party (if agency)
-	quest.Status = models.QuestStatusInProgress
-	quest.AssignedFreelancerID = &app.FreelancerID
-	quest.AcceptedPartyID = app.PartyID // nil for individual
-
-	// Auto-reject other pending apps
-	pendingApps, _ := s.appRepo.ListByQuestID(qUUID, string(models.ApplicationPending))
-	otherApps := make([]models.QuestApplication, 0, len(pendingApps))
-	for i := range pendingApps {
-		if pendingApps[i].ID == app.ID {
-			continue
+		quest, err = questRepo.FindByIDForUpdate(qUUID)
+		if err != nil || quest == nil {
+			return ErrQuestNotFound
 		}
-		pendingApps[i].Status = models.ApplicationRejected
-		pendingApps[i].RejectedAt = &now
-		pendingApps[i].RejectReason = "Another applicant was selected"
-		otherApps = append(otherApps, pendingApps[i])
-	}
+		if quest.ClientID != userUUID {
+			return ErrOnlyClientCanReview
+		}
+		if quest.Status != models.QuestStatusOpen && quest.Status != models.QuestStatusPublished {
+			return ErrQuestNotOpenForApplications
+		}
 
-	// Chat channel
-	chatType := "direct_client"
-	var chatPartyID *uuid.UUID
-	if app.PartyID != nil {
-		chatType = "party_client"
-		chatPartyID = app.PartyID
-	}
-	chat := &models.QuestChatChannel{
-		QuestID:   quest.ID,
-		PartyID:   chatPartyID,
-		Name:      fmt.Sprintf("Quest: %s", quest.Title),
-		Type:      chatType,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
+		app, err = appRepo.FindByID(aUUID)
+		if err != nil || app == nil || app.QuestID != qUUID {
+			return ErrApplicationNotFound
+		}
+		if app.Status != models.ApplicationPending {
+			return ErrApplicationNotPending
+		}
 
-	activity := &models.QuestActivity{
-		QuestID:     quest.ID,
-		ActorID:     userUUID,
-		ActionType:  models.ActivityQuestAssigned,
-		Title:       fmt.Sprintf("Quest assigned to %s", strings.TrimSpace(app.Freelancer.FirstName+" "+app.Freelancer.LastName)),
-		Description: "Client accepted an application and assigned the quest.",
-		CreatedAt:   now,
-	}
+		now = time.Now()
 
-	meta, _ := json.Marshal(map[string]interface{}{
-		"application_id": app.ID.String(),
-		"freelancer_id":  app.FreelancerID.String(),
-		"party_id":       app.PartyID,
+		// Accept
+		app.Status = models.ApplicationAccepted
+		app.AcceptedAt = &now
+
+		// Update quest — set assigned freelancer AND accepted party (if agency)
+		quest.Status = models.QuestStatusInProgress
+		quest.AssignedFreelancerID = &app.FreelancerID
+		quest.AcceptedPartyID = app.PartyID // nil for individual
+
+		// Auto-reject other pending apps
+		pendingApps, _ := appRepo.ListByQuestID(qUUID, string(models.ApplicationPending))
+		otherApps = make([]models.QuestApplication, 0, len(pendingApps))
+		for i := range pendingApps {
+			if pendingApps[i].ID == app.ID {
+				continue
+			}
+			pendingApps[i].Status = models.ApplicationRejected
+			pendingApps[i].RejectedAt = &now
+			pendingApps[i].RejectReason = "Another applicant was selected"
+			otherApps = append(otherApps, pendingApps[i])
+		}
+
+		// Chat channel
+		chatType := "direct_client"
+		var chatPartyID *uuid.UUID
+		if app.PartyID != nil {
+			chatType = "party_client"
+			chatPartyID = app.PartyID
+		}
+		chat = &models.QuestChatChannel{
+			QuestID:   quest.ID,
+			PartyID:   chatPartyID,
+			Name:      fmt.Sprintf("Quest: %s", quest.Title),
+			Type:      chatType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+
+		activity := &models.QuestActivity{
+			QuestID:     quest.ID,
+			ActorID:     userUUID,
+			ActionType:  models.ActivityQuestAssigned,
+			Title:       fmt.Sprintf("Quest assigned to %s", strings.TrimSpace(app.Freelancer.FirstName+" "+app.Freelancer.LastName)),
+			Description: "Client accepted an application and assigned the quest.",
+			CreatedAt:   now,
+		}
+
+		meta, _ := json.Marshal(map[string]interface{}{
+			"application_id": app.ID.String(),
+			"freelancer_id":  app.FreelancerID.String(),
+			"party_id":       app.PartyID,
+		})
+		audit := &models.AuditLog{
+			UserID:   &userUUID,
+			Action:   "application_accepted",
+			Entity:   "quest_application",
+			EntityID: app.ID.String(),
+			Metadata: datatypes.JSON(meta),
+		}
+
+		return appRepo.AcceptApplicationAtomic(tx, app, quest, otherApps, chat, activity, audit)
 	})
-	audit := &models.AuditLog{
-		UserID:   &userUUID,
-		Action:   "application_accepted",
-		Entity:   "quest_application",
-		EntityID: app.ID.String(),
-		Metadata: datatypes.JSON(meta),
-	}
-
-	if err := s.appRepo.AcceptApplicationAtomic(app, quest, otherApps, chat, activity, audit); err != nil {
-		return nil, fmt.Errorf("failed to accept application: %w", err)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrQuestNotFound),
+			errors.Is(err, ErrOnlyClientCanReview),
+			errors.Is(err, ErrQuestNotOpenForApplications),
+			errors.Is(err, ErrApplicationNotFound),
+			errors.Is(err, ErrApplicationNotPending):
+			return nil, err
+		default:
+			return nil, fmt.Errorf("failed to accept application: %w", err)
+		}
 	}
 
 	resp := &dto.AcceptApplicationResponse{
