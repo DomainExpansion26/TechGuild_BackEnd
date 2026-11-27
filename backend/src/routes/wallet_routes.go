@@ -10,15 +10,14 @@ import (
 func RegisterWalletRoutes(api huma.API, c *controllers.WalletController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Wallet"}
 
 	huma.Register(api, huma.Operation{
 		Security:    bearer,
 		OperationID: "get-wallet",
 		Method:      "GET",
 		Path:        "/v1/me/wallet",
-		Tags:        tags,
-		Summary:     "Get authenticated user's wallet (freelancer)",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Get authenticated user's wallet",
 		Middlewares: authMw,
 	}, c.GetWalletHandler)
 
@@ -27,8 +26,8 @@ func RegisterWalletRoutes(api huma.API, c *controllers.WalletController) {
 		OperationID: "list-wallet-transactions",
 		Method:      "GET",
 		Path:        "/v1/me/wallet/transactions",
-		Tags:        tags,
-		Summary:     "List wallet transactions",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] List wallet transactions",
 		Middlewares: authMw,
 	}, c.ListTransactionsHandler)
 }

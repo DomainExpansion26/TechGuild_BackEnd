@@ -14,7 +14,6 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		middleware.AuthMiddlewareHuma(api),
 		middleware.ClientMiddlewareHuma(api),
 	}
-	tags := []string{"Quest Applications"}
 
 	// Freelancer applies (individual or agency)
 	huma.Register(api, huma.Operation{
@@ -22,8 +21,8 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "apply-to-quest",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/apply",
-		Tags:        tags,
-		Summary:     "Apply/bid to a quest (freelancer or party lead)",
+		Tags:        []string{"Freelancer / Quest Board"},
+		Summary:     "[Freelancer] Apply/bid to a quest",
 		Middlewares: generalAuthMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -34,7 +33,7 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 						ProposedBudget:    72000,
 						Currency:          "INR",
 						EstimatedDuration: "18 days",
-						PartyID:           "11111111-1111-1111-1111-111111111111",
+						PartyID:           "8f14e45f-ceea-467a-9a3b-1c2d3e4f5a6b",
 					},
 				},
 			},
@@ -47,8 +46,8 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "list-quest-applications",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/applications",
-		Tags:        tags,
-		Summary:     "List applications (client sees all, freelancer sees own)",
+		Tags:        []string{"Common / Quest Discovery"},
+		Summary:     "[Common] List applications (client sees all, freelancer sees own)",
 		Middlewares: generalAuthMw,
 	}, controllers.ListApplicationsHandler)
 
@@ -58,8 +57,9 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "accept-quest-application",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/applications/{application_id}/accept",
-		Tags:        tags,
-		Summary:     "Accept application (client only) — assigns freelancer, quest→in_progress, auto-rejects others",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Accept application (client only)",
+		Description: "Accepts the selected application for this quest. This operation takes no request body; it is identified by the quest and application path parameters only.",
 		Middlewares: clientAuthMw,
 	}, controllers.AcceptApplicationHandler)
 
@@ -69,8 +69,8 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "reject-quest-application",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/applications/{application_id}/reject",
-		Tags:        tags,
-		Summary:     "Reject application (client only)",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Reject application (client only)",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -90,8 +90,9 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "withdraw-quest-application",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/applications/{application_id}/withdraw",
-		Tags:        tags,
-		Summary:     "Withdraw own pending application (freelancer)",
+		Tags:        []string{"Freelancer / Quest Board"},
+		Summary:     "[Freelancer] Withdraw own pending application",
+		Description: "Withdraws the caller's own pending application for this quest. This operation takes no request body; it is identified by the quest and application path parameters only.",
 		Middlewares: generalAuthMw,
 	}, controllers.WithdrawApplicationHandler)
 
@@ -101,8 +102,8 @@ func RegisterQuestApplicationRoutes(api huma.API) {
 		OperationID: "my-work",
 		Method:      "GET",
 		Path:        "/v1/quests/my-work",
-		Tags:        tags,
-		Summary:     "List quests assigned to me (freelancer dashboard)",
+		Tags:        []string{"Freelancer / Quest Board"},
+		Summary:     "[Freelancer] List quests assigned to me (dashboard)",
 		Middlewares: generalAuthMw,
 	}, controllers.MyWorkHandler)
 }

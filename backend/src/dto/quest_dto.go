@@ -2,14 +2,6 @@ package dto
 
 import "time"
 
-type CreateQuestMilestoneInput struct {
-	Title       string  `json:"title" required:"true" minLength:"3" maxLength:"255" example:"Research & Wireframes"`
-	Description string  `json:"description,omitempty" maxLength:"5000" example:"User research and low-fidelity wireframes"`
-	Amount      float64 `json:"amount" required:"true" minimum:"0.01" example:"15000"`
-	DueDays     int     `json:"due_days" required:"true" minimum:"1" example:"5"`
-	OrderIndex  int     `json:"order_index" required:"true" minimum:"1" example:"1"`
-}
-
 type CreateQuestSkillInput struct {
 	Name             string `json:"name" required:"true" minLength:"1" maxLength:"100" example:"Figma"`
 	ProficiencyLevel string `json:"proficiency_level,omitempty" maxLength:"50" example:"expert"`
@@ -46,7 +38,7 @@ type CreateQuestResponse struct {
 	QuestID         string    `json:"quest_id" example:"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"`
 	Title           string    `json:"title" example:"Website Redesign for FinTech Startup"`
 	Status          string    `json:"status" example:"draft"`
-	BudgetMinor     int64     `json:"budget_minor" example:"7500000" doc:"Budget in minor units (paise)"`
+	BudgetMinor     int64     `json:"budget_minor" example:"7500000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
 	RequiredMinRank string    `json:"required_min_rank" example:"B"`
 	CreatedAt       time.Time `json:"created_at" example:"2026-09-03T20:15:00Z"`
 }
@@ -95,8 +87,8 @@ type ListQuestsInput struct {
 	Skills         string  `query:"skills" maxLength:"500" doc:"Comma-separated skill names; matches quests requiring ANY of them"`
 	TimelineBucket string  `query:"timeline_bucket" enum:"under_7,7_15,15_30,30_plus" doc:"Filter by timeline bucket"`
 	ClientRank     string  `query:"client_rank" maxLength:"10" doc:"Filter by the posting client's rank"`
-	MinBudget      float64 `query:"min_budget" minimum:"0" doc:"Filter by minimum budget INR"`
-	MaxBudget      float64 `query:"max_budget" minimum:"0" doc:"Filter by maximum budget INR"`
+	MinBudget      float64 `query:"min_budget" minimum:"0" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise. Filter by minimum budget."`
+	MaxBudget      float64 `query:"max_budget" minimum:"0" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise. Filter by maximum budget."`
 	Status         string  `query:"status" maxLength:"50" doc:"Filter by status (open, in_progress, completed, etc.)"`
 	Sort           string  `query:"sort" enum:"newest,budget_desc,budget_asc,emergency_first" doc:"Sort order (default newest)"`
 }
@@ -108,11 +100,11 @@ type QuestListItem struct {
 	Category        string     `json:"category" example:"UI/UX Design"`
 	Complexity      string     `json:"complexity" example:"intermediate"`
 	QuestType       string     `json:"quest_type" example:"standard"`
-	BudgetINR       float64    `json:"budget_inr" example:"75000"`
+	BudgetINR       float64    `json:"budget_inr" example:"75000" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise."`
 	TimelineDays    int        `json:"timeline_days" example:"20"`
 	RequiredMinRank string     `json:"required_min_rank" example:"B"`
 	Status          string     `json:"status" example:"open"`
-	ClientID        string     `json:"client_id" example:"11111111-2222-3333-4444-555555555555"`
+	ClientID        string     `json:"client_id" example:"6f1d9b3a-8c2e-4a57-9b1f-3d6c0e8a5b24"`
 	ClientName      string     `json:"client_name" example:"Acme Corp"`
 	ClientRank      string     `json:"client_rank" example:"A"`
 	Skills          []string   `json:"skills" example:"[\"Figma\", \"React\"]"`
@@ -169,7 +161,7 @@ type QuestDetailsResponse struct {
 	Category        string                 `json:"category"`
 	Industry        string                 `json:"industry,omitempty"`
 	Complexity      string                 `json:"complexity"`
-	BudgetINR       float64                `json:"budget_inr"`
+	BudgetINR       float64                `json:"budget_inr" example:"75000" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise."`
 	TimelineDays    int                    `json:"timeline_days"`
 	QuestType       string                 `json:"quest_type"`
 	RequiredMinRank string                 `json:"required_min_rank"`
@@ -208,7 +200,7 @@ type RejectQuestResponse struct {
 	QuestID            string  `json:"quest_id"`
 	Status             string  `json:"status"`
 	EscrowRefunded     bool    `json:"escrow_refunded"`
-	EscrowRefundAmount float64 `json:"escrow_refund_amount"`
+	EscrowRefundAmount float64 `json:"escrow_refund_amount" example:"75000" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise."`
 	Message            string  `json:"message"`
 }
 
@@ -224,7 +216,7 @@ type UpdateQuestBody struct {
 	Category        *string                     `json:"category,omitempty" minLength:"1" maxLength:"100"`
 	Industry        *string                     `json:"industry,omitempty" maxLength:"100"`
 	Complexity      *string                     `json:"complexity,omitempty" maxLength:"50"`
-	BudgetMinor     *int64                      `json:"budget_minor,omitempty" minimum:"100000" doc:"Budget in paise; re-derives required_min_rank"`
+	BudgetMinor     *int64                      `json:"budget_minor,omitempty" minimum:"100000" example:"9000000" doc:"Amount in paise (minor units). 9000000 = ₹90,000.00 INR"`
 	TimelineDays    *int                        `json:"timeline_days,omitempty" minimum:"1"`
 	QuestType       *string                     `json:"quest_type,omitempty" maxLength:"50"`
 	ExperienceLevel *string                     `json:"experience_level,omitempty" maxLength:"50"`
@@ -242,7 +234,7 @@ type UpdateQuestResponse struct {
 	QuestID         string    `json:"quest_id"`
 	Title           string    `json:"title"`
 	Status          string    `json:"status"`
-	BudgetMinor     int64     `json:"budget_minor"`
+	BudgetMinor     int64     `json:"budget_minor" example:"9000000" doc:"Amount in paise (minor units). 9000000 = ₹90,000.00 INR"`
 	RequiredMinRank string    `json:"required_min_rank"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -286,7 +278,7 @@ type QuestBoardKPIs struct {
 type QuestBoardApplicationItem struct {
 	QuestID    string    `json:"quest_id"`
 	QuestTitle string    `json:"quest_title"`
-	BudgetINR  float64   `json:"budget_inr"`
+	BudgetINR  float64   `json:"budget_inr" example:"75000" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise."`
 	Status     string    `json:"status"`
 	AppliedAt  time.Time `json:"applied_at"`
 }

@@ -4,13 +4,13 @@ package dto
 // ---------- Request/Response bodies ----------
 
 type Setup2FAResponse struct {
-	ProvisioningURI string `json:"provisioning_uri" example:"otpauth://totp/TechGuild:user@example.com?secret=XXXX&issuer=TechGuild"`
+	ProvisioningURI string `json:"provisioning_uri" example:"otpauth://totp/TechGuild:aarav.sharma@example.in?secret=JBSWY3DPEHPK3PXP&issuer=TechGuild"`
 	QRCodeImage     string `json:"qr_code_image"` //base64 data uri - frontend can render this directly in an <img> tag
 	ExpiresAt       string `json:"expires_at" example:"2026-09-07T14:30:00Z"`
 }
 
 type VerifySetup2FARequest struct {
-	Code string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
+	Code string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"482915"`
 }
 
 type VerifySetup2FAResponse struct {
@@ -20,22 +20,22 @@ type VerifySetup2FAResponse struct {
 
 type VerifyLogin2FARequest struct {
 	TemporaryToken string `json:"temporary_token" required:"true" minLength:"20" maxLength:"4096"`
-	Code           string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
+	Code           string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"482915"`
 }
 
 type VerifyRecoveryCodeRequest struct {
 	TemporaryToken string `json:"temporary_token" required:"true" minLength:"20" maxLength:"4096"`
-	Code           string `json:"code" required:"true" minLength:"8" maxLength:"16" example:"ABCD-EFGH"`
+	Code           string `json:"code" required:"true" minLength:"8" maxLength:"16" example:"K7QM-3XPZ"`
 }
 
 type Disable2FARequest struct {
-	Password string `json:"password,omitempty" maxLength:"72" example:"test@123" doc:"Required for password-based accounts; omit for OAuth-only accounts."`
-	Code     string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456"`
+	Password string `json:"password,omitempty" maxLength:"72" example:"Pune@2026x" doc:"Required for password-based accounts; omit for OAuth-only accounts."`
+	Code     string `json:"code" required:"true" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"482915"`
 }
 
 type RegenerateRecoveryCodesRequest struct {
-	Password string `json:"password,omitempty" maxLength:"72" example:"test@123" doc:"Required for password-based accounts."`
-	Code     string `json:"code,omitempty" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"123456" doc:"Required for OAuth-only accounts (6-digit TOTP code)."`
+	Password string `json:"password,omitempty" maxLength:"72" example:"Pune@2026x" doc:"Required for password-based accounts."`
+	Code     string `json:"code,omitempty" minLength:"6" maxLength:"6" pattern:"^[0-9]{6}$" example:"482915" doc:"Required for OAuth-only accounts (6-digit TOTP code)."`
 }
 
 type RegenerateRecoveryCodesResponse struct {
