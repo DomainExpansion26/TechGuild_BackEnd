@@ -36,6 +36,7 @@ func (c *MilestoneFundingController) FundMilestoneHandler(
 		return nil, mapFundingError(err)
 	}
 
+	populateMinorTwins(resp)
 	return &dto.FundMilestoneOutput{Body: *resp}, nil
 }
 
@@ -53,6 +54,7 @@ func (c *MilestoneFundingController) ConfirmFundingHandler(
 		return nil, mapFundingError(err)
 	}
 
+	populateMinorTwins(resp)
 	return &dto.ConfirmFundingOutput{Body: *resp}, nil
 }
 
@@ -71,6 +73,18 @@ func (c *MilestoneFundingController) GetMilestonePaymentHandler(
 	}
 
 	return &dto.GetMilestonePaymentOutput{Body: *resp}, nil
+}
+
+// populateMinorTwins fills the minor-unit twins of the rupee amounts on
+// FundMilestoneResponse. The funding service populates the rupee fields for
+// every variant (mock and Razorpay), so the paise values are derived here with
+// the same conversion the service uses in the opposite direction. The three
+// minor fields that the service already sets (milestone amount, client fee,
+// client charged) are left untouched.
+func populateMinorTwins(resp *dto.FundMilestoneResponse) {
+	resp.FreelancerFeeMinor = utils.RupeesToPaise(resp.FreelancerFee)
+	resp.FreelancerNetMinor = utils.RupeesToPaise(resp.FreelancerNet)
+	resp.PlatformTotalMinor = utils.RupeesToPaise(resp.PlatformTotal)
 }
 
 func mapFundingError(err error) error {

@@ -14,15 +14,14 @@ func RegisterMilestoneReleaseRoutes(
 ) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Milestone Release"}
 
 	huma.Register(api, huma.Operation{
 		Security:    bearer,
 		OperationID: "submit-milestone-for-release",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/submit-for-release",
-		Tags:        tags,
-		Summary:     "Freelancer submits completed milestone for client release",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Submit completed milestone for release",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -41,8 +40,8 @@ func RegisterMilestoneReleaseRoutes(
 		OperationID: "release-quest-milestone",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/release",
-		Tags:        tags,
-		Summary:     "Client releases escrow to freelancer wallet",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Release escrow to freelancer wallet",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,

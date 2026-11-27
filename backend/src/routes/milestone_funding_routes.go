@@ -14,15 +14,14 @@ func RegisterMilestoneFundingRoutes(
 ) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Milestone Funding"}
 
 	huma.Register(api, huma.Operation{
 		Security:    bearer,
 		OperationID: "fund-quest-milestone",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/fund",
-		Tags:        tags,
-		Summary:     "Fund a milestone (client). Holds funds in escrow.",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Fund a milestone (holds funds in escrow)",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -42,17 +41,17 @@ func RegisterMilestoneFundingRoutes(
 		OperationID: "confirm-milestone-funding",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/fund/confirm",
-		Tags:        tags,
-		Summary:     "Confirm Razorpay checkout (signature verification)",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Confirm Razorpay checkout",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ConfirmFundingBody{
-						RazorpayPaymentID: "pay_xxx",
-						RazorpayOrderID:   "order_xxx",
-						RazorpaySignature: "<hmac>",
+						RazorpayPaymentID: "pay_NqX8kL2mZ4vB1c",
+						RazorpayOrderID:   "order_NqX7tR5wY3uA9p",
+						RazorpaySignature: "9f2c1a4b7e8d3f6a0b5c9e2d4f7a1b8c3e6d9f2a5b8c1e4d7f0a3b6c9e2d5f8a",
 					},
 				},
 			},
@@ -64,8 +63,8 @@ func RegisterMilestoneFundingRoutes(
 		OperationID: "get-milestone-payment",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/payment",
-		Tags:        tags,
-		Summary:     "Get payment details for a milestone",
+		Tags:        []string{"Common / Milestones Read"},
+		Summary:     "[Common] Get payment details for a milestone",
 		Middlewares: authMw,
 	}, c.GetMilestonePaymentHandler)
 }

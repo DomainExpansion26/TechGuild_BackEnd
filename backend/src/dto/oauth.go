@@ -2,7 +2,7 @@ package dto
 
 type GoogleLoginRequest struct {
 	GoogleID string `json:"google_id" example:"110234567890123456789"`
-	Email    string `json:"email" example:"test@example.com"`
+	Email    string `json:"email" example:"aarav.sharma@example.in"`
 	FullName string `json:"full_name" example:"John Doe"`
 	Picture  string `json:"picture" example:"https://lh3.googleusercontent.com/a-/default-photo"`
 }
@@ -26,7 +26,7 @@ type GoogleLoginResponse struct {
 
 type GitHubLoginRequest struct {
 	GitHubID string `json:"github_id" example:"12345678"`
-	Email    string `json:"email" example:"test@example.com"`
+	Email    string `json:"email" example:"aarav.sharma@example.in"`
 	FullName string `json:"full_name" example:"John Doe"`
 	Avatar   string `json:"avatar" example:"https://avatars.githubusercontent.com/u/12345678"`
 }

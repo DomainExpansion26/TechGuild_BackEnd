@@ -9,7 +9,7 @@ type GetAccountSettingsOutput struct {
 }
 
 type GetAccountSettingsResponse struct {
-	Email         string `json:"email" example:"user@example.com"`
+	Email         string `json:"email" example:"aarav.sharma@example.in"`
 	EmailVerified bool   `json:"email_verified" example:"true"`
 }
 
@@ -82,7 +82,7 @@ type DeactivateAccountInput struct {
 }
 
 type DeactivateAccountRequest struct {
-	Password     string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"test@123"`
+	Password     string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"Pune@2026x"`
 	Confirmation bool   `json:"confirmation" required:"true" example:"true"`
 }
 
@@ -91,7 +91,7 @@ type DeactivateAccountOutput struct {
 }
 
 type DeleteAccountRequest struct {
-	Password string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"test@123"`
+	Password string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"Pune@2026x"`
 }
 
 type DeleteAccountInput struct {
@@ -137,9 +137,9 @@ type SignOtherSessionsOutput struct {
 }
 
 type UpdateAccountRequest struct {
-	Password        string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"test@123"` // For verification if changing email/password
-	NewPassword     string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
-	ConfirmPassword string `json:"confirm_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
+	Password        string `json:"password" required:"true" minLength:"1" maxLength:"72" example:"Pune@2026x"` // For verification if changing email/password
+	NewPassword     string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"Hyderabad@2026z"`
+	ConfirmPassword string `json:"confirm_password" required:"true" minLength:"8" maxLength:"72" example:"Hyderabad@2026z"`
 }
 
 type UpdateNotificationsRequest struct {

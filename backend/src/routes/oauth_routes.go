@@ -12,8 +12,8 @@ func RegisterOAuthRoutes(api huma.API, c *controllers.OAuthController) {
 		OperationID: "google-login",
 		Method:      "GET",
 		Path:        "/oauth/google/login",
-		Tags:        []string{"OAuth"},
-		Summary:     "Login with Google",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Login with Google",
 		Security:    []map[string][]string{},
 	}, c.GoogleLoginHandler)
 
@@ -21,8 +21,8 @@ func RegisterOAuthRoutes(api huma.API, c *controllers.OAuthController) {
 		OperationID: "google-callback",
 		Method:      "GET",
 		Path:        "/oauth/google/callback",
-		Tags:        []string{"OAuth"},
-		Summary:     "Google OAuth callback",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Google OAuth callback",
 		Security:    []map[string][]string{},
 	}, c.GoogleCallbackHandler)
 
@@ -30,8 +30,8 @@ func RegisterOAuthRoutes(api huma.API, c *controllers.OAuthController) {
 		OperationID: "github-login",
 		Method:      "GET",
 		Path:        "/oauth/github/login",
-		Tags:        []string{"OAuth"},
-		Summary:     "Login with GitHub",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Login with GitHub",
 		Security:    []map[string][]string{},
 	}, c.GitHubLoginHandler)
 
@@ -39,8 +39,8 @@ func RegisterOAuthRoutes(api huma.API, c *controllers.OAuthController) {
 		OperationID: "github-callback",
 		Method:      "GET",
 		Path:        "/oauth/github/callback",
-		Tags:        []string{"OAuth"},
-		Summary:     "GitHub OAuth callback",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] GitHub OAuth callback",
 		Security:    []map[string][]string{},
 	}, c.GitHubCallbackHandler)
 }

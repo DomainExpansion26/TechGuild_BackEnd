@@ -17,17 +17,17 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "register",
 		Method:      "POST",
 		Path:        "/auth/register",
-		Tags:        []string{"Authentication"},
-		Summary:     "Register a new user",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Register a new user",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.RegisterRequest{
-						FirstName: "John",
-						LastName:  "Doe",
-						Email:     "test@example.com",
-						Password:  "test@123",
+						FirstName: "Aarav",
+						LastName:  "Sharma",
+						Email:     "aarav.sharma@example.in",
+						Password:  "Bengaluru@2026",
 					},
 				},
 			},
@@ -38,15 +38,15 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "login",
 		Method:      "POST",
 		Path:        "/auth/login",
-		Tags:        []string{"Authentication"},
-		Summary:     "User Login",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] User Login",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.LoginRequest{
-						Email:    "test@example.com",
-						Password: "test@123",
+						Email:    "aarav.sharma@example.in",
+						Password: "Bengaluru@2026",
 					},
 				},
 			},
@@ -57,8 +57,8 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "logout",
 		Method:      "POST",
 		Path:        "/auth/logout",
-		Tags:        []string{"Authentication"},
-		Summary:     "Logout user",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Logout user",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
@@ -75,8 +75,8 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "refresh-token",
 		Method:      "POST",
 		Path:        "/auth/refresh-token",
-		Tags:        []string{"Authentication"},
-		Summary:     "Refresh access token",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Refresh access token",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
@@ -93,8 +93,8 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "verify-email",
 		Method:      "GET",
 		Path:        "/auth/verify-email",
-		Tags:        []string{"Authentication"},
-		Summary:     "Verify email",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Verify email",
 		Security:    []map[string][]string{},
 	}, c.VerifyEmailHandler)
 
@@ -102,14 +102,14 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "resend-verification",
 		Method:      "POST",
 		Path:        "/auth/resend-verification",
-		Tags:        []string{"Authentication"},
-		Summary:     "Resend verification email",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Resend verification email",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ResendVerificationRequest{
-						Email: "test@example.com",
+						Email: "aarav.sharma@example.in",
 					},
 				},
 			},
@@ -120,14 +120,14 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "forgot-password",
 		Method:      "POST",
 		Path:        "/auth/forgot-password",
-		Tags:        []string{"Authentication"},
-		Summary:     "Forgot password",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Forgot password",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ForgotPasswordRequest{
-						Email: "test@example.com",
+						Email: "aarav.sharma@example.in",
 					},
 				},
 			},
@@ -138,14 +138,15 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "reset-password",
 		Method:      "POST",
 		Path:        "/auth/reset-password",
-		Tags:        []string{"Authentication"},
-		Summary:     "Reset password",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Reset password",
+		Description: "Completes a password reset. A valid reset token is ALSO required as the ?token=<reset token> query parameter (in addition to this JSON body).",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ResetPasswordRequest{
-						NewPassword: "newpass@123",
+						NewPassword: "Mumbai@2026x",
 					},
 				},
 			},
@@ -158,41 +159,21 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "change-password",
 		Method:      "POST",
 		Path:        "/auth/change-password",
-		Tags:        []string{"Authentication"},
-		Summary:     "Change password",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Change password",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.ChangePasswordRequest{
-						OldPassword:     "test@123",
-						NewPassword:     "newpass@123",
-						ConfirmPassword: "newpass@123",
+						OldPassword:     "Bengaluru@2026",
+						NewPassword:     "Pune@2026x",
+						ConfirmPassword: "Pune@2026x",
 					},
 				},
 			},
 		},
 	}, c.ChangePasswordHandler)
-
-	// huma.Register(api, huma.Operation{
-	// 	OperationID: "set-account-type",
-	// 	Method:      "POST",
-	// 	Path:        "/auth/register/account-type",
-	// 	Tags:        []string{"Authentication"},
-	// 	Summary:     "Set account type",
-	// 	Security:    []map[string][]string{},
-	// 	RequestBody: &huma.RequestBody{
-	// 		Content: map[string]*huma.MediaType{
-	// 			"application/json": {
-	// 				Example: dto.SetAccountTypeRequest{
-	// 					Email:       "test@example.com",
-	// 					Password:    "test@123",
-	// 					AccountType: "individual",
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// }, pc.SetAccountTypeHandler)
 
 	// ---------- for oauth ----------
 	huma.Register(api, huma.Operation{
@@ -200,8 +181,8 @@ func RegisterAuthRoutes(api huma.API, c *controllers.AuthController) {
 		OperationID: "set-account-type-authenticated",
 		Method:      "POST",
 		Path:        "/auth/account-type",
-		Tags:        []string{"Authentication"},
-		Summary:     "Set account type for an already-logged-in user (e.g. OAuth signup)",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Set account type for an already-logged-in user (e.g. OAuth signup)",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{

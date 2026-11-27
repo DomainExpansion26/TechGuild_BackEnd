@@ -13,12 +13,12 @@ type AddPayoutMethodRequest struct {
 
 	// Bank fields (used when type = "bank")
 	BankName      *string `json:"bank_name,omitempty" maxLength:"150" example:"HDFC Bank"`
-	AccountHolder *string `json:"account_holder,omitempty" maxLength:"150" example:"John Doe"`
-	AccountNumber *string `json:"account_number,omitempty" maxLength:"34" example:"1234567890123456"` // never stored
+	AccountHolder *string `json:"account_holder,omitempty" maxLength:"150" example:"Ananya Sharma"`
+	AccountNumber *string `json:"account_number,omitempty" maxLength:"34" example:"50100234567891"` // never stored
 	IFSC          *string `json:"ifsc,omitempty" maxLength:"20" example:"HDFC0001234"`
 
 	// UPI fields (used when type = "upi")
-	VPA *string `json:"vpa,omitempty" maxLength:"100" example:"johndoe@okhdfc"`
+	VPA *string `json:"vpa,omitempty" maxLength:"100" example:"ananya.sharma@okhdfc"`
 
 	// Card/wallet fields (used when type = "card" or "wallet")
 	Last4 *string `json:"last4,omitempty" maxLength:"4" example:"4242"`
@@ -37,12 +37,12 @@ type PayoutMethodResponse struct {
 
 	// Bank fields
 	BankName      string `json:"bank_name,omitempty" example:"HDFC Bank"`
-	AccountHolder string `json:"account_holder,omitempty" example:"John Doe"`
+	AccountHolder string `json:"account_holder,omitempty" example:"Ananya Sharma"`
 	MaskedAccount string `json:"masked_account,omitempty" example:"XXXX1234"`
 	IFSC          string `json:"ifsc,omitempty" example:"HDFC0001234"`
 
 	// UPI
-	VPA string `json:"vpa,omitempty" example:"johndoe@okhdfc"`
+	VPA string `json:"vpa,omitempty" example:"ananya.sharma@okhdfc"`
 
 	// Card/wallet
 	Last4 string `json:"last4,omitempty" example:"4242"`
