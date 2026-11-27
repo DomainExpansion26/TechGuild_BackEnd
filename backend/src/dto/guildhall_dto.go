@@ -6,8 +6,8 @@ type CreateGuildhallPostBody struct {
 	Type    string         `json:"type" huma:"required,enum=discussion;question;project_showcase;poll;opportunity;media" example:"question"`
 	Title   string         `json:"title,omitempty" huma:"maxLength=200" example:"How do you approach API versioning?"`
 	Content string         `json:"content" huma:"required,minLength=1" example:"I'm comparing a few approaches and would appreciate your experience."`
-	LinkURL string         `json:"link_url,omitempty" huma:"maxLength=2048" example:"https://example.com/project"`
-	Details map[string]any `json:"details,omitempty"`
+	LinkURL string         `json:"link_url,omitempty" huma:"maxLength=2048" example:"https://techguild.in/blog/api-versioning"`
+	Details map[string]any `json:"details,omitempty" doc:"Type-specific details. For opportunity posts this carries engagement_type, location, budget_inr (rupees, major units — 250000 = ₹2,50,000), budget_period. budget_inr is in rupees (major units), not paise."`
 }
 
 type CreateGuildhallPostInput struct {
@@ -61,7 +61,7 @@ type UpdateGuildhallPostBody struct {
 	Title   *string         `json:"title,omitempty" huma:"maxLength=200"`
 	Content *string         `json:"content,omitempty" huma:"minLength=1"`
 	LinkURL *string         `json:"link_url,omitempty" huma:"maxLength=2048"`
-	Details *map[string]any `json:"details,omitempty"`
+	Details *map[string]any `json:"details,omitempty" doc:"Type-specific details. Same contract as CreateGuildhallPostBody: engagement_type, location, budget_inr (rupees, major units — 250000 = ₹2,50,000), budget_period. budget_inr is in rupees (major units), not paise."`
 }
 
 type UpdateGuildhallPostInput struct {

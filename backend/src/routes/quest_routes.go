@@ -19,16 +19,14 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		middleware.AuthMiddlewareHuma(api),
 	}
 
-	tags := []string{"Quests"}
-
 	// 1. Task P2-3.2: Create Quest Draft (Client Only)
 	huma.Register(api, huma.Operation{
 		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "create-quest",
 		Method:      "POST",
 		Path:        "/v1/quests",
-		Tags:        tags,
-		Summary:     "Create a quest draft",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Create a quest draft",
 		Description: "Allows authenticated and verified clients to create a quest draft with milestones and skill requirements. The minimum required rank is auto-computed based on the budget progression matrix (minimum budget ₹1,000).",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
@@ -65,16 +63,14 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "publish-quest",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/publish",
-		Tags:        tags,
-		Summary:     "Publish quest (open for acceptance)",
-		Description: "Validates quest is in draft status, sets quest status to open and records the publish timestamp. No payment or escrow movement happens here: escrow is funded per-milestone via POST /v1/quests/{id}/milestones/{milestone_id}/fund once a milestone is agreed.",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Publish quest (open for acceptance)",
+		Description: "Validates quest is in draft status, sets quest status to open and records the publish timestamp. No payment or escrow movement happens here: escrow is funded per-milestone via POST /v1/quests/{id}/milestones/{milestone_id}/fund once a milestone is agreed. The request body is optional and ignored: funding_method and fund_escrow_now are deprecated and ignored.",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
-					Example: dto.PublishQuestBody{
-						FundingMethod: "escrow_deposit",
-					},
+					Example: dto.PublishQuestBody{},
 				},
 			},
 		},
@@ -86,8 +82,8 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "list-quests",
 		Method:      "GET",
 		Path:        "/v1/quests",
-		Tags:        tags,
-		Summary:     "List quests (tier-locked per requester)",
+		Tags:        []string{"Common / Quest Discovery"},
+		Summary:     "[Common] List quests (tier-locked visibility)",
 		Description: "Returns public marketplace quests with asymmetric tier visibility (requester rank >= quest required_min_rank). Supports cursor-based pagination and filtering.",
 		Middlewares: generalAuthMw,
 	}, controllers.ListQuestsHandler)
@@ -98,8 +94,8 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "list-saved-quests",
 		Method:      "GET",
 		Path:        "/v1/quests/saved",
-		Tags:        tags,
-		Summary:     "List bookmarked quests",
+		Tags:        []string{"Common / Quest Discovery"},
+		Summary:     "[Common] List bookmarked quests",
 		Description: "Returns every quest the authenticated caller bookmarked, newest first.",
 		Middlewares: generalAuthMw,
 	}, c.ListSavedQuestsHandler)
@@ -110,8 +106,8 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "get-quest-board-summary",
 		Method:      "GET",
 		Path:        "/v1/quests/board/summary",
-		Tags:        tags,
-		Summary:     "Freelancer quest board summary",
+		Tags:        []string{"Freelancer / Quest Board"},
+		Summary:     "[Freelancer] Freelancer quest board summary",
 		Description: "Returns the caller's application KPIs, latest applications and rank-eligible quests ranked by skill match.",
 		Middlewares: generalAuthMw,
 	}, c.BoardSummaryHandler)
@@ -122,8 +118,8 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "get-quest-details",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}",
-		Tags:        tags,
-		Summary:     "Get quest details",
+		Tags:        []string{"Common / Quest Discovery"},
+		Summary:     "[Common] Get quest details",
 		Description: "Returns full quest details including milestones and required skills, if visible to the requester according to tier hierarchy and ownership.",
 		Middlewares: generalAuthMw,
 	}, controllers.GetQuestDetailsHandler)
@@ -134,8 +130,8 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "reject-quest",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/reject",
-		Tags:        tags,
-		Summary:     "Reject / cancel quest (client only)",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Reject / cancel quest",
 		Description: "Validates quest is not already cancelled/completed, refunds every milestone still in a refundable state (work_in_progress, submitted_for_release) through the escrow refund flow, then marks the quest cancelled. Returns 409 for legacy quest-level escrow, which needs manual reconciliation.",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
@@ -155,16 +151,21 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "update-quest",
 		Method:      "PATCH",
 		Path:        "/v1/quests/{id}",
-		Tags:        tags,
-		Summary:     "Update a draft quest",
+		Tags:        []string{"Client / Quest Board"},
+		Summary:     "[Client] Update a draft quest",
 		Description: "Partially updates a quest the caller owns. Only drafts are editable (409 otherwise). Changing the budget re-derives the required minimum rank. Providing skills replaces the whole skill set.",
 		Middlewares: clientAuthMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.UpdateQuestBody{
-						Title:       strPtr("Website Redesign for FinTech Startup v2"),
-						BudgetMinor: int64Ptr(9000000),
+						Title:        strPtr("Website Redesign for FinTech Startup v2"),
+						BudgetMinor:  int64Ptr(9000000), // ₹90,000.00
+						TimelineDays: ptr(50),
+						Skills: ptr([]dto.CreateQuestSkillInput{
+							{Name: "Figma", ProficiencyLevel: "expert", IsCore: true},
+							{Name: "React", ProficiencyLevel: "advanced", IsCore: true},
+						}),
 					},
 				},
 			},
@@ -177,9 +178,9 @@ func RegisterQuestRoutes(api huma.API, c *controllers.QuestController) {
 		OperationID: "save-quest",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/save",
-		Tags:        tags,
-		Summary:     "Bookmark / unbookmark a quest",
-		Description: "Toggles the caller's bookmark for this quest and returns the resulting state.",
+		Tags:        []string{"Common / Quest Discovery"},
+		Summary:     "[Common] Bookmark / unbookmark a quest",
+		Description: "Toggles the caller's bookmark for this quest and returns the resulting state. This operation takes no request body; it is identified by the quest path parameter only.",
 		Middlewares: generalAuthMw,
 	}, c.SaveQuestHandler)
 }

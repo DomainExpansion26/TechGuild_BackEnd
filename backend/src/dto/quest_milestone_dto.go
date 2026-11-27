@@ -17,7 +17,7 @@ type MilestoneTaskInput struct {
 type CreateQuestMilestoneBody struct {
 	Title       string               `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Research & Wireframes"`
 	Description string               `json:"description,omitempty" maxLength:"5000" example:"User research and low-fidelity wireframes"`
-	Amount      float64              `json:"amount" required:"true" minimum:"0.01" example:"10000" doc:"Milestone amount in INR (rupees)"`
+	Amount      float64              `json:"amount" required:"true" minimum:"0.01" example:"10000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	StartDate   *time.Time           `json:"start_date,omitempty"`
 	DueDate     *time.Time           `json:"due_date,omitempty"`
 	DueDays     int                  `json:"due_days,omitempty" minimum:"1" example:"7"`
@@ -41,7 +41,7 @@ type CreateQuestMilestoneOutput struct {
 type UpdateQuestMilestoneBody struct {
 	Title       *string    `json:"title,omitempty" minLength:"2" maxLength:"255"`
 	Description *string    `json:"description,omitempty" maxLength:"5000"`
-	Amount      *float64   `json:"amount,omitempty" minimum:"0.01" doc:"Amount in INR rupees"`
+	Amount      *float64   `json:"amount,omitempty" minimum:"0.01" example:"28000" doc:"Amount in rupees (major units). 28000 = ₹28,000.00 INR. NOT paise."`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
 	DueDays     *int       `json:"due_days,omitempty" minimum:"1"`
@@ -127,7 +127,7 @@ type ApproveMilestoneOutput struct {
 
 type RequestMilestoneRevisionBody struct {
 	Note          string `json:"note" required:"true" minLength:"5" maxLength:"2000" example:"Please adjust the color scheme to match brand guidelines"`
-	AttachmentURL string `json:"attachment_url,omitempty" format:"uri" maxLength:"2048"`
+	AttachmentURL string `json:"attachment_url,omitempty" format:"uri" maxLength:"2048" example:"https://cdn.techguild.in/reviews/milestone-1-revision-notes.pdf"`
 }
 
 type RequestMilestoneRevisionInput struct {
@@ -183,7 +183,7 @@ type RevisionItem struct {
 	RequestedByRole     string    `json:"requested_by_role" example:"client" doc:"client or freelancer"`
 	TitleSnapshot       string    `json:"title_snapshot,omitempty"`
 	DescriptionSnapshot string    `json:"description_snapshot,omitempty"`
-	AmountMinorSnapshot int64     `json:"amount_minor_snapshot,omitempty"`
+	AmountMinorSnapshot int64     `json:"amount_minor_snapshot,omitempty" example:"2500000" doc:"Amount in paise (minor units). 2500000 = ₹25,000.00 INR"`
 	Note                string    `json:"note,omitempty"`
 	AttachmentURL       string    `json:"attachment_url,omitempty"`
 	RoundNumber         int       `json:"round_number"`
@@ -217,8 +217,8 @@ type MilestoneSummaryItem struct {
 	ID            string     `json:"id"`
 	Title         string     `json:"title"`
 	Description   string     `json:"description,omitempty"`
-	AmountMinor   int64      `json:"amount_minor"`
-	Amount        float64    `json:"amount" doc:"Amount in rupees for display"`
+	AmountMinor   int64      `json:"amount_minor" example:"2500000" doc:"Amount in paise (minor units). 2500000 = ₹25,000.00 INR"`
+	Amount        float64    `json:"amount" example:"25000" doc:"Amount in rupees (major units). 25000 = ₹25,000.00 INR. NOT paise."`
 	Currency      string     `json:"currency" example:"INR"`
 	DueDays       int        `json:"due_days"`
 	OrderIndex    int        `json:"order_index"`
@@ -238,8 +238,8 @@ type MilestoneDetailResponse struct {
 
 	Title       string  `json:"title"`
 	Description string  `json:"description,omitempty"`
-	AmountMinor int64   `json:"amount_minor"`
-	Amount      float64 `json:"amount" doc:"Amount in rupees for display"`
+	AmountMinor int64   `json:"amount_minor" example:"2500000" doc:"Amount in paise (minor units). 2500000 = ₹25,000.00 INR"`
+	Amount      float64 `json:"amount" example:"25000" doc:"Amount in rupees (major units). 25000 = ₹25,000.00 INR. NOT paise."`
 	Currency    string  `json:"currency" example:"INR"`
 	DueDays     int     `json:"due_days"`
 	OrderIndex  int     `json:"order_index"`

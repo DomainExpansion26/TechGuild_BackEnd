@@ -17,8 +17,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "get-account-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/account",
-		Tags:        []string{"Settings"},
-		Summary:     "Get account settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Get account settings",
 		Middlewares: authMw,
 	}, c.GetAccountSettingsHandler)
 
@@ -28,16 +28,17 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "update-account-settings",
 		Method:      "PATCH",
 		Path:        "/v1/settings/account",
-		Tags:        []string{"Settings"},
-		Summary:     "Update account settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Update account settings",
+		Description: "Changes the account password. Requires the current password plus the new password twice for confirmation.",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.UpdateAccountRequest{
-						Password:        "test@123",
-						NewPassword:     "newpass@123",
-						ConfirmPassword: "newpass@123",
+						Password:        "Pune@2026x",
+						NewPassword:     "Hyderabad@2026z",
+						ConfirmPassword: "Hyderabad@2026z",
 					},
 				},
 			},
@@ -50,8 +51,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "get-notifications",
 		Method:      "GET",
 		Path:        "/v1/settings/notifications",
-		Tags:        []string{"Settings"},
-		Summary:     "Get notification settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Get notification settings",
 		Middlewares: authMw,
 	}, c.GetNotificationsHandler)
 
@@ -61,8 +62,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "update-notifications",
 		Method:      "PATCH",
 		Path:        "/v1/settings/notifications",
-		Tags:        []string{"Settings"},
-		Summary:     "Update notification settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Update notification settings",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -85,8 +86,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "get-privacy-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/privacy",
-		Tags:        []string{"Settings"},
-		Summary:     "Get privacy settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Get privacy settings",
 		Middlewares: authMw,
 	}, c.GetPrivacySettingsHandler)
 
@@ -96,8 +97,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "update-privacy-settings",
 		Method:      "PATCH",
 		Path:        "/v1/settings/privacy",
-		Tags:        []string{"Settings"},
-		Summary:     "Update privacy settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Update privacy settings",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
@@ -116,8 +117,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "get-billing-settings",
 		Method:      "GET",
 		Path:        "/v1/settings/billing",
-		Tags:        []string{"Settings"},
-		Summary:     "Get billing settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Get billing settings",
 		Middlewares: authMw,
 	}, c.GetBillingSettingsHandler)
 
@@ -127,8 +128,10 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "update-payout-method",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payout-method",
-		Tags:        []string{"Settings"},
-		Summary:     "Update billing settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] DEPRECATED — use Payout Methods API",
+		Description: "Deprecated. Returns 501 Not Implemented.",
+		Deprecated:  true,
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -148,8 +151,10 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "update-payout-schedule",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payout-schedule",
-		Tags:        []string{"Settings"},
-		Summary:     "Update billing settings",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] DEPRECATED — use Payout Methods API",
+		Description: "Deprecated. Returns 501 Not Implemented.",
+		Deprecated:  true,
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -169,15 +174,15 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "deactivate-account",
 		Method:      "POST",
 		Path:        "/v1/settings/account/deactivate",
-		Tags:        []string{"Settings"},
-		Summary:     "Deactivate account",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Deactivate account",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.DeactivateAccountRequest{
-						Password:     "test@123",
+						Password:     "Pune@2026x",
 						Confirmation: true,
 					},
 				},
@@ -191,15 +196,15 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "delete-settings-account",
 		Method:      "DELETE",
 		Path:        "/v1/settings/account",
-		Tags:        []string{"Settings"},
-		Summary:     "Delete account",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Delete account",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.DeleteAccountRequest{
-						Password: "test@123",
+						Password: "Pune@2026x",
 					},
 				},
 			},
@@ -212,8 +217,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "get-sessions",
 		Method:      "GET",
 		Path:        "/v1/settings/sessions",
-		Tags:        []string{"Settings"},
-		Summary:     "Get session info",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Get session info",
 		Middlewares: authMw,
 	}, c.GetSessionsHandler)
 
@@ -223,8 +228,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "revoke-session",
 		Method:      "DELETE",
 		Path:        "/v1/settings/sessions/{id}",
-		Tags:        []string{"Settings"},
-		Summary:     "Revoke specific session",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Revoke specific session",
 		Middlewares: authMw,
 	}, c.RevokeSessionHandler)
 
@@ -234,8 +239,8 @@ func RegisterSettingsRoutes(api huma.API, c *controllers.SettingsController) {
 		OperationID: "sign-out-other-sessions",
 		Method:      "DELETE",
 		Path:        "/v1/settings/sessions/others",
-		Tags:        []string{"Settings"},
-		Summary:     "Sign out of all other sessions",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Sign out of all other sessions",
 		Middlewares: authMw,
 	}, c.SignOutOtherSessionsHandler)
 }

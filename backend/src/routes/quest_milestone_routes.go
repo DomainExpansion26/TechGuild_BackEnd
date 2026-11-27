@@ -14,7 +14,6 @@ func RegisterQuestMilestoneRoutes(
 ) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Quest Milestones"}
 
 	// ============================================================
 	// FREELANCER — Milestone lifecycle
@@ -25,8 +24,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "create-quest-milestone",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones",
-		Tags:        tags,
-		Summary:     "Create a milestone (freelancer only)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Create a milestone",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -35,13 +34,13 @@ func RegisterQuestMilestoneRoutes(
 					Example: dto.CreateQuestMilestoneBody{
 						Title:       "Research & Wireframes",
 						Description: "User research and low-fidelity wireframes",
-						Amount:      10000,
+						Amount:      25000,
 						DueDays:     7,
 						Tasks: []dto.MilestoneTaskInput{
 							{
 								Title:       "Navbar Wireframe",
 								Description: "Design responsive navigation component",
-								AssigneeID:  ptr("11111111-1111-1111-1111-111111111111"),
+								AssigneeID:  ptr("a7f3c2e1-9b4d-4f6a-8e2c-1d5b7a9c3e0f"),
 							},
 						},
 					},
@@ -55,8 +54,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "update-quest-milestone",
 		Method:      "PATCH",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}",
-		Tags:        tags,
-		Summary:     "Update a milestone (freelancer, draft/revision only)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Update a milestone (draft/revision)",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -65,18 +64,18 @@ func RegisterQuestMilestoneRoutes(
 					Example: dto.UpdateQuestMilestoneBody{
 						Title:       ptr("Research & Wireframes"),
 						Description: ptr("Updated scope after kickoff call"),
-						Amount:      ptr(12000.0),
+						Amount:      ptr(28000.0),
 						DueDays:     ptr(10),
 						Tasks: []dto.MilestoneTaskPatchInput{
 							{
-								ID:          ptr("22222222-2222-2222-2222-222222222222"),
+								ID:          ptr("c1e4a9d2-7f3b-4a8c-9d6e-2b5f8c1a4d70"),
 								Title:       ptr("Navbar Wireframe v2"),
 								Description: ptr("Add mobile breakpoints"),
-								AssigneeID:  ptr("11111111-1111-1111-1111-111111111111"),
+								AssigneeID:  ptr("a7f3c2e1-9b4d-4f6a-8e2c-1d5b7a9c3e0f"),
 								Status:      ptr("in_progress"),
 							},
 						},
-						DeleteTaskIDs: []string{"33333333-3333-3333-3333-333333333333"},
+						DeleteTaskIDs: []string{"f2b8d1c4-6a9e-4b3d-8c7f-0e5a2d9b6c13"},
 					},
 				},
 			},
@@ -88,8 +87,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "delete-quest-milestone",
 		Method:      "DELETE",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}",
-		Tags:        tags,
-		Summary:     "Delete a milestone (freelancer, draft only)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Delete a milestone (draft only)",
 		Middlewares: authMw,
 	}, c.DeleteMilestoneHandler)
 
@@ -98,8 +97,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "send-milestone-for-review",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/send-for-review",
-		Tags:        tags,
-		Summary:     "Send milestone for client review (freelancer)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Send milestone for client review",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -118,8 +117,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "resubmit-milestone-after-revision",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/resubmit",
-		Tags:        tags,
-		Summary:     "Resubmit milestone after revision (freelancer)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Resubmit milestone after revision",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -142,8 +141,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "approve-quest-milestone",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/approve",
-		Tags:        tags,
-		Summary:     "Approve milestone (client)",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Approve milestone",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -162,8 +161,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "request-milestone-revision",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/request-revision",
-		Tags:        tags,
-		Summary:     "Request milestone revision (client)",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Request milestone revision",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -171,7 +170,7 @@ func RegisterQuestMilestoneRoutes(
 				"application/json": {
 					Example: dto.RequestMilestoneRevisionBody{
 						Note:          "Please adjust the color scheme to match brand guidelines",
-						AttachmentURL: "https://example.com/attachments/color-scheme-notes.pdf",
+						AttachmentURL: "https://cdn.techguild.in/reviews/milestone-1-revision-notes.pdf",
 					},
 				},
 			},
@@ -187,8 +186,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "get-quest-milestone",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}",
-		Tags:        tags,
-		Summary:     "Get milestone detail (client or freelancer)",
+		Tags:        []string{"Common / Milestones Read"},
+		Summary:     "[Common] Get milestone detail (client or freelancer)",
 		Middlewares: authMw,
 	}, c.GetMilestoneHandler)
 
@@ -197,8 +196,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "list-quest-milestones",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/milestones",
-		Tags:        tags,
-		Summary:     "List all milestones for a quest",
+		Tags:        []string{"Common / Milestones Read"},
+		Summary:     "[Common] List all milestones for a quest",
 		Middlewares: authMw,
 	}, c.ListMilestonesHandler)
 
@@ -207,8 +206,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "get-milestone-revisions",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/revisions",
-		Tags:        tags,
-		Summary:     "Get revision history for a milestone",
+		Tags:        []string{"Common / Milestones Read"},
+		Summary:     "[Common] Get revision history for a milestone",
 		Middlewares: authMw,
 	}, c.GetRevisionsHandler)
 
@@ -221,8 +220,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "submit-milestone-roadmap",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/submit-roadmap",
-		Tags:        tags,
-		Summary:     "Submit all draft milestones for client review at once (freelancer)",
+		Tags:        []string{"Freelancer / Milestones & Deliverables"},
+		Summary:     "[Freelancer] Submit all draft milestones for review",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,
@@ -241,8 +240,8 @@ func RegisterQuestMilestoneRoutes(
 		OperationID: "approve-milestone-roadmap",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/approve-roadmap",
-		Tags:        tags,
-		Summary:     "Approve the entire milestone roadmap (client)",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Approve the entire milestone roadmap",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: false,

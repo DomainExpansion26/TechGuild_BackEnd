@@ -4,9 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 
-	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humagin"
 	"github.com/gin-gonic/gin"
 
@@ -53,27 +51,18 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	apiConfig := huma.DefaultConfig("TechGuild Backend API", "1.0.0")
-	apiConfig.Info.Description = "Backend API for TechGuild Platform."
-
-	publicURL := os.Getenv("SERVER_PUBLIC_URL")
-	if publicURL == "" {
-		publicURL = "http://localhost:8080"
-	}
-	apiConfig.Servers = []*huma.Server{{URL: publicURL}}
-
-	apiConfig.Components = &huma.Components{
-		SecuritySchemes: map[string]*huma.SecurityScheme{
-			"BearerAuth": {
-				Type:         "http",
-				Scheme:       "bearer",
-				BearerFormat: "JWT",
-			},
-		},
-	}
-	apiConfig.Security = []map[string][]string{{"BearerAuth": {}}}
+	apiConfig := routes.APIConfig()
 
 	api := humagin.New(router, apiConfig)
+
+	router.GET("/postman.json", func(c *gin.Context) {
+		data, err := utils.PostmanCollection(api)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build Postman collection: " + err.Error()})
+			return
+		}
+		c.Data(http.StatusOK, "application/json", data)
+	})
 
 	// --------------------------------------------------
 	// Payment Provider (selected via PAYMENT_PROVIDER env)

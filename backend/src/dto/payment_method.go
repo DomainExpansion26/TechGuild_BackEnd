@@ -6,7 +6,7 @@ type AddClientPaymentMethodRequest struct {
 	// Provider token from client-side SDK (Razorpay/Stripe checkout).
 	// TechGuild never sees raw card/UPI data.
 	Provider         string `json:"provider" required:"true" enum:"razorpay,stripe" example:"razorpay"`
-	ProviderMethodID string `json:"provider_method_id" required:"true" minLength:"1" maxLength:"255" example:"pm_xxxxxxxxxxxx"`
+	ProviderMethodID string `json:"provider_method_id" required:"true" minLength:"1" maxLength:"255" example:"pm_NqX8kL2mZ4vB1c"`
 
 	Type string `json:"type" required:"true" enum:"card,upi,netbanking" example:"card"`
 

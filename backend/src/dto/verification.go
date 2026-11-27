@@ -13,7 +13,7 @@ import (
 // Step 1: Individual Info
 type UpdateIndividualInfoRequest struct {
 	DocType  string `json:"doc_type" enum:"AADHAAR,PAN,PASSPORT,DRIVING_LICENSE" required:"true" example:"AADHAAR"`
-	IDNumber string `json:"id_number" minLength:"4" maxLength:"20" required:"true" example:"123456789012"`
+	IDNumber string `json:"id_number" minLength:"4" maxLength:"20" required:"true" example:"234567890123"`
 }
 
 // Step 1: Business Info
@@ -28,10 +28,10 @@ type UpdateBusinessInfoRequest struct {
 
 // Step 3: Bank Details
 type UpdateBankDetailsRequest struct {
-	BankName          string `json:"bank_name" required:"true" minLength:"1" maxLength:"150" example:"HDFC Bank"`
+	BankName          string `json:"bank_name" required:"true" minLength:"1" maxLength:"150" example:"Kotak Mahindra Bank"`
 	AccountHolderName string `json:"account_holder_name" required:"true" minLength:"1" maxLength:"150" example:"Nimbus Analytics Pvt Ltd"`
-	AccountNumber     string `json:"account_number" minLength:"6" maxLength:"20" required:"true" example:"12345678901234"`
-	IFSCCode          string `json:"ifsc_code" pattern:"^[A-Z]{4}0[A-Z0-9]{6}$" required:"true" example:"HDFC0001234"`
+	AccountNumber     string `json:"account_number" minLength:"6" maxLength:"20" required:"true" example:"9012345678901234"`
+	IFSCCode          string `json:"ifsc_code" pattern:"^[A-Z]{4}0[A-Z0-9]{6}$" required:"true" example:"KKBK0001234"`
 }
 
 // Step 2: File Upload (Huma Multipart wrapper)
@@ -165,7 +165,7 @@ type VerificationDocRef struct {
 type VerificationQueueItem struct {
 	ID               string                `json:"id" format:"uuid"`
 	UserID           string                `json:"user_id" format:"uuid"`
-	UserEmail        string                `json:"user_email" example:"user@example.com"`
+	UserEmail        string                `json:"user_email" example:"aarav.sharma@example.in"`
 	VerificationType string                `json:"verification_type" example:"individual"`
 	SubmittedAt      *time.Time            `json:"submitted_at,omitempty"`
 	MLCompletedAt    *time.Time            `json:"ml_completed_at,omitempty"`

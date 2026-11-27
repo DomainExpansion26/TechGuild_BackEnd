@@ -1,10 +1,10 @@
 package dto
 
 type RegisterRequest struct {
-	FirstName string `json:"first_name" required:"true" minLength:"1" maxLength:"100" example:"John"`
-	LastName  string `json:"last_name" required:"true" minLength:"1" maxLength:"100" example:"Doe"`
-	Email     string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
-	Password  string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"test@123"`
+	FirstName string `json:"first_name" required:"true" minLength:"1" maxLength:"100" example:"Aarav"`
+	LastName  string `json:"last_name" required:"true" minLength:"1" maxLength:"100" example:"Sharma"`
+	Email     string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"aarav.sharma@example.in"`
+	Password  string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"Bengaluru@2026"`
 }
 
 type RegisterResponse struct {
@@ -13,8 +13,8 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
-	Password string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"test@123"`
+	Email    string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"aarav.sharma@example.in"`
+	Password string `json:"password" required:"true" minLength:"8" maxLength:"72" example:"Bengaluru@2026"`
 }
 
 type LoginResponse struct {
@@ -38,7 +38,7 @@ type VerifyEmailResponse struct {
 }
 
 type ResendVerificationRequest struct {
-	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
+	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"aarav.sharma@example.in"`
 }
 
 type ResendVerificationResponse struct {
@@ -54,7 +54,7 @@ type LogoutResponse struct {
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"test@gmail.com"`
+	Email string `json:"email" required:"true" minLength:"3" maxLength:"254" pattern:"^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$" example:"aarav.sharma@example.in"`
 }
 
 type ForgotPasswordResponse struct {
@@ -62,7 +62,7 @@ type ForgotPasswordResponse struct {
 }
 
 type ResetPasswordRequest struct {
-	NewPassword string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
+	NewPassword string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"Mumbai@2026x"`
 }
 
 type ResetPasswordResponse struct {
@@ -70,9 +70,9 @@ type ResetPasswordResponse struct {
 }
 
 type ChangePasswordRequest struct {
-	OldPassword     string `json:"old_password" required:"true" minLength:"1" maxLength:"72" example:"test@123"`
-	NewPassword     string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
-	ConfirmPassword string `json:"confirm_password" required:"true" minLength:"8" maxLength:"72" example:"newpass@123"`
+	OldPassword     string `json:"old_password" required:"true" minLength:"1" maxLength:"72" example:"Bengaluru@2026"`
+	NewPassword     string `json:"new_password" required:"true" minLength:"8" maxLength:"72" example:"Pune@2026x"`
+	ConfirmPassword string `json:"confirm_password" required:"true" minLength:"8" maxLength:"72" example:"Pune@2026x"`
 }
 
 type ChangePasswordResponse struct {

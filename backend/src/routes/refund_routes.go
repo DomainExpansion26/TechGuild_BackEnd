@@ -11,15 +11,14 @@ import (
 func RegisterRefundRoutes(api huma.API, c *controllers.RefundController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Refunds"}
 
 	huma.Register(api, huma.Operation{
 		Security:    bearer,
 		OperationID: "request-milestone-refund",
 		Method:      "POST",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/refund",
-		Tags:        tags,
-		Summary:     "Request refund for a milestone (client only)",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Request refund for a milestone",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -39,8 +38,8 @@ func RegisterRefundRoutes(api huma.API, c *controllers.RefundController) {
 		OperationID: "get-milestone-refund",
 		Method:      "GET",
 		Path:        "/v1/quests/{id}/milestones/{milestone_id}/refund",
-		Tags:        tags,
-		Summary:     "Get refund details for a milestone",
+		Tags:        []string{"Client / Milestones & Escrow"},
+		Summary:     "[Client] Get refund details",
 		Middlewares: authMw,
 	}, c.GetRefundHandler)
 }

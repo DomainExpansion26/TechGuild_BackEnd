@@ -36,7 +36,7 @@ type ActiveQuestSummaryItem struct {
 	ID         string             `json:"id"`
 	Title      string             `json:"title"`
 	Category   string             `json:"category"`
-	Budget     float64            `json:"budget"`
+	Budget     float64            `json:"budget" example:"10000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	Currency   string             `json:"currency"`
 	Freelancer *FreelancerSummary `json:"freelancer,omitempty"`
 	Progress   int                `json:"progress"`
@@ -62,7 +62,7 @@ type QuestDashboardOverview struct {
 	ID              string             `json:"id"`
 	Title           string             `json:"title"`
 	Category        string             `json:"category"`
-	Budget          float64            `json:"budget"`
+	Budget          float64            `json:"budget" example:"10000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	Currency        string             `json:"currency"`
 	Status          string             `json:"status"`
 	Freelancer      *FreelancerSummary `json:"freelancer,omitempty"`
@@ -114,7 +114,7 @@ type QuestMilestoneRowItem struct {
 	StartDate   *string `json:"start_date,omitempty"`
 	DueDate     *string `json:"due_date,omitempty"`
 	DueDays     int     `json:"due_days"`
-	Amount      float64 `json:"amount"`
+	Amount      float64 `json:"amount" example:"10000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	Currency    string  `json:"currency"`
 	Status      string  `json:"status"`
 	OrderIndex  int     `json:"order_index"`
@@ -122,7 +122,7 @@ type QuestMilestoneRowItem struct {
 
 type QuestMilestonesTableResponse struct {
 	Milestones  []QuestMilestoneRowItem `json:"milestones"`
-	TotalAmount float64                 `json:"total_amount"`
+	TotalAmount float64                 `json:"total_amount" example:"30000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	Currency    string                  `json:"currency"`
 }
 
@@ -135,7 +135,7 @@ type QuestMilestonesTableOutput struct {
 type AddMilestoneRequestBody struct {
 	Title       string     `json:"title" required:"true" minLength:"2" maxLength:"255" example:"Responsive Design & Mobile Optimization"`
 	Description string     `json:"description,omitempty" maxLength:"5000" example:"Complete responsive layouts for tablet and mobile."`
-	Amount      float64    `json:"amount" required:"true" minimum:"0.01" example:"10000"`
+	Amount      float64    `json:"amount" required:"true" minimum:"0.01" example:"10000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 	StartDate   *time.Time `json:"start_date,omitempty"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
 	DueDays     int        `json:"due_days,omitempty" minimum:"1" example:"7"`
@@ -149,7 +149,7 @@ type AddMilestoneInput struct {
 type AddMilestoneResponse struct {
 	Message        string                `json:"message"`
 	Milestone      QuestMilestoneRowItem `json:"milestone"`
-	NewTotalBudget float64               `json:"new_total_budget"`
+	NewTotalBudget float64               `json:"new_total_budget" example:"40000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
 }
 
 type AddMilestoneOutput struct {
@@ -265,10 +265,10 @@ type ApproveQuestTMDResponse struct {
 	CompletedAt time.Time `json:"completed_at"`
 
 	// Wallet movement caused by completion: pending hold → available.
-	UnlockedToAvailableMinor    int64   `json:"unlocked_to_available_minor"`
-	UnlockedToAvailable         float64 `json:"unlocked_to_available"`
-	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor"`
-	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor"`
+	UnlockedToAvailableMinor    int64   `json:"unlocked_to_available_minor" example:"2500000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
+	UnlockedToAvailable         float64 `json:"unlocked_to_available" example:"25000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
+	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor" example:"3900000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
+	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor" example:"1000000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
 }
 
 type ApproveQuestTMDOutput struct {
@@ -292,10 +292,10 @@ type CancelQuestApprovalTMDResponse struct {
 	Status  string `json:"status"`
 
 	// Wallet movement caused by reopening: available → pending hold.
-	RelockedToPendingMinor      int64   `json:"relocked_to_pending_minor"`
-	RelockedToPending           float64 `json:"relocked_to_pending"`
-	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor"`
-	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor"`
+	RelockedToPendingMinor      int64   `json:"relocked_to_pending_minor" example:"2500000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
+	RelockedToPending           float64 `json:"relocked_to_pending" example:"25000" doc:"Amount in rupees (major units). 10000 = ₹10,000.00 INR. NOT paise."`
+	WalletAvailableBalanceMinor int64   `json:"wallet_available_balance_minor" example:"1400000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
+	WalletPendingBalanceMinor   int64   `json:"wallet_pending_balance_minor" example:"3500000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
 }
 
 type CancelQuestApprovalTMDOutput struct {
