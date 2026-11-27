@@ -17,8 +17,9 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-setup",
 		Method:      "POST",
 		Path:        "/auth/2fa/setup",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Generate TOTP secret and QR provisioning URI",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Generate TOTP secret and QR provisioning URI",
+		Description: "Takes no request body. Returns the TOTP provisioning URI and secret to enroll in an authenticator app.",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 	}, controllers.Setup2FAHandler)
 
@@ -27,13 +28,13 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-verify-setup",
 		Method:      "POST",
 		Path:        "/auth/2fa/verify-setup",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Verify initial TOTP code and enable 2FA",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Verify initial TOTP code and enable 2FA",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
-					Example: dto.VerifySetup2FARequest{Code: "123456"},
+					Example: dto.VerifySetup2FARequest{Code: "482915"},
 				},
 			},
 		},
@@ -43,15 +44,15 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-verify-login",
 		Method:      "POST",
 		Path:        "/auth/2fa/verify-login",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Verify TOTP and issue final tokens",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Verify TOTP and issue final tokens",
 		Security:    []map[string][]string{}, // uses temporary token, not bearer auth
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.VerifyLogin2FARequest{
-						TemporaryToken: "eyJhbGciOiJIUzI1NiIs...",
-						Code:           "123456",
+						TemporaryToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZjNhOWMyZS0xYjRkLTQ2OGYtOWMwMi0xZDNlNWY3YTliMDEiLCJ0b2tlbl90eXBlIjoiMmZhX3RtcCIsImlhdCI6MTc2NDIzMDQwMH0.9rT4wYq2Lm8Np0XsVb3cKd6EgHj1UiOaPqRsTuVwXyZ",
+						Code:           "482915",
 					},
 				},
 			},
@@ -62,15 +63,15 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-verify-recovery-code",
 		Method:      "POST",
 		Path:        "/auth/2fa/verify-recovery-code",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Authenticate using a single-use recovery code",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Authenticate using a single-use recovery code",
 		Security:    []map[string][]string{},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.VerifyRecoveryCodeRequest{
-						TemporaryToken: "eyJhbGciOiJIUzI1NiIs...",
-						Code:           "ABCD-EFGH",
+						TemporaryToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3ZjNhOWMyZS0xYjRkLTQ2OGYtOWMwMi0xZDNlNWY3YTliMDEiLCJ0b2tlbl90eXBlIjoiMmZhX3RtcCIsImlhdCI6MTc2NDIzMDQwMH0.9rT4wYq2Lm8Np0XsVb3cKd6EgHj1UiOaPqRsTuVwXyZ",
+						Code:           "K7QM-3XPZ",
 					},
 				},
 			},
@@ -82,13 +83,13 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-disable",
 		Method:      "POST",
 		Path:        "/auth/2fa/disable",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Disable 2FA after verifying password and TOTP",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Disable 2FA after verifying password and TOTP",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
-					Example: dto.Disable2FARequest{Password: "test@123", Code: "123456"},
+					Example: dto.Disable2FARequest{Password: "Pune@2026x", Code: "482915"},
 				},
 			},
 		},
@@ -99,13 +100,14 @@ func RegisterTwoFactorRoutes(api huma.API) {
 		OperationID: "2fa-recovery-codes-regenerate",
 		Method:      "POST",
 		Path:        "/auth/2fa/recovery-codes/regenerate",
-		Tags:        []string{"Two-Factor Authentication"},
-		Summary:     "Invalidate old recovery codes and generate new ones",
+		Tags:        []string{"Common / Authentication"},
+		Summary:     "[Common] Invalidate old recovery codes and generate new ones",
+		Description: "Password-based accounts send {\"password\":\"Pune@2026x\"}. OAuth-only accounts send {\"code\":\"482915\"} instead.",
 		Middlewares: huma.Middlewares{middleware.AuthMiddlewareHuma(api)},
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
-					Example: dto.RegenerateRecoveryCodesRequest{Password: "test@123"},
+					Example: dto.RegenerateRecoveryCodesRequest{Password: "Pune@2026x"},
 				},
 			},
 		},

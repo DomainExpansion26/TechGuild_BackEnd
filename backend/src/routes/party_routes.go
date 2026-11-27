@@ -18,18 +18,18 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "create-party",
 		Method:      "POST",
 		Path:        "/v1/parties",
-		Tags:        []string{"Parties"},
-		Summary:     "Create a party",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Create a party",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.CreatePartyRequest{
-						Name:        "TechGuild Devs",
-						Slug:        "techguild-devs",
-						Description: "A party of full-stack developers",
-						LogoURL:     "https://storage.example.com/logos/party.png",
-						BannerURL:   "https://storage.example.com/banners/party.png",
+						Name:        "Bengaluru Go Guild",
+						Slug:        "bengaluru-go-guild",
+						Description: "A 12-engineer party focused on Go, gRPC and cloud-native delivery.",
+						LogoURL:     "https://cdn.techguild.in/logos/bengaluru-go-guild.png",
+						BannerURL:   "https://cdn.techguild.in/banners/bengaluru-go-guild.png",
 						IsHiring:    true,
 					},
 				},
@@ -42,8 +42,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-party",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Get a party",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Get a party",
 		Middlewares: authMw},
 		controllers.GetPartyHandler)
 
@@ -53,8 +53,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-party-members",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/members",
-		Tags:        []string{"Parties"},
-		Summary:     "Get party members",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Get party members",
 		Middlewares: authMw,
 	}, controllers.GetPartyMembersHandler)
 
@@ -63,8 +63,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-party-invitations",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/invitations",
-		Tags:        []string{"Parties"},
-		Summary:     "Get party invitations",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Get party invitations",
 		Middlewares: authMw,
 	}, controllers.GetPartyInvitationsHandler)
 
@@ -73,8 +73,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-party-portfolio",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/portfolio",
-		Tags:        []string{"Parties"},
-		Summary:     "Get party portfolio",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Get party portfolio",
 		Middlewares: authMw,
 	}, controllers.GetPartyPortfolioHandler)
 
@@ -83,8 +83,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-party-skills",
 		Method:      "GET",
 		Path:        "/v1/parties/{party_id}/skills",
-		Tags:        []string{"Parties"},
-		Summary:     "Get party skills",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Get party skills",
 		Middlewares: authMw,
 	}, controllers.GetPartySkillsHandler)
 
@@ -94,17 +94,18 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "update-party",
 		Method:      "PUT",
 		Path:        "/v1/parties/{party_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Update a party",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Update a party",
+		Description: "PUT replaces all mutable party fields. Send every field; omitted fields are written as empty values.",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.UpdatePartyRequest{
-						Name:        "TechGuild Devs v2",
-						Description: "Updated party description",
-						LogoURL:     "https://storage.example.com/logos/party-v2.png",
-						BannerURL:   "https://storage.example.com/banners/party-v2.png",
+						Name:        "Bengaluru Go Guild",
+						Description: "Now 18 engineers; added a DevOps pod.",
+						LogoURL:     "https://cdn.techguild.in/logos/bengaluru-go-guild.png",
+						BannerURL:   "https://cdn.techguild.in/banners/bengaluru-go-guild.png",
 						IsHiring:    false,
 					},
 				},
@@ -116,8 +117,8 @@ func RegisterPartyRoutes(api huma.API) {
 		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "delete-party", Method: "DELETE",
 		Path:        "/v1/parties/{party_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Delete a party",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Delete a party",
 		Middlewares: authMw},
 		controllers.DeletePartyHandler)
 
@@ -125,8 +126,8 @@ func RegisterPartyRoutes(api huma.API) {
 		Security:    []map[string][]string{{"BearerAuth": {}}},
 		OperationID: "get-my-parties", Method: "GET",
 		Path:        "/v1/parties/my",
-		Tags:        []string{"Parties"},
-		Summary:     "Get my parties",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Get my parties",
 		Middlewares: authMw},
 		controllers.GetMyPartiesHandler)
 
@@ -135,8 +136,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "get-available-parties",
 		Method:      "GET",
 		Path:        "/v1/parties/available",
-		Tags:        []string{"Parties"},
-		Summary:     "Get parties available to freelancer",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Get available parties",
 		Middlewares: authMw},
 		controllers.GetAvailablePartiesHandler)
 
@@ -146,15 +147,15 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "invite-member",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/invite",
-		Tags:        []string{"Parties"},
-		Summary:     "Invite a member",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Invite a member",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.InviteMemberRequest{
-						UserID:  "550e8400-e29b-41d4-a716-446655440000",
-						Message: "We'd love to have you on our party!",
+						UserID:  "9f8b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
+						Message: "We'd love to have you join the Bengaluru Go Guild.",
 					},
 				},
 			},
@@ -166,8 +167,9 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "accept-invitation",
 		Method:      "POST",
 		Path:        "/v1/parties/invitation/{invitation_id}/accept",
-		Tags:        []string{"Parties"},
-		Summary:     "Accept invitation",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Accept invitation",
+		Description: "No request body is required; the authenticated user accepts the invitation identified by the path parameter.",
 		Middlewares: authMw},
 		controllers.AcceptInvitationHandler)
 
@@ -176,14 +178,14 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "reject-invitation",
 		Method:      "POST",
 		Path:        "/v1/parties/invitation/{invitation_id}/reject",
-		Tags:        []string{"Parties"},
-		Summary:     "Reject invitation",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Reject invitation",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.RejectInvitationRequest{
-						Reason: "Currently busy with other projects",
+						Reason: "Committed to a client engagement through March; cannot take on party work.",
 					},
 				},
 			},
@@ -194,8 +196,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "remove-member",
 		Method:      "DELETE",
 		Path:        "/v1/parties/{party_id}/member/{member_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Remove member",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Remove member",
 		Middlewares: authMw},
 		controllers.RemoveMemberHandler)
 
@@ -204,14 +206,14 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "leave-party",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/leave",
-		Tags:        []string{"Parties"},
-		Summary:     "Leave party",
+		Tags:        []string{"Freelancer / Task Management"},
+		Summary:     "[Freelancer] Leave party",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.LeavePartyRequest{
-						Reason: "Joining another party",
+						Reason: "Moving to an in-house role; leaving the party on good terms.",
 					},
 				},
 			},
@@ -224,18 +226,18 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "create-portfolio",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/portfolio",
-		Tags:        []string{"Parties"},
-		Summary:     "Create portfolio",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Create portfolio",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.CreatePortfolioRequest{
-						Title:       "E-commerce Platform",
-						Description: "Built a full-stack e-commerce platform with React and Go",
-						ImageURL:    "https://storage.example.com/portfolio/project.png",
-						ProjectURL:  "https://example.com/project",
-						GithubURL:   "https://github.com/user/project",
+						Title:       "UPI Reconciliation Dashboard",
+						Description: "Real-time settlement dashboard for a Pune NBFC, built with Go, React and ClickHouse.",
+						ImageURL:    "https://cdn.techguild.in/portfolio/upi-reconciliation.png",
+						ProjectURL:  "https://cygnetsolutions.in/case-studies/upi-reconciliation",
+						GithubURL:   "https://github.com/cygnet-software/upi-reconciliation",
 					},
 				},
 			},
@@ -247,18 +249,19 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "update-portfolio",
 		Method:      "PUT",
 		Path:        "/v1/parties/portfolio/{portfolio_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Update portfolio",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Update portfolio",
+		Description: "PUT replaces all mutable portfolio fields. Send every field; omitted fields are written as empty values.",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.UpdatePortfolioRequest{
-						Title:       "E-commerce Platform v2",
-						Description: "Updated project with payment integration",
-						ImageURL:    "https://storage.example.com/portfolio/project-v2.png",
-						ProjectURL:  "https://example.com/project-v2",
-						GithubURL:   "https://github.com/user/project-v2",
+						Title:       "UPI Reconciliation Dashboard v2",
+						Description: "Added multi-bank settlement matching and anomaly alerts.",
+						ImageURL:    "https://cdn.techguild.in/portfolio/upi-reconciliation-v2.png",
+						ProjectURL:  "https://cygnetsolutions.in/case-studies/upi-reconciliation-v2",
+						GithubURL:   "https://github.com/cygnet-software/upi-reconciliation-v2",
 					},
 				},
 			},
@@ -270,8 +273,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "delete-portfolio",
 		Method:      "DELETE",
 		Path:        "/v1/parties/portfolio/{portfolio_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Delete portfolio",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Delete portfolio",
 		Middlewares: authMw},
 		controllers.DeletePortfolioHandler)
 
@@ -281,15 +284,15 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "add-skill",
 		Method:      "POST",
 		Path:        "/v1/parties/{party_id}/skills",
-		Tags:        []string{"Parties"},
-		Summary:     "Add skill",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Add skill",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.AddSkillRequest{
-						SkillName:       "Go",
-						ExperienceLevel: "intermediate",
+						SkillName:       "Terraform",
+						ExperienceLevel: "expert",
 					},
 				},
 			},
@@ -301,14 +304,15 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "update-skill",
 		Method:      "PUT",
 		Path:        "/v1/parties/skills/{skill_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Update skill",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Update skill",
+		Description: "PUT replaces the skill entirely; send both `skill_name` and `experience_level`.",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.AddSkillRequest{
-						SkillName:       "Go",
+						SkillName:       "Kubernetes",
 						ExperienceLevel: "expert",
 					},
 				},
@@ -321,8 +325,8 @@ func RegisterPartyRoutes(api huma.API) {
 		OperationID: "delete-skill",
 		Method:      "DELETE",
 		Path:        "/v1/parties/skills/{skill_id}",
-		Tags:        []string{"Parties"},
-		Summary:     "Delete skill",
+		Tags:        []string{"Agency / Profile & Party"},
+		Summary:     "[Agency] Delete skill",
 		Middlewares: authMw},
 		controllers.DeleteSkillHandler)
 }

@@ -65,7 +65,7 @@ type PartyTMDMilestoneItem struct {
 	OrderIndex         int                      `json:"order_index"`
 	Title              string                   `json:"title"`
 	Description        string                   `json:"description"`
-	AmountMinor        int64                    `json:"amount_minor"`
+	AmountMinor        int64                    `json:"amount_minor" example:"1000000" doc:"Amount in paise (minor units). 7500000 = ₹75,000.00 INR"`
 	Status             string                   `json:"status"`
 	Progress           int                      `json:"progress" doc:"0-100"`
 	StartDate          *time.Time               `json:"start_date,omitempty"`

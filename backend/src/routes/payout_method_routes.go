@@ -21,8 +21,8 @@ func RegisterPayoutMethodRoutes(api huma.API, c *controllers.PayoutMethodControl
 		OperationID: "list-payout-methods",
 		Method:      "GET",
 		Path:        "/v1/settings/billing/payout-methods",
-		Tags:        []string{"Payout Methods"},
-		Summary:     "List payout methods for the authenticated user",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] List payout methods",
 		Middlewares: authMw,
 	}, c.ListPayoutMethodsHandler)
 
@@ -31,19 +31,20 @@ func RegisterPayoutMethodRoutes(api huma.API, c *controllers.PayoutMethodControl
 		OperationID: "add-payout-method",
 		Method:      "POST",
 		Path:        "/v1/settings/billing/payout-methods",
-		Tags:        []string{"Payout Methods"},
-		Summary:     "Add a payout method (bank / UPI / card / wallet)",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Add payout method (bank/UPI/card)",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
+			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.AddPayoutMethodRequest{
-						Provider:      "mock",
+						Provider:      "razorpay",
 						Type:          "bank",
 						Purpose:       "payout",
 						BankName:      ptr("HDFC Bank"),
-						AccountHolder: ptr("John Doe"),
-						AccountNumber: ptr("1234567890123456"),
+						AccountHolder: ptr("Ananya Sharma"),
+						AccountNumber: ptr("50100234567891"),
 						IFSC:          ptr("HDFC0001234"),
 						SetPrimary:    true,
 					},
@@ -57,16 +58,9 @@ func RegisterPayoutMethodRoutes(api huma.API, c *controllers.PayoutMethodControl
 		OperationID: "set-primary-payout-method",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payout-methods/{id}/primary",
-		Tags:        []string{"Payout Methods"},
-		Summary:     "Set a payout method as primary",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Set primary payout method",
 		Middlewares: authMw,
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: map[string]any{},
-				},
-			},
-		},
 	}, c.SetPrimaryPayoutMethodHandler)
 
 	huma.Register(api, huma.Operation{
@@ -74,15 +68,8 @@ func RegisterPayoutMethodRoutes(api huma.API, c *controllers.PayoutMethodControl
 		OperationID: "delete-payout-method",
 		Method:      "DELETE",
 		Path:        "/v1/settings/billing/payout-methods/{id}",
-		Tags:        []string{"Payout Methods"},
-		Summary:     "Delete a payout method",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Delete payout method",
 		Middlewares: authMw,
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: map[string]any{},
-				},
-			},
-		},
 	}, c.DeletePayoutMethodHandler)
 }

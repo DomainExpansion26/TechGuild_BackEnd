@@ -11,15 +11,14 @@ import (
 func RegisterWalletWithdrawalRoutes(api huma.API, c *controllers.WalletWithdrawalController) {
 	authMw := huma.Middlewares{middleware.AuthMiddlewareHuma(api)}
 	bearer := []map[string][]string{{"BearerAuth": {}}}
-	tags := []string{"Wallet Withdrawal"}
 
 	huma.Register(api, huma.Operation{
 		Security:    bearer,
 		OperationID: "request-wallet-withdrawal",
 		Method:      "POST",
 		Path:        "/v1/me/wallet/withdraw",
-		Tags:        tags,
-		Summary:     "Request withdrawal from wallet to bank/UPI",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Request withdrawal to bank/UPI",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true,
@@ -40,8 +39,8 @@ func RegisterWalletWithdrawalRoutes(api huma.API, c *controllers.WalletWithdrawa
 		OperationID: "list-wallet-withdrawals",
 		Method:      "GET",
 		Path:        "/v1/me/wallet/withdrawals",
-		Tags:        tags,
-		Summary:     "List wallet withdrawal history",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] List withdrawal history",
 		Middlewares: authMw,
 	}, c.ListWithdrawalsHandler)
 
@@ -50,8 +49,8 @@ func RegisterWalletWithdrawalRoutes(api huma.API, c *controllers.WalletWithdrawa
 		OperationID: "get-wallet-withdrawal",
 		Method:      "GET",
 		Path:        "/v1/me/wallet/withdrawals/{payout_id}",
-		Tags:        tags,
-		Summary:     "Get withdrawal details",
+		Tags:        []string{"Freelancer / Wallet & Payouts"},
+		Summary:     "[Freelancer] Get withdrawal details",
 		Middlewares: authMw,
 	}, c.GetWithdrawalHandler)
 }

@@ -21,8 +21,8 @@ func RegisterPaymentMethodRoutes(api huma.API, c *controllers.PaymentMethodContr
 		OperationID: "list-client-payment-methods",
 		Method:      "GET",
 		Path:        "/v1/settings/billing/payment-methods",
-		Tags:        []string{"Payment Methods"},
-		Summary:     "List saved client payment methods",
+		Tags:        []string{"Client / Billing & Payments"},
+		Summary:     "[Client] List saved client payment methods",
 		Middlewares: authMw,
 	}, c.ListClientPaymentMethodsHandler)
 
@@ -31,15 +31,16 @@ func RegisterPaymentMethodRoutes(api huma.API, c *controllers.PaymentMethodContr
 		OperationID: "add-client-payment-method",
 		Method:      "POST",
 		Path:        "/v1/settings/billing/payment-methods",
-		Tags:        []string{"Payment Methods"},
-		Summary:     "Add a client payment method (provider token)",
+		Tags:        []string{"Client / Billing & Payments"},
+		Summary:     "[Client] Add a client payment method",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
+			Required: true,
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.AddClientPaymentMethodRequest{
-						Provider:         "mock",
-						ProviderMethodID: "pm_test_123",
+						Provider:         "razorpay",
+						ProviderMethodID: "pm_NqX8kL2mZ4vB1c",
 						Type:             "card",
 						Last4:            ptr("4242"),
 						Brand:            ptr("visa"),
@@ -57,16 +58,9 @@ func RegisterPaymentMethodRoutes(api huma.API, c *controllers.PaymentMethodContr
 		OperationID: "set-primary-client-payment-method",
 		Method:      "PATCH",
 		Path:        "/v1/settings/billing/payment-methods/{id}/primary",
-		Tags:        []string{"Payment Methods"},
-		Summary:     "Set a payment method as primary",
+		Tags:        []string{"Client / Billing & Payments"},
+		Summary:     "[Client] Set a payment method as primary",
 		Middlewares: authMw,
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: map[string]any{},
-				},
-			},
-		},
 	}, c.SetPrimaryClientPaymentMethodHandler)
 
 	huma.Register(api, huma.Operation{
@@ -74,15 +68,8 @@ func RegisterPaymentMethodRoutes(api huma.API, c *controllers.PaymentMethodContr
 		OperationID: "delete-client-payment-method",
 		Method:      "DELETE",
 		Path:        "/v1/settings/billing/payment-methods/{id}",
-		Tags:        []string{"Payment Methods"},
-		Summary:     "Delete a saved payment method",
+		Tags:        []string{"Client / Billing & Payments"},
+		Summary:     "[Client] Delete a saved payment method",
 		Middlewares: authMw,
-		RequestBody: &huma.RequestBody{
-			Content: map[string]*huma.MediaType{
-				"application/json": {
-					Example: map[string]any{},
-				},
-			},
-		},
 	}, c.DeleteClientPaymentMethodHandler)
 }

@@ -28,12 +28,12 @@ type RefundResponse struct {
 	Status string `json:"status" example:"completed"`
 
 	// Refund amount = milestone amount only
-	RefundAmount      float64 `json:"refund_amount" example:"12000"`
-	RefundAmountMinor int64   `json:"refund_amount_minor" example:"1200000"`
+	RefundAmount      float64 `json:"refund_amount" example:"12000" doc:"Amount in rupees (major units). 12000 = ₹12,000.00 INR. NOT paise."`
+	RefundAmountMinor int64   `json:"refund_amount_minor" example:"1200000" doc:"Amount in paise (minor units). 1200000 = ₹12,000.00 INR"`
 
 	// Info about non-refunded amounts
-	ClientFeeRetained      float64 `json:"client_fee_retained" example:"600"`
-	ClientFeeRetainedMinor int64   `json:"client_fee_retained_minor" example:"60000"`
+	ClientFeeRetained      float64 `json:"client_fee_retained" example:"600" doc:"Amount in rupees (major units). 600 = ₹600.00 INR. NOT paise."`
+	ClientFeeRetainedMinor int64   `json:"client_fee_retained_minor" example:"60000" doc:"Amount in paise (minor units). 60000 = ₹600.00 INR"`
 
 	Currency string `json:"currency" example:"INR"`
 

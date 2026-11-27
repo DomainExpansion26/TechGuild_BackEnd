@@ -15,8 +15,8 @@ func RegisterLocationRoutes(api huma.API, c *controllers.LocationController) {
 		OperationID: "get-location-countries",
 		Method:      "GET",
 		Path:        "/v1/locations/countries",
-		Tags:        []string{"Locations"},
-		Summary:     "List countries for profile location input",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] List countries for profile location input",
 		Middlewares: authMw,
 	}, c.GetCountries)
 
@@ -25,8 +25,8 @@ func RegisterLocationRoutes(api huma.API, c *controllers.LocationController) {
 		OperationID: "search-location-cities",
 		Method:      "GET",
 		Path:        "/v1/locations/cities",
-		Tags:        []string{"Locations"},
-		Summary:     "Search cities within a country",
+		Tags:        []string{"Common / Settings & Webhooks"},
+		Summary:     "[Common] Search cities within a country",
 		Middlewares: authMw,
 	}, c.GetCities)
 }

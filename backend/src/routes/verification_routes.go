@@ -21,8 +21,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "get-verification-status",
 		Method:      "GET",
 		Path:        "/v1/verification/status",
-		Tags:        []string{"Verification"},
-		Summary:     "Get current verification draft/status",
+		Tags:        []string{"Common / Profile & Verification"},
+		Summary:     "[Common] Get current verification draft/status",
 		Middlewares: authMw,
 	}, c.GetStatusHandler)
 
@@ -30,8 +30,9 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "update-individual-info",
 		Method:      "PUT",
 		Path:        "/v1/verification/individual/info",
-		Tags:        []string{"Verification"},
-		Summary:     "Step 1: Save Individual Info (Aadhaar/PAN)",
+		Tags:        []string{"Freelancer / Profile & Verification"},
+		Summary:     "[Freelancer] Step 1: Save Individual Info (Aadhaar/PAN)",
+		Description: "Accepted `doc_type` values: AADHAAR, PAN, PASSPORT, DRIVING_LICENSE. Expected `id_number` shape per type: AADHAAR = 12 digits; PAN = 10 characters (5 letters, 4 digits, 1 letter); PASSPORT = 8 characters; DRIVING_LICENSE = 9 to 16 characters.",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional
@@ -39,7 +40,7 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 				"application/json": {
 					Example: dto.UpdateIndividualInfoRequest{
 						DocType:  "AADHAAR",
-						IDNumber: "123456789012",
+						IDNumber: "234567890123",
 					},
 				},
 			},
@@ -50,8 +51,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "update-business-info",
 		Method:      "PUT",
 		Path:        "/v1/verification/business/info",
-		Tags:        []string{"Verification"},
-		Summary:     "Step 1: Save Business Info",
+		Tags:        []string{"Client / Profile & Verification"},
+		Summary:     "[Client] Step 1: Save Business Info",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional
@@ -74,18 +75,18 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "update-bank-details",
 		Method:      "PUT",
 		Path:        "/v1/verification/bank-details",
-		Tags:        []string{"Verification"},
-		Summary:     "Step 3: Save Bank Details",
+		Tags:        []string{"Common / Profile & Verification"},
+		Summary:     "[Common] Step 3: Save Bank Details",
 		Middlewares: authMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional
 			Content: map[string]*huma.MediaType{
 				"application/json": {
 					Example: dto.UpdateBankDetailsRequest{
-						BankName:          "HDFC Bank",
+						BankName:          "Kotak Mahindra Bank",
 						AccountHolderName: "Nimbus Analytics Pvt Ltd",
-						AccountNumber:     "12345678901234",
-						IFSCCode:          "HDFC0001234",
+						AccountNumber:     "9012345678901234",
+						IFSCCode:          "KKBK0001234",
 					},
 				},
 			},
@@ -97,9 +98,9 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID:  "upload-verification-document",
 		Method:       "POST",
 		Path:         "/v1/verification/upload",
-		Tags:         []string{"Verification"},
-		Summary:      "Step 2: Upload KYC Document",
-		Description:  "Multipart upload with two form fields: `document_type` (one of aadhaar, govt_id, selfie, gst_certificate, incorporation_certificate, pan_card, business_registration, cancelled_cheque) and `file` (PDF or image: JPEG, PNG, WebP). Maximum file size: 2 MiB.",
+		Tags:         []string{"Common / Profile & Verification"},
+		Summary:      "[Common] Step 2: Upload KYC Document",
+		Description:  "Uploads a KYC document as `multipart/form-data` with two form fields: `document_type` (one of aadhaar, govt_id, selfie, gst_certificate, incorporation_certificate, pan_card, business_registration, cancelled_cheque) and `file` (PDF or image: JPEG, PNG, WebP). Maximum file size: 2 MiB.",
 		MaxBodyBytes: utils.MaxUploadBytes,
 		Middlewares:  authMw,
 	}, c.UploadDocumentHandler)
@@ -109,8 +110,9 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "submit-verification",
 		Method:      "POST",
 		Path:        "/v1/verification/submit",
-		Tags:        []string{"Verification"},
-		Summary:     "Step 4: Submit Verification for Review",
+		Tags:        []string{"Common / Profile & Verification"},
+		Summary:     "[Common] Step 4: Submit Verification for Review",
+		Description: "No request body is required; the document must already be uploaded and the caller must be authenticated.",
 		Middlewares: authMw,
 	}, c.SubmitVerificationHandler)
 
@@ -122,8 +124,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-get-verification-queue",
 		Method:      "GET",
 		Path:        "/v1/admin/verification/queue",
-		Tags:        []string{"Admin Verification"},
-		Summary:     "List all pending verifications",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] List all pending verifications",
 		Middlewares: adminMw,
 	}, c.AdminGetQueueHandler)
 
@@ -137,8 +139,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-get-ai-auto-eligible",
 		Method:      "GET",
 		Path:        "/v1/admin/verification/ai-auto-eligible",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Queue of AI auto-eligible records (24-48h batch approval window)",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Queue of AI auto-eligible records",
 		Middlewares: adminMw,
 	}, c.AdminGetAutoEligibleHandler)
 
@@ -146,8 +148,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-get-manual-review",
 		Method:      "GET",
 		Path:        "/v1/admin/verification/manual-review",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Queue of borderline records (supports weakest-first AI score sorting)",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Queue of borderline records",
 		Middlewares: adminMw,
 	}, c.AdminGetManualReviewHandler)
 
@@ -155,8 +157,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-verification-detail",
 		Method:      "GET",
 		Path:        "/v1/admin/verification/{id}/detail",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Full verification detail with AI scores and documents",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Full verification detail with AI scores",
 		Middlewares: adminMw,
 	}, c.AdminGetDetailHandler)
 
@@ -164,8 +166,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-bulk-approve",
 		Method:      "POST",
 		Path:        "/v1/admin/verification/bulk-approve",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Bulk approve auto-eligible records (transactional, audited)",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Bulk approve auto-eligible records",
 		Middlewares: adminMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional
@@ -173,8 +175,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 				"application/json": {
 					Example: dto.BulkApproveRequest{
 						VerificationIDs: []string{
-							"11111111-1111-1111-1111-111111111111",
-							"22222222-2222-2222-2222-222222222222",
+							"3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+							"7c9e6679-7425-40de-944b-e07fc1f90ae7",
 						},
 					},
 				},
@@ -186,8 +188,9 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-manual-action",
 		Method:      "POST",
 		Path:        "/v1/admin/verification/{id}/review",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Single approve/reject from manual review (audited)",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Single approve/reject from manual review",
+		Description: "`rejection_reason` is required when `action` is REJECT and must be omitted when `action` is APPROVE.",
 		Middlewares: adminMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional
@@ -207,8 +210,8 @@ func RegisterVerificationRoutes(api huma.API, c *controllers.VerificationControl
 		OperationID: "admin-escalate-manual",
 		Method:      "POST",
 		Path:        "/v1/admin/verification/{id}/escalate",
-		Tags:        []string{"Admin Verification", "KYC AI Pipeline"},
-		Summary:     "Escalate auto-eligible record to manual review",
+		Tags:        []string{"Admin / Verification"},
+		Summary:     "[Admin] Escalate auto-eligible to manual review",
 		Middlewares: adminMw,
 		RequestBody: &huma.RequestBody{
 			Required: true, // false only when EVERY body field is optional

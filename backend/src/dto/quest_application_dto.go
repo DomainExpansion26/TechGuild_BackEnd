@@ -6,7 +6,7 @@ import "time"
 
 type ApplyQuestBody struct {
 	CoverLetter       string  `json:"cover_letter,omitempty" maxLength:"5000" doc:"Optional. Empty is allowed for 1-click apply." example:"I have 5+ years in UI/UX and shipped multiple FinTech dashboards."`
-	ProposedBudget    float64 `json:"proposed_budget,omitempty" minimum:"0" doc:"Proposed budget in INR. Omit or send 0 to accept the full quest budget." example:"72000"`
+	ProposedBudget    float64 `json:"proposed_budget,omitempty" minimum:"0" doc:"Amount in rupees (major units). 72000 = ₹72,000.00 INR. NOT paise. Omit or send 0 to accept the full quest budget." example:"72000"`
 	Currency          string  `json:"currency,omitempty" maxLength:"10" example:"INR"`
 	EstimatedDuration string  `json:"estimated_duration,omitempty" maxLength:"100" example:"18 days"`
 	PartyID           string  `json:"party_id,omitempty" maxLength:"36" doc:"Optional: apply as agency (party UUID). Omit for individual."`
@@ -21,8 +21,8 @@ type ApplyQuestResponse struct {
 	ApplicationID         string    `json:"application_id"`
 	QuestID               string    `json:"quest_id"`
 	Status                string    `json:"status"`
-	ProposedBudgetINR     float64   `json:"proposed_budget_inr"`
-	EstimatedNetPayoutINR float64   `json:"estimated_net_payout_inr" doc:"After 5% freelancer platform fee"`
+	ProposedBudgetINR     float64   `json:"proposed_budget_inr" example:"72000" doc:"Amount in rupees (major units). 72000 = ₹72,000.00 INR. NOT paise."`
+	EstimatedNetPayoutINR float64   `json:"estimated_net_payout_inr" example:"68400" doc:"Amount in rupees (major units). 68400 = ₹68,400.00 INR. NOT paise. After 5% freelancer platform fee"`
 	CreatedAt             time.Time `json:"created_at"`
 	Message               string    `json:"message"`
 }
@@ -48,7 +48,7 @@ type ApplicationItem struct {
 	PartyName         *string   `json:"party_name,omitempty"`
 	IsAgency          bool      `json:"is_agency"`
 	CoverLetter       string    `json:"cover_letter"`
-	ProposedBudgetINR float64   `json:"proposed_budget_inr"`
+	ProposedBudgetINR float64   `json:"proposed_budget_inr" example:"72000" doc:"Amount in rupees (major units). 72000 = ₹72,000.00 INR. NOT paise."`
 	Currency          string    `json:"currency"`
 	EstimatedDuration string    `json:"estimated_duration"`
 	Status            string    `json:"status"`
@@ -142,7 +142,7 @@ type MyWorkItem struct {
 	Title          string     `json:"title"`
 	Description    string     `json:"description"`
 	Category       string     `json:"category"`
-	BudgetINR      float64    `json:"budget_inr"`
+	BudgetINR      float64    `json:"budget_inr" example:"75000" doc:"Amount in rupees (major units). 75000 = ₹75,000.00 INR. NOT paise."`
 	Status         string     `json:"status"`
 	ClientID       string     `json:"client_id"`
 	ClientName     string     `json:"client_name"`

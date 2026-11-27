@@ -26,7 +26,16 @@ func NewTaskManagementControllerWithService(svc services.TaskManagementService) 
 	return &TaskManagementController{service: svc}
 }
 
-var defaultTMDController = NewTaskManagementController()
+var defaultTMDController = &TaskManagementController{}
+
+// InitTaskManagementController builds the default controller lazily.
+// It must run after postgres.ConnectDatabase() so the repositories capture a
+// non-nil postgres.DB; a package-level initializer would pin the nil handle.
+func InitTaskManagementController() {
+	if defaultTMDController.service == nil {
+		defaultTMDController = NewTaskManagementController()
+	}
+}
 
 // SetTaskManagementServiceForTesting allows unit tests to inject a mock service.
 func SetTaskManagementServiceForTesting(svc services.TaskManagementService) {
